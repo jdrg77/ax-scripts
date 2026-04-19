@@ -1,28 +1,25 @@
 // ==UserScript==
-// @name         Axiom QBuy 11
+// @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      3.4
+// @version      3.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2011-3.4.user.js
-// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2011-3.4.user.js
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  // ─── Config ───────────────────────────────────────────────────────────────
   const SAMPLE_SIZE = 16;
 
-  // ─── State ────────────────────────────────────────────────────────────────
   const addedBtns     = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
   let updateTimeout   = null;
-
   let referencePixels = null;
   let referenceSource = null;
 
@@ -41,9 +38,7 @@
         ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
         const raw = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
         cb(raw);
-      } catch (e) {
-        cb(null);
-      }
+      } catch (e) { cb(null); }
     };
     img.onerror = () => cb(null);
     img.src = src.startsWith('data:') ? src : (src.includes('?') ? src : src + '?qb=1');
@@ -83,6 +78,53 @@
 
   window.qbSetReference = function (src) { setReference(src); };
 
+  // ─── Age parser: returns seconds ─────────────────────────────────────────
+
+  function ageToSeconds(ageStr) {
+    if (!ageStr) return Infinity;
+    const s = ageStr.trim().toLowerCase();
+    const num = parseFloat(s);
+    if (isNaN(num)) return Infinity;
+    if (s.endsWith('mo')) return num * 30 * 24 * 3600;
+    if (s.endsWith('y'))  return num * 365 * 24 * 3600;
+    if (s.endsWith('d'))  return num * 24 * 3600;
+    if (s.endsWith('h'))  return num * 3600;
+    if (s.endsWith('m'))  return num * 60;
+    if (s.endsWith('s'))  return num;
+    return Infinity;
+  }
+
+  // ─── MC parser: returns number ────────────────────────────────────────────
+
+  function mcToNumber(mcStr) {
+    if (!mcStr) return 0;
+    const s = mcStr.replace('$', '').trim().toUpperCase();
+    const num = parseFloat(s);
+    if (isNaN(num)) return 0;
+    if (s.endsWith('T')) return num * 1e12;
+    if (s.endsWith('B')) return num * 1e9;
+    if (s.endsWith('M')) return num * 1e6;
+    if (s.endsWith('K')) return num * 1e3;
+    return num;
+  }
+
+  // ─── Find newest visible button ──────────────────────────────────────────
+
+  function getNewestBtn() {
+    let best = null;
+    let bestSecs = Infinity;
+    addedBtns.forEach(newBtn => {
+      if (newBtn.style.display === 'none') return;
+      const originalBtn = newBtn._original;
+      if (!originalBtn) return;
+      const row = originalBtn.closest('[class*="max-h-[64px]"]');
+      const timeEl = row?.querySelector('span[class*="text-primaryGreen"]');
+      const secs = ageToSeconds(timeEl?.textContent?.trim() || '');
+      if (secs < bestSecs) { bestSecs = secs; best = newBtn; }
+    });
+    return best;
+  }
+
   // ─── Badge ────────────────────────────────────────────────────────────────
 
   function badgeColor(pct) {
@@ -99,7 +141,7 @@
       badge.className = 'qb-sim-badge';
       badge.style.cssText = `
         position: absolute;
-        left: -88px;
+        left: -66px;
         top: -10px;
         font-size: 11px;
         font-weight: 700;
@@ -123,25 +165,17 @@
     const badge       = getOrCreateBadge(newBtn);
     const originalBtn = newBtn._original;
     if (!originalBtn) return;
-
     const coinImg = getCoinImage(originalBtn);
     if (!coinImg || !coinImg.src) {
-      badge.textContent = '—';
-      badge.style.color = '#888';
-      return;
+      badge.textContent = '—'; badge.style.color = '#888'; return;
     }
-
     if (!referencePixels) {
-      badge.textContent = '…';
-      badge.style.color = '#888';
-      return;
+      badge.textContent = '…'; badge.style.color = '#888'; return;
     }
-
     getPixels(coinImg.src, (rowPixels) => {
       const pct = pixelSimilarity(referencePixels, rowPixels);
       if (pct === null) {
-        badge.textContent = '?';
-        badge.style.color = '#888';
+        badge.textContent = '?'; badge.style.color = '#888';
       } else {
         badge.textContent       = pct.toFixed(1) + '%';
         badge.style.color       = badgeColor(pct);
@@ -150,11 +184,166 @@
     });
   }
 
-  function updateAllBadges() {
-    addedBtns.forEach(btn => updateBadge(btn));
+  function updateAllBadges() { addedBtns.forEach(btn => updateBadge(btn)); }
+
+  // ─── Token name ───────────────────────────────────────────────────────────
+
+  function getTokenName(originalBtn) {
+    const row = originalBtn.closest('[class*="max-h-[64px]"]');
+    if (!row) return '';
+    const nameEls = [...row.querySelectorAll('div[class*="truncate"][class*="whitespace-nowrap"]')];
+    return nameEls[1]?.textContent?.trim() || nameEls[0]?.textContent?.trim() || '';
   }
 
-  // ─── Existing helpers ─────────────────────────────────────────────────────
+  function getSearchQuery() {
+    const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+      .find(el => isSearchPanel(el));
+    return panel?.querySelector('input')?.value?.trim().toLowerCase() || '';
+  }
+
+  function getOrCreateNameLabel(newBtn) {
+    let label = newBtn.querySelector('.qb-name-label');
+    if (!label) {
+      label = document.createElement('div');
+      label.className = 'qb-name-label';
+      label.style.cssText = `
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-bottom: 2px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: monospace;
+        color: #ccc;
+        background: rgba(0,0,0,0.65);
+        border-radius: 4px;
+        padding: 1px 4px;
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 10001;
+      `;
+      newBtn.appendChild(label);
+    }
+    return label;
+  }
+
+  function updateNameLabel(newBtn) {
+    const originalBtn = newBtn._original;
+    if (!originalBtn) return;
+    const name  = getTokenName(originalBtn);
+    const label = getOrCreateNameLabel(newBtn);
+    label.textContent = name;
+
+    // Gold if search query matches token name or ticker
+    const query = getSearchQuery();
+    if (query && name.toLowerCase().includes(query)) {
+      label.style.color      = '#ffd700';
+      label.style.fontWeight = '800';
+    } else {
+      label.style.color      = '#ccc';
+      label.style.fontWeight = '600';
+    }
+  }
+
+  // ─── Token info (age + MC) ────────────────────────────────────────────────
+
+  function getTokenInfo(originalBtn) {
+    const row = originalBtn.closest('[class*="max-h-[64px]"]');
+    if (!row) return { age: '', mc: '' };
+
+    const timeEl = row.querySelector('span[class*="text-primaryGreen"]');
+    const age = timeEl?.textContent?.trim() || '';
+
+    const mcContainers = [...row.querySelectorAll('div[class*="gap-[4px]"]')];
+    let mc = '';
+    for (const container of mcContainers) {
+      const spans = [...container.querySelectorAll('span')];
+      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
+      if (labelSpan) {
+        const valueSpan = spans.find(s => s !== labelSpan && s.textContent.trim().length > 0);
+        mc = valueSpan?.textContent?.trim() || '';
+        break;
+      }
+    }
+
+    return { age, mc };
+  }
+
+  function getOrCreateInfoBar(newBtn) {
+    let bar = newBtn.querySelector('.qb-info-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'qb-info-bar';
+      bar.style.cssText = `
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 2px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: monospace;
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 10001;
+      `;
+      newBtn.appendChild(bar);
+    }
+    return bar;
+  }
+
+  function updateInfoBar(newBtn) {
+    const originalBtn = newBtn._original;
+    if (!originalBtn) return;
+    const { age, mc } = getTokenInfo(originalBtn);
+    const bar = getOrCreateInfoBar(newBtn);
+    bar.innerHTML = '';
+
+    // Age span — gold + glow if newest, otherwise green
+    if (age) {
+      const newestBtn = getNewestBtn();
+      const isNewest  = (newestBtn === newBtn);
+      const ageSpan   = document.createElement('span');
+      ageSpan.textContent = age;
+      if (isNewest) {
+        ageSpan.style.cssText = `
+          color: #ffd700;
+          background: rgba(0,0,0,0.7);
+          border-radius: 4px;
+          padding: 1px 5px;
+          box-shadow: 0 0 6px 2px #ffd700, 0 0 12px 4px rgba(255,215,0,0.4);
+          text-shadow: 0 0 6px #ffd700;
+        `;
+      } else {
+        ageSpan.style.cssText = 'color: #78ffa0; background: rgba(0,0,0,0.7); border-radius: 4px; padding: 1px 5px;';
+      }
+      bar.appendChild(ageSpan);
+    }
+
+    // MC span — red if > $10K, blue otherwise
+    if (mc) {
+      const mcVal  = mcToNumber(mc);
+      const mcOver = mcVal > 10000;
+      const mcSpan = document.createElement('span');
+      mcSpan.textContent = 'MC ' + mc;
+      mcSpan.style.cssText = `
+        color: ${mcOver ? '#ff4444' : '#5bb8ff'};
+        background: rgba(0,0,0,0.7);
+        border-radius: 4px;
+        padding: 1px 5px;
+      `;
+      bar.appendChild(mcSpan);
+    }
+  }
+
+  // ─── Core helpers ─────────────────────────────────────────────────────────
 
   function fireClick(el) {
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev => {
@@ -202,6 +391,9 @@
         imgEl.src = coinImg.src;
         updateBadge(newBtn);
       }
+
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
     });
   }
 
@@ -248,27 +440,23 @@
     const zIndex     = wrapper?.style.zIndex;
     const wasVisible = isPanelVisible;
     const hadSearch  = hasActiveSearch;
-
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
     const input      = panel.querySelector('input');
     const inputValue = input?.value?.trim() || '';
     hasActiveSearch  = inputValue.length > 0;
-
     if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) {
       scheduleUpdate();
     }
   }
 
-  // ─── Click: set reference only from pulse rows outside the panel ──────────
+  // ─── Click: set reference from pulse rows outside panel ──────────────────
 
   document.addEventListener('click', (e) => {
     const clickedImg = e.target.closest('img[class*="object-cover"]');
     if (!clickedImg?.src || clickedImg.src.startsWith('data:')) return;
-
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (panel && panel.contains(clickedImg)) return;
-
     setReference(clickedImg.src);
   }, true);
 
@@ -312,16 +500,17 @@
     }
 
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+
     btns.forEach(originalBtn => {
       if (originalBtn.dataset.qbAdded) return;
       originalBtn.dataset.qbAdded = 'true';
 
       const newBtn = originalBtn.cloneNode(true);
-      newBtn._original         = originalBtn;
-      newBtn.style.cssText     = originalBtn.style.cssText;
-      newBtn.style.position    = 'fixed';
-      newBtn.style.zIndex      = '9999';
-      newBtn.style.overflow    = 'visible';
+      newBtn._original      = originalBtn;
+      newBtn.style.cssText  = originalBtn.style.cssText;
+      newBtn.style.position = 'fixed';
+      newBtn.style.zIndex   = '9999';
+      newBtn.style.overflow = 'visible';
 
       const coinImg = getCoinImage(originalBtn);
       if (coinImg) {
@@ -329,13 +518,13 @@
         imgEl.src       = coinImg.src;
         imgEl.className = 'qb-coin-img';
         imgEl.style.cssText = `
-          width: 80px;
-          height: 80px;
+          width: 60px;
+          height: 60px;
           border-radius: 50%;
           object-fit: cover;
           flex-shrink: 0;
           position: absolute;
-          left: -88px;
+          left: -66px;
           top: 50%;
           transform: translateY(-50%);
           pointer-events: none;
@@ -366,6 +555,8 @@
       });
 
       updateBadge(newBtn);
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
     });
   }
 
@@ -374,7 +565,7 @@
   const observer = new MutationObserver(() => addButtons());
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // ─── Reference sync: only when panel is closed ───────────────────────────
+  // ─── Reference sync ───────────────────────────────────────────────────────
 
   setInterval(() => {
     if (!isPanelVisible) {
