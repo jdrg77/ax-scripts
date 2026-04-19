@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Click Search
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Click%20Search-2.1.user.js
@@ -73,9 +73,7 @@
     }
   };
 
-  document.addEventListener('pointerdown', handler, true);
   document.addEventListener('mousedown', handler, true);
-  document.addEventListener('click', handler, true);
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') window.axiomUserOpen = false;
