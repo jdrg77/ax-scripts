@@ -1,1 +1,1 @@
-# axiom-scripts
+# ax-scripts
