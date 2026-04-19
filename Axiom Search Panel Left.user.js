@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Search Panel Left
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.4
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
