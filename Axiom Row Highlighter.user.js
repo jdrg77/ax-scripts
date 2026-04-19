@@ -7,8 +7,8 @@
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Row%20Highlighter-2.8.user.js
-// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Row%20Highlighter-2.8.user.js
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Row%20Highlighter.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Row%20Highlighter.user.js
 // ==/UserScript==
 (function () {
   'use strict';
