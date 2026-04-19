@@ -5,6 +5,8 @@
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Mark%20Special%20Tokens%20(Exact%20Match%20Fast)-9.1.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Mark%20Special%20Tokens%20(Exact%20Match%20Fast)-9.1.user.js
 // ==/UserScript==
 (function () {
   'use strict';

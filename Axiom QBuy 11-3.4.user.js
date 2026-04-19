@@ -5,6 +5,8 @@
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2011-3.4.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2011-3.4.user.js
 // ==/UserScript==
 
 (function () {

@@ -5,6 +5,8 @@
 // @description  Right click triggers Graduated ONLY when button is visible on screen
 // @match        *://*/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Right%20Click%20%E2%86%92%20Graduated%20(only%20if%20visible)%2022-1.5.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Right%20Click%20%E2%86%92%20Graduated%20(only%20if%20visible)%2022-1.5.user.js
 // ==/UserScript==
 
 (function () {

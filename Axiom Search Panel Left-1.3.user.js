@@ -5,6 +5,8 @@
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Search%20Panel%20Left-1.3.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20Search%20Panel%20Left-1.3.user.js
 // ==/UserScript==
 
 (function () {

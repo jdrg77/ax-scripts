@@ -4,6 +4,8 @@
 // @version      5.3
 // @match        https://axiom.trade/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.3.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.3.user.js
 // ==/UserScript==
 
 (function () {

@@ -4,6 +4,8 @@
 // @version      2.1
 // @match        https://axiom.trade/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Click%20Search-2.1.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Click%20Search-2.1.user.js
 // ==/UserScript==
 
 (function () {
