@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Click Search
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Click%20Search-2.1.user.js
@@ -29,7 +29,7 @@
       if (p) {
         const wrapper = p.parentElement;
         const overlay = wrapper?.parentElement;
-        if (wrapper) { wrapper.style.pointerEvents = 'auto'; }
+        if (wrapper) { wrapper.style.pointerEvents = 'none'; }
         if (overlay) { overlay.style.pointerEvents = 'none'; overlay.style.background = 'none'; overlay.style.backdropFilter = 'none'; }
       }
       const input = document.querySelector('[class*="bg-backgroundTertiary"] input');
