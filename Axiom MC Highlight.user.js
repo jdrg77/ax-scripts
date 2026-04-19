@@ -5,8 +5,8 @@
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20MC%20Highlight-1.1.user.js
-// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20MC%20Highlight-1.1.user.js
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20MC%20Highlight.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20MC%20Highlight.user.js
 // ==/UserScript==
 
 (function () {
