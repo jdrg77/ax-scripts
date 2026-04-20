@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.3
+// @version      6.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -619,6 +619,19 @@
         setTimeout(waitAndScan, 80);
         return;
       }
+      // Skip graduated scan if a good normal match exists (T1H/T1L/T2/T3)
+      const hasGoodMatch = addedBtns.some(btn => {
+        const pct     = btn._matchPct ?? 0;
+        const data    = getTokenData(btn);
+        if (!data) return false;
+        const ageDays = data.ageHours / 24;
+        if (ageDays < 7  && pct > 72) return true;
+        if (ageDays >= 7 && pct > 80) return true;
+        if (pct >= 75) return true;
+        return false;
+      });
+      if (hasGoodMatch) { console.log('⏭️ Skipping grad scan — good normal match found'); isScanning = false; flushQueue(); return; }
+
       doScan();
     };
 
@@ -641,7 +654,7 @@
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
         toggleBtn.click();
-        setTimeout(() => { isScanning = false; flushQueue(); }, 700);
+        setTimeout(() => { isScanning = false; flushQueue(); }, 350);
         return;
       }
 
@@ -669,9 +682,9 @@
           isScanning = false;
           scheduleUpdate();
           flushQueue();
-        }, 700);
+        }, 350);
       });
-    }, 700);
+    }, 350);
     } // end doScan
 
     waitAndScan();
@@ -868,8 +881,7 @@
     freezeButtons();
     removeGradProxyBtns();
     if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
-    // Wait for normal panel results to fully load before scanning
-    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 800);
+    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 50);
   });
 
   function addButtons() {
