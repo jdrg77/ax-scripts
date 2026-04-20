@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      4.2
+// @version      4.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -594,9 +594,8 @@
       updateNameLabel(newBtn);
 
       // Ghost button — natural position, low opacity
-      const ghostBtn        = originalBtn.cloneNode(false);
-      ghostBtn._original    = originalBtn;
-      ghostBtn.style.cssText = originalBtn.style.cssText;
+      const ghostBtn          = newBtn.cloneNode(true);
+      ghostBtn._original      = originalBtn;
       ghostBtn.style.position = 'fixed';
       ghostBtn.style.zIndex   = '9998';
       ghostBtn.style.overflow = 'visible';
