@@ -740,8 +740,9 @@
       return;
     }
 
-    // slot1Top = topmost visible original button position
-    const slot1Top  = Math.min(...sortedNormal.map(v => v.rect.top));
+    // slot1Top = top of panel's first QB row (stack always starts at top regardless of match position)
+    const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+    const slot1Top = firstPanelBtn?.getBoundingClientRect().top ?? Math.min(...sortedNormal.map(v => v.rect.top));
     const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
                       (sortedNormal.length > 1 ? Math.abs(sortedNormal[1].rect.top - sortedNormal[0].rect.top) : 64);
