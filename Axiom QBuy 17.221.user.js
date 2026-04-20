@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      5.4
+// @version      5.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -15,6 +15,7 @@
   const SAMPLE_SIZE = 16;
   const addedBtns     = [];
   const ghostBtns     = [];
+  const gradProxyBtns = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -23,16 +24,18 @@
   let referencePixels = null;
   let referenceSource = null;
 
-  // Frozen state: while panel is loading new results, queue clicks
-  let frozen       = false;
-  let clickQueue   = null; // originalBtn to click once unfrozen
-  let freezeTimer  = null;
+  let frozen          = false;
+  let clickQueue      = null;
+  let freezeTimer     = null;
+  let isScanning      = false;
+  let scanDebounceTimer = null;
 
   function freezeButtons() {
     frozen = true;
     clickQueue = null;
     if (freezeTimer) clearTimeout(freezeTimer);
-    freezeTimer = setTimeout(() => { frozen = false; flushQueue(); }, 1000);
+    // Safety net: unfreeze after 3s if scan never completes
+    freezeTimer = setTimeout(() => { frozen = false; isScanning = false; flushQueue(); }, 3000);
   }
 
   function flushQueue() {
@@ -178,7 +181,6 @@
     return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0 };
   }
 
-  // Sort non-gold (green/blue) buttons
   function sortNormal(tokens, newPair) {
     const normalize       = s => (s || '').toLowerCase().trim();
     const sameName        = t => normalize(t.name)   === normalize(newPair.name);
@@ -228,11 +230,6 @@
     }
 
     return sortRest(arr);
-  }
-
-  // Sort graduated (gold) buttons: best match first, then most recent
-  function sortGraduated(tokens) {
-    return [...tokens].sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours));
   }
 
   function getNewestBtn() {
@@ -396,9 +393,15 @@
     });
   }
 
+  function removeGradProxyBtns() {
+    gradProxyBtns.forEach(btn => btn.remove());
+    gradProxyBtns.length = 0;
+  }
+
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove()); addedBtns.length = 0;
     ghostBtns.forEach(btn => btn.remove()); ghostBtns.length = 0;
+    removeGradProxyBtns();
   }
 
   function shouldShowButton(originalBtn) {
@@ -444,6 +447,194 @@
     }, 150);
   }
 
+  // ======= GRADUATED SCAN =======
+
+  function getGraduatedToggleBtn(panel) {
+    return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim() === 'Graduated') || null;
+  }
+
+  function extractGradTokenInfo(originalBtn) {
+    const row = originalBtn.closest('[class*="max-h-[64px]"]');
+    if (!row) return null;
+    const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+    const ticker = truncateDivs[0]?.textContent.trim() || '';
+    const name   = truncateDivs[1]?.textContent.trim() || truncateDivs[0]?.textContent.trim() || '';
+    const ageEl  = row.querySelector('span[class*="pointer-events-none"]');
+    const age    = ageEl?.textContent?.trim() || '';
+    let mc = '';
+    for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
+      const spans = [...container.querySelectorAll('span')];
+      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
+      if (labelSpan) { mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || ''; break; }
+    }
+    const coinImg = getRealImage(row);
+    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, match: 0 };
+  }
+
+  function computeGradSimilarities(candidates, cb) {
+    if (!referencePixels || !candidates.length) { cb(candidates); return; }
+    let done = 0;
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) { resolved = true; cb(candidates); }
+    }, 400);
+    candidates.forEach(data => {
+      if (!data.imgSrc) {
+        data.match = 0; done++;
+        if (done === candidates.length && !resolved) { resolved = true; clearTimeout(timeout); cb(candidates); }
+        return;
+      }
+      getPixels(data.imgSrc, pixels => {
+        data.match = pixelSimilarity(referencePixels, pixels) ?? 0;
+        done++;
+        if (done === candidates.length && !resolved) { resolved = true; clearTimeout(timeout); cb(candidates); }
+      });
+    });
+  }
+
+  function createGradProxy(data) {
+    const proxy = document.createElement('button');
+    proxy._gradData = data;
+    const refStyle = addedBtns[0] ? addedBtns[0].style.cssText : '';
+    proxy.style.cssText  = refStyle;
+    proxy.style.position = 'fixed';
+    proxy.style.zIndex   = '9999';
+    proxy.style.overflow = 'visible';
+    proxy.style.background = 'rgb(255, 215, 0)';
+    proxy.style.color    = '#000';
+    proxy.style.display  = 'none';
+
+    if (data.imgSrc) {
+      const imgEl = document.createElement('img');
+      imgEl.src = data.imgSrc;
+      imgEl.className = 'qb-coin-img';
+      imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+      proxy.appendChild(imgEl);
+    }
+
+    const label = document.createElement('div');
+    label.className = 'qb-name-label';
+    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;text-align:center;font-size:10px;font-weight:600;font-family:monospace;color:#000;background:rgba(255,215,0,0.85);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
+    label.textContent = data.name || data.ticker;
+    proxy.appendChild(label);
+
+    const badge = document.createElement('span');
+    badge.className = 'qb-sim-badge';
+    badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid #ffd700;z-index:10001;';
+    badge.textContent = data.match.toFixed(1) + '%';
+    proxy.appendChild(badge);
+
+    const bar = document.createElement('div');
+    bar.className = 'qb-info-bar';
+    bar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
+    if (data.age) {
+      const ageSpan = document.createElement('span');
+      ageSpan.textContent = data.age;
+      ageSpan.style.cssText = 'color:#ffd700;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
+      bar.appendChild(ageSpan);
+    }
+    if (data.mc) {
+      const mcSpan = document.createElement('span');
+      mcSpan.textContent = 'MC ' + data.mc;
+      mcSpan.style.cssText = 'color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
+      bar.appendChild(mcSpan);
+    }
+    proxy.appendChild(bar);
+
+    proxy.addEventListener('click', e => {
+      e.stopPropagation(); e.preventDefault();
+      if (isScanning) return;
+      executeGradClick(data);
+    });
+
+    return proxy;
+  }
+
+  function scanGraduated() {
+    if (!lastPanel) { isScanning = false; flushQueue(); return; }
+    const toggleBtn = getGraduatedToggleBtn(lastPanel);
+    if (!toggleBtn) { isScanning = false; flushQueue(); return; }
+
+    isScanning = true;
+    toggleBtn.click();
+    console.log('🎓 Scanning graduated...');
+
+    setTimeout(() => {
+      if (!lastPanel) { isScanning = false; flushQueue(); return; }
+
+      const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
+      if (!btns.length) {
+        toggleBtn.click();
+        setTimeout(() => { isScanning = false; flushQueue(); }, 700);
+        return;
+      }
+
+      const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
+
+      computeGradSimilarities(candidates, (withScores) => {
+        const top3 = [...withScores]
+          .sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours))
+          .slice(0, 3);
+        console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
+
+        toggleBtn.click();
+
+        setTimeout(() => {
+          removeGradProxyBtns();
+          top3.forEach(data => {
+            const proxy = createGradProxy(data);
+            document.body.appendChild(proxy);
+            gradProxyBtns.push(proxy);
+          });
+
+          isScanning = false;
+          scheduleUpdate();
+          flushQueue();
+        }, 700);
+      });
+    }, 700);
+  }
+
+  function executeGradClick(data) {
+    if (!lastPanel) return;
+    const toggleBtn = getGraduatedToggleBtn(lastPanel);
+    if (!toggleBtn) return;
+
+    frozen = true;
+    isScanning = true;
+    clickQueue = null;
+    removeGradProxyBtns();
+    if (freezeTimer) clearTimeout(freezeTimer);
+
+    toggleBtn.click();
+
+    setTimeout(() => {
+      if (!lastPanel) { isScanning = false; frozen = false; return; }
+      const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
+      let targetBtn = null;
+      for (const btn of btns) {
+        const row = btn.closest('[class*="max-h-[64px]"]');
+        if (!row) continue;
+        const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+        const t = truncateDivs[0]?.textContent.trim() || '';
+        const n = truncateDivs[1]?.textContent.trim() || truncateDivs[0]?.textContent.trim() || '';
+        if ((data.ticker && t === data.ticker) || (data.name && n === data.name)) {
+          targetBtn = btn; break;
+        }
+      }
+
+      if (targetBtn) {
+        fireClick(targetBtn);
+        console.log('✅ Grad click:', data.ticker || data.name);
+      }
+
+      toggleBtn.click();
+      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 700);
+    }, 700);
+  }
+
+  // ======= POSITION & LAYOUT =======
+
   function updatePositions() {
     const newPair = getNewPair();
     const visible = [];
@@ -453,47 +644,45 @@
       if (!originalBtn) return;
       const rect = originalBtn.getBoundingClientRect();
       if (rect.top < 50 || rect.bottom > window.innerHeight + 200 || !shouldShowButton(originalBtn)) {
-        if (!frozen) newBtn.style.display = 'none';
+        // Keep visible while frozen/scanning to avoid layout flicker
+        if (!frozen && !isScanning) newBtn.style.display = 'none';
         return;
       }
       const data = getTokenData(newBtn);
       if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    // Split: green/blue = normal stack | gold = graduated section
+    // Gold buttons from normal panel are always hidden — graduated tokens come via proxy buttons
     const normalCandidates = visible.filter(v => !v.data.isGold);
-    const gradCandidates   = visible.filter(v => v.data.isGold);
+    visible.filter(v => v.data.isGold).forEach(({ newBtn }) => { newBtn.style.display = 'none'; });
 
-    // Sort normal
     let sortedNormal = normalCandidates;
     if (newPair && normalCandidates.length > 0) {
       const datas      = normalCandidates.map(v => v.data);
       const sorted     = sortNormal(datas, newPair);
       const sortedVis  = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
-      // Append any not in sorted result (e.g. blue buttons when panel open)
       normalCandidates.forEach(v => {
         if (!sortedVis.find(s => s.newBtn === v.newBtn)) sortedVis.push(v);
       });
       sortedNormal = sortedVis;
     }
 
-    // Sort graduated: best match desc, then most recent; take top 3
-    const sortedGrad = sortGraduated(gradCandidates.map(v => v.data))
-      .slice(0, 3)
-      .map(d => gradCandidates.find(v => v.newBtn === d.newBtn))
-      .filter(Boolean);
-
-    const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGrad;
-    if (refGroup.length === 0) return;
+    // Need at least normal buttons to establish reference geometry
+    if (sortedNormal.length === 0 && gradProxyBtns.length === 0) return;
+    if (sortedNormal.length === 0) {
+      // Hide proxies if no reference geometry
+      gradProxyBtns.forEach(p => { p.style.display = 'none'; });
+      return;
+    }
 
     const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? refGroup[0].rect.top;
-    const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? sortedNormal[0].rect.top;
+    const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
-    const leftPos   = refGroup[0].rect.left - 621.5;
+                      (sortedNormal.length > 1 ? sortedNormal[1].rect.top - sortedNormal[0].rect.top : 64);
+    const leftPos   = sortedNormal[0].rect.left - 621.5;
 
-    // Position normal buttons
+    // Position normal buttons (sorted)
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
       newBtn.style.left    = leftPos + 'px';
       newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
@@ -506,23 +695,16 @@
       updateNameLabel(newBtn);
     });
 
-    // Position graduated buttons — 1 slot gap after normal
+    // Position graduated proxy buttons: 1-slot gap after normal stack
     const gradStart = sortedNormal.length + 1;
-    sortedGrad.forEach(({ newBtn, originalBtn }, i) => {
-      newBtn.style.left    = leftPos + 'px';
-      newBtn.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
-      newBtn.style.display = '';
-      newBtn.style.opacity = '1';
-      const coinImg = getCoinImage(originalBtn);
-      const imgEl   = newBtn.querySelector('img.qb-coin-img');
-      if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
-      updateInfoBar(newBtn);
-      updateNameLabel(newBtn);
-    });
-
-    // Hide graduated buttons not in top 3
-    gradCandidates.forEach(({ newBtn }) => {
-      if (!sortedGrad.find(s => s.newBtn === newBtn)) newBtn.style.display = 'none';
+    const showProxies = !(isPanelVisible && hasActiveSearch);
+    gradProxyBtns.forEach((proxy, i) => {
+      if (!proxy.isConnected) return;
+      if (!showProxies) { proxy.style.display = 'none'; return; }
+      proxy.style.left    = leftPos + 'px';
+      proxy.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
+      proxy.style.display = '';
+      proxy.style.opacity = '1';
     });
 
     // Ghost buttons at natural positions
@@ -597,10 +779,19 @@
     setReference(clickedImg.src);
   }, true);
 
-  // Freeze when prefetch changes token (panel is reloading results)
-  window.addEventListener('axiomPrefetchStart', () => freezeButtons());
+  // On prefetch: freeze, clear grad proxies, schedule graduated scan
+  window.addEventListener('axiomPrefetchStart', () => {
+    freezeButtons();
+    removeGradProxyBtns();
+    if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
+    // Wait for normal panel results to fully load before scanning
+    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 800);
+  });
 
   function addButtons() {
+    // Block during graduated scan to prevent graduated panel buttons from registering as normal
+    if (isScanning) return;
+
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
     const panel      = [...candidates].find(el => isSearchPanel(el));
 
@@ -687,21 +878,18 @@
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (frozen) { clickQueue = originalBtn; }
+        if (frozen || isScanning) { clickQueue = originalBtn; }
         else { fireClick(originalBtn); }
       });
       ghostBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (frozen) { clickQueue = originalBtn; }
+        if (frozen || isScanning) { clickQueue = originalBtn; }
         else { fireClick(originalBtn); }
       });
 
       updateBadge(newBtn);
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
-
-      // Unfreeze once new results arrive
-      if (frozen) flushQueue();
     });
   }
 
