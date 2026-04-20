@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.3
+// @version      7.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -74,6 +74,11 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
         const raw = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+        // Blank/all-black pixels = CORS-failed canvas or placeholder → treat as null
+        let totalLum = 0;
+        for (let i = 0; i < raw.length; i += 4)
+          totalLum += raw[i] * 0.299 + raw[i+1] * 0.587 + raw[i+2] * 0.114;
+        if (totalLum / (raw.length / 4) < 3) { cb(null); return; }
         cb(raw);
       } catch (e) { cb(null); }
     };
@@ -83,10 +88,16 @@
 
   function extractUrlId(url) {
     if (!url) return null;
-    const ipfs = url.match(/\/ipfs\/([A-Za-z0-9]{20,})/);
-    if (ipfs) return ipfs[1];
+    const clean = url.split('?')[0];
+    // IPFS CID in path (ipfs.io, cf-ipfs.com, pinata, gateway.ipfs.io, etc.)
+    const ipfsPath = clean.match(/\/ipfs\/([A-Za-z0-9]{20,})/);
+    if (ipfsPath) return ipfsPath[1];
     try {
-      const u = new URL(url);
+      const u = new URL(clean);
+      // CID as subdomain: {cid}.ipfs.nftstorage.link or {cid}.ipfs.dweb.link
+      const parts = u.hostname.split('.');
+      if (parts.length >= 3 && parts[1] === 'ipfs' && parts[0].length >= 20) return parts[0];
+      // Last path segment without extension
       const last = u.pathname.split('/').filter(Boolean).pop() || '';
       return last.replace(/\.[^.]+$/, '') || null;
     } catch { return null; }
@@ -182,6 +193,7 @@
       const id1 = extractUrlId(referenceSource);
       const id2 = extractUrlId(tokenSrc);
       if (id1 && id2 && id1 === id2) return 100;
+      if (id1 && id2 && id1 !== id2) console.log(`🔍 URL IDs differ: ref="${id1}" tok="${id2}"`);
     }
     if (!p1 || !p2) return null;
     const n1 = normalizeBrightness(p1);
