@@ -718,7 +718,26 @@
 
     const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGold;
     if (refGroup.length === 0 && gradProxyBtns.length === 0) return;
-    if (refGroup.length === 0) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
+
+    // No normal/gold visible but grad proxies exist — use panel's first QB button for geometry
+    if (refGroup.length === 0) {
+      const firstBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      if (!firstBtn) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
+      const firstRect = firstBtn.getBoundingClientRect();
+      const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
+      const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
+      const lp2       = firstRect.left - 621.5;
+      const showP     = !(isPanelVisible && hasActiveSearch);
+      gradProxyBtns.forEach((proxy, i) => {
+        if (!proxy.isConnected) return;
+        if (!showP) { proxy.style.display = 'none'; return; }
+        proxy.style.left    = lp2 + 'px';
+        proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
+        proxy.style.display = '';
+        proxy.style.opacity = '1';
+      });
+      return;
+    }
 
     const slot1Top  = refGroup[0].rect.top;
     const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
