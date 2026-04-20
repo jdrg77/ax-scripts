@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.5
+// @version      6.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -611,12 +611,10 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
-    // Wait until normal panel has at least 5 QB buttons AND referencePixels is ready
     const startWait = Date.now();
     const waitAndScan = () => {
-      const btnCount = lastPanel?.querySelectorAll('[class*="group/quickBuyButton"]').length || 0;
-      const elapsed  = Date.now() - startWait;
-      if ((btnCount < 5 || !referencePixels) && elapsed < 2000) {
+      const elapsed = Date.now() - startWait;
+      if (!referencePixels && elapsed < 2000) {
         setTimeout(waitAndScan, 80);
         return;
       }
@@ -766,16 +764,16 @@
 
     // No normal visible but grad proxies exist — use panel's first QB button for geometry
     if (sortedNormal.length === 0) {
-      const firstBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      if (!firstBtn) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
-      const firstRect = firstBtn.getBoundingClientRect();
-      const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
+      const firstBtn  = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      const firstRect = firstBtn?.getBoundingClientRect();
+      const rowEl2    = firstBtn?.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
-      const lp2       = firstRect.left - 621.5;
+      const lp2       = firstRect ? firstRect.left - 621.5 : 40;
+      const top0      = firstRect ? firstRect.top : 120;
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
         proxy.style.left    = lp2 + 'px';
-        proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
+        proxy.style.top     = (top0 + i * rowH2) + 'px';
         proxy.style.display = '';
         proxy.style.opacity = '1';
       });
