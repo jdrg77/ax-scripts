@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.95
+// @version      7.985
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -471,11 +471,9 @@
   }
 
   function shouldShowButton(originalBtn) {
+    if (isPanelVisible) return true;
     const bgColor = originalBtn.style.background || '';
-    const isGold  = bgColor.includes('255, 215, 0');
-    const isGreen = bgColor.includes('120, 255, 160');
-    if (isPanelVisible && hasActiveSearch) return true;
-    return isGold || isGreen;
+    return bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
   }
 
   function getCoinImage(originalBtn) {
@@ -702,15 +700,6 @@
     const tb1 = liveToggle();
     if (!tb1) { isScanning = false; flushQueue(); return; }
 
-    // If chip is already active, panel is stuck in graduated — fix and abort
-    if (isGraduatedChipActive(lastPanel)) {
-      console.warn('🎓 doScan: chip already active at start — clicking back to normal');
-      panelIsGraduated = false;
-      tb1.click();
-      isScanning = false;
-      flushQueue();
-      return;
-    }
 
     isScanning = true;
     inGraduatedView = true;
@@ -977,8 +966,8 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
-    abortScan();
-    ensureNormalView(); // no delay — just clicks toggle if panel got stuck in graduated
+    const wasInGrad = abortScan();
+    if (!wasInGrad) ensureNormalView(); // skip if abortScan already clicked toggle (avoid double-click)
     removeButtons();
     removeGradProxyBtns();
     freezeButtons();
@@ -998,8 +987,12 @@
       return;
     }
 
-    // Panel is physically in graduated view — don't process graduated tokens as normal
-    if (isGraduatedChipActive(panel)) return;
+    // Panel physically in graduated — don't process graduated tokens as normal.
+    // If we're waiting for a new pair, retry in 100ms: chip class change won't trigger the observer.
+    if (isGraduatedChipActive(panel)) {
+      if (waitingForNewPair) setTimeout(addButtons, 100);
+      return;
+    }
 
     checkPanelState(panel);
 
