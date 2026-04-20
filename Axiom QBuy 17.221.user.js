@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.2
+// @version      6.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -653,9 +653,7 @@
           const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
           return !normalTokenKeys.has(key);
         });
-        const top3 = [...unique]
-          .sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours))
-          .slice(0, 3);
+        const top3 = unique.slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
         toggleBtn.click();
