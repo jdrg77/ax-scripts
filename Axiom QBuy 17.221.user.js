@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      5.7
+// @version      5.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
+// @updateURL    y
 // @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
 // ==/UserScript==
 
@@ -406,8 +406,11 @@
   }
 
   function fireClick(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width  / 2;
+    const y = rect.top  + rect.height / 2;
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev => {
-      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y }));
     });
   }
 
@@ -716,15 +719,25 @@
       .slice(0, 3);
 
     const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGold;
-    if (refGroup.length === 0 && gradProxyBtns.length === 0) return;
-    if (refGroup.length === 0) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
 
-    const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? refGroup[0].rect.top;
-    const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
-    const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
-    const leftPos   = refGroup[0].rect.left - 621.5;
+    // Geometry reference — use first visible button or fall back to first panel QB button
+    let slot1Top, rowHeight, leftPos;
+    if (refGroup.length > 0) {
+      slot1Top  = refGroup[0].rect.top;
+      const rowEl = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+      rowHeight = rowEl?.getBoundingClientRect().height ||
+                  (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
+      leftPos   = refGroup[0].rect.left - 621.5;
+    } else {
+      // Only grad proxies — derive geometry from panel's first QB button
+      const firstOrig = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      if (!firstOrig && gradProxyBtns.length === 0) return;
+      if (!firstOrig) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
+      const fr = firstOrig.getBoundingClientRect();
+      slot1Top  = fr.top;
+      rowHeight = firstOrig.closest('[class*="max-h-[64px]"]')?.getBoundingClientRect().height || 64;
+      leftPos   = fr.left - 621.5;
+    }
 
     // Position normal buttons (sorted)
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
