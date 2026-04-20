@@ -29,6 +29,7 @@
   let isScanning        = false;
   let inGraduatedView   = false;
   let scanDebounceTimer = null;
+  let scanId            = 0;
   let referenceLocked   = false;
 
   function freezeButtons() {
@@ -60,6 +61,22 @@
         }
       }
     }
+  }
+
+  // Returns true if panel was in graduated view (caller must wait for toggle-back)
+  function abortScan() {
+    if (!isScanning) return false;
+    scanId++;
+    const wasInGrad = inGraduatedView;
+    inGraduatedView = false; // unblock addButtons immediately
+    isScanning = false;
+    frozen = false;
+    if (freezeTimer) clearTimeout(freezeTimer);
+    if (wasInGrad) {
+      const tb = lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
+      if (tb) tb.click();
+    }
+    return wasInGrad;
   }
 
   function getPixels(src, cb) {
@@ -660,22 +677,27 @@
 
     isScanning = true;
     inGraduatedView = true;
+    const myId = ++scanId;
+    const live = () => scanId === myId;
+
     tb1.click();
     console.log('🎓 Scanning graduated...');
 
     setTimeout(() => {
-      if (!lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
+      if (!live() || !lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
         const tb2 = liveToggle(); if (tb2) tb2.click();
-        setTimeout(() => { inGraduatedView = false; isScanning = false; flushQueue(); }, 350);
+        setTimeout(() => { if (live()) { inGraduatedView = false; isScanning = false; flushQueue(); } }, 350);
         return;
       }
 
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
 
       computeGradSimilarities(candidates, (withScores) => {
+        if (!live()) return; // aborted — panel already being toggled back by abortScan
+
         const unique = withScores.filter(d => {
           if (!d.ca) return true;
           return !normalCAKeys.has(d.ca);
@@ -686,6 +708,7 @@
         const tb3 = liveToggle(); if (tb3) tb3.click();
 
         setTimeout(() => {
+          if (!live()) return; // aborted between toggle and timeout
           inGraduatedView = false;
           removeGradProxyBtns();
           top3.forEach(data => {
@@ -868,9 +891,15 @@
 
   document.addEventListener('click', (e) => {
     const qbImg = e.target.closest('img.qb-coin-img');
-    if (qbImg?.src && !qbImg.src.startsWith('data:')) {
-      referenceLocked = false;
-      setReference(qbImg.src);
+    if (qbImg) {
+      // Click on coin photo → open the token (navigate like clicking the row)
+      const parentBtn = qbImg.closest('[data-qb-btn]') ||
+        addedBtns.find(b => b.contains(qbImg));
+      const originalBtn = parentBtn?._original;
+      if (originalBtn) {
+        const rowBtn = originalBtn.closest('div[role="button"]');
+        if (rowBtn) { fireClick(rowBtn); return; }
+      }
       return;
     }
 
@@ -890,14 +919,20 @@
     setReference(clickedImg.src);
   }, true);
 
-  // On prefetch: freeze, clear grad proxies, schedule graduated scan
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
-    freezeButtons();
+    // Abort any in-progress graduated scan — inGraduatedView goes false immediately
+    // so addButtons runs right away and normal buttons appear with zero delay
+    const wasInGrad = abortScan();
+    removeButtons();        // clear ALL previous buttons instantly
     removeGradProxyBtns();
-    if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
-    // Wait for normal panel results to fully load before scanning
-    scanGraduated();
+    freezeButtons();
+    // If panel was in graduated view, wait for toggle-back before new scan
+    if (wasInGrad) {
+      setTimeout(() => scanGraduated(), 350);
+    } else {
+      scanGraduated();
+    }
   });
 
   function addButtons() {
@@ -975,7 +1010,16 @@
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (frozen || isScanning) { clickQueue = newBtn; }
+        if (frozen || isScanning) {
+          clickQueue = newBtn;
+          // Abort graduated scan, toggle back if needed, then execute click
+          const wasInGrad = abortScan();
+          if (wasInGrad) {
+            setTimeout(() => flushQueue(), 370);
+          } else {
+            flushQueue();
+          }
+        }
         else { fireClick(originalBtn); }
       });
 
