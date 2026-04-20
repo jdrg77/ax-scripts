@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.91
+// @version      7.93
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -65,15 +65,17 @@
     }
   }
 
-  // Returns true if panel was in graduated view (caller must wait for toggle-back)
   function abortScan() {
     if (!isScanning) return false;
     scanId++;
-    const wasInGrad = inGraduatedView;
-    inGraduatedView = false; // unblock addButtons immediately
+    inGraduatedView = false;
     isScanning = false;
     frozen = false;
     if (freezeTimer) clearTimeout(freezeTimer);
+    // Use panelIsGraduated (real toggle state), not inGraduatedView:
+    // toggleBack() may have already flipped the toggle while inGraduatedView was still true,
+    // so using inGraduatedView here would double-click and send the panel back to graduated.
+    const wasInGrad = panelIsGraduated;
     if (wasInGrad) {
       panelIsGraduated = false;
       const tb = lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
@@ -661,9 +663,13 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { flushQueue(); return; }
 
+    // Capture scanId now — if it changes before doScan starts, abort was called during wait
+    const startScanId = scanId;
+
     // Wait only for referencePixels (max 1000ms, poll every 30ms)
     const startWait = Date.now();
     const waitAndScan = () => {
+      if (scanId !== startScanId) return; // aborted while waiting for pixels
       const elapsed = Date.now() - startWait;
       if (!referencePixels && elapsed < 1000) {
         setTimeout(waitAndScan, 30);
@@ -702,9 +708,9 @@
 
     const toggleBack = () => {
       panelIsGraduated = false;
-      const tb = liveToggle();
-      if (tb) tb.click();
-      else console.warn('🎓 toggleBack: button not found, panel may stay in graduated');
+      // Prefer live lookup; fall back to tb1 in case button text changes while in graduated view
+      const tb = liveToggle() || tb1;
+      tb.click();
     };
 
     setTimeout(() => {
