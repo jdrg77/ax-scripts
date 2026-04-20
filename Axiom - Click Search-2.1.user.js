@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Click Search
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Click%20Search-2.1.user.js
@@ -21,17 +21,15 @@
   function openSearchWithTicker(token) {
     window.axiomUserOpen = true;
     const panel = document.querySelector('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
-    if (!panel) {
+    if (panel) {
+      const wrapper = panel.parentElement;
+      const overlay = wrapper?.parentElement;
+      if (wrapper) { wrapper.style.removeProperty('z-index'); wrapper.style.removeProperty('pointer-events'); }
+      if (overlay) { overlay.style.removeProperty('z-index'); overlay.style.removeProperty('pointer-events'); overlay.style.removeProperty('background'); overlay.style.removeProperty('backdrop-filter'); }
+    } else {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
     }
     setTimeout(() => {
-      const p = document.querySelector('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
-      if (p) {
-        const wrapper = p.parentElement;
-        const overlay = wrapper?.parentElement;
-        if (wrapper) { wrapper.style.pointerEvents = 'none'; }
-        if (overlay) { overlay.style.pointerEvents = 'none'; overlay.style.background = 'none'; overlay.style.backdropFilter = 'none'; }
-      }
       const input = document.querySelector('[class*="bg-backgroundTertiary"] input');
       if (!input) return;
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -75,7 +73,9 @@
     }
   };
 
+  document.addEventListener('pointerdown', handler, true);
   document.addEventListener('mousedown', handler, true);
+  document.addEventListener('click', handler, true);
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') window.axiomUserOpen = false;
