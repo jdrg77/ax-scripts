@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.985
+// @version      7.99
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -66,8 +66,8 @@
   }
 
   function abortScan() {
+    scanId++; // always increment — aborts any pending waitAndScan even if isScanning=false
     if (!isScanning) return false;
-    scanId++;
     inGraduatedView = false;
     isScanning = false;
     frozen = false;
@@ -1082,9 +1082,13 @@
       updateNameLabel(newBtn);
     });
 
-    // New pair's buttons just appeared — kick off graduated scan now
+    // New pair's buttons just appeared — position them NOW before scan starts,
+    // then kick off graduated scan. updatePositions() must run synchronously here
+    // because scheduleUpdate() has a 16ms debounce and doScan() fires in ~1ms,
+    // causing originals to detach before the first updatePositions() call.
     if (waitingForNewPair && addedBtns.length > 0) {
       waitingForNewPair = false;
+      updatePositions();
       setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
     }
   }
