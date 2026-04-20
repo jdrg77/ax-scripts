@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.3
+// @version      5.4
 // @match        https://axiom.trade/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.3.user.js
-// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.3.user.js
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.4.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.4.user.js
 // ==/UserScript==
 
 (function () {
@@ -95,6 +95,11 @@
     return nameSpan ? nameSpan.textContent.trim() : null;
   }
 
+  function getTokenTicker(row) {
+    const tickerEl = row.querySelector('[style*="max-width"]');
+    return tickerEl ? tickerEl.textContent.trim() : null;
+  }
+
   function forceLoadImages() {
     const panel = getPanel();
     if (!panel) return;
@@ -106,11 +111,32 @@
     });
   }
 
-  function prefetch(name) {
+  async function fetchGraduated(name, ticker) {
+    window.axiomFetchingGraduated = true;
+    try {
+      const params = `searchQuery=${encodeURIComponent(name)}&isOg=false&isPumpSearch=false&isBonkSearch=false&isBagsSearch=false&sortBy=trending&onlyBonded=false&v=${Date.now()}`;
+      const results = await fetch(`https://api3.axiom.trade/search-v4?${params}`).then(r => r.json());
+      window.axiomGraduatedResults = {
+        query: name,
+        ticker: ticker || '',
+        results: Array.isArray(results) ? results : []
+      };
+      window.dispatchEvent(new CustomEvent('axiomGraduated', { detail: window.axiomGraduatedResults }));
+    } catch (e) {
+      window.axiomGraduatedResults = { query: name, ticker: ticker || '', results: [] };
+      window.dispatchEvent(new CustomEvent('axiomGraduated', { detail: window.axiomGraduatedResults }));
+    } finally {
+      window.axiomFetchingGraduated = false;
+    }
+  }
+
+  function prefetch(name, ticker) {
     if (!name || userOpen || window.axiomUserOpen || name === lastPrefetched) return;
 
-    console.log('🔄 Prefetch:', name);
+    console.log('🔄 Prefetch:', name, ticker);
     lastPrefetched = name;
+
+    fetchGraduated(name, ticker);
 
     if (!getPanel()) {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
@@ -152,10 +178,11 @@
       setTimeout(() => {
         const rows = document.querySelectorAll('[class*="group/pulseRow"]');
         if (rows.length) {
-          const name = getTokenName(rows[0]);
+          const name   = getTokenName(rows[0]);
+          const ticker = getTokenTicker(rows[0]);
           if (name) {
             lastRowName = name;
-            prefetch(name);
+            prefetch(name, ticker);
           }
         }
       }, 500);
@@ -176,10 +203,11 @@
       setTimeout(() => {
         const rows = document.querySelectorAll('[class*="group/pulseRow"]');
         if (rows.length) {
-          const name = getTokenName(rows[0]);
+          const name   = getTokenName(rows[0]);
+          const ticker = getTokenTicker(rows[0]);
           if (name) {
             lastRowName = name;
-            prefetch(name);
+            prefetch(name, ticker);
           }
         }
       }, 500);
@@ -189,15 +217,16 @@
       const rows = document.querySelectorAll('[class*="group/pulseRow"]');
       if (!rows.length) return;
 
-      const name = getTokenName(rows[0]);
+      const name   = getTokenName(rows[0]);
+      const ticker = getTokenTicker(rows[0]);
       if (name && name !== lastRowName) {
         lastRowName = name;
-        prefetch(name);
+        prefetch(name, ticker);
       }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  console.log('🚀 Axiom Prefetch v5.3 (SIN DELAY)');
+  console.log('🚀 Axiom Prefetch v5.4 (SIN DELAY)');
 })();
