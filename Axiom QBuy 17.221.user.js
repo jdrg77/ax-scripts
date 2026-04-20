@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      6.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -452,6 +452,7 @@
 
   let lastTopSrc = null;
   function checkTopPulseReference() {
+    if (isPanelVisible) return; // don't auto-change reference while panel is open
     const topImg = getTopPulseRowImage();
     if (topImg?.src && topImg.src !== lastTopSrc) {
       lastTopSrc = topImg.src;
