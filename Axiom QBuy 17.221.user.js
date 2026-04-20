@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.4
+// @version      6.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const SAMPLE_SIZE = 32;
+  const SAMPLE_SIZE = 16;
   const addedBtns     = [];
   const gradProxyBtns = [];
   let scrollEl        = null;
@@ -26,8 +26,7 @@
   let frozen          = false;
   let clickQueue      = null;
   let freezeTimer     = null;
-  let isScanning        = false;
-  let inGraduatedView   = false;
+  let isScanning      = false;
   let scanDebounceTimer = null;
   let referenceLocked = false;
 
@@ -74,11 +73,6 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
         const raw = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-        // Blank/all-black pixels = CORS-failed canvas or placeholder → treat as null
-        let totalLum = 0;
-        for (let i = 0; i < raw.length; i += 4)
-          totalLum += raw[i] * 0.299 + raw[i+1] * 0.587 + raw[i+2] * 0.114;
-        if (totalLum / (raw.length / 4) < 3) { cb(null); return; }
         cb(raw);
       } catch (e) { cb(null); }
     };
@@ -86,129 +80,18 @@
     img.src = src.includes('?') ? src : src + '?qb=1';
   }
 
-  function extractUrlId(url) {
-    if (!url) return null;
-    const clean = url.split('?')[0];
-    // IPFS CID in path (ipfs.io, cf-ipfs.com, pinata, gateway.ipfs.io, etc.)
-    const ipfsPath = clean.match(/\/ipfs\/([A-Za-z0-9]{20,})/);
-    if (ipfsPath) return ipfsPath[1];
-    try {
-      const u = new URL(clean);
-      // CID as subdomain: {cid}.ipfs.nftstorage.link or {cid}.ipfs.dweb.link
-      const parts = u.hostname.split('.');
-      if (parts.length >= 3 && parts[1] === 'ipfs' && parts[0].length >= 20) return parts[0];
-      // Last path segment without extension
-      const last = u.pathname.split('/').filter(Boolean).pop() || '';
-      return last.replace(/\.[^.]+$/, '') || null;
-    } catch { return null; }
-  }
-
-  function normalizeBrightness(pixels) {
-    const len = pixels.length;
-    let total = 0;
-    for (let i = 0; i < len; i += 4)
-      total += pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114;
-    const avg = total / (len / 4);
-    if (avg < 1) return pixels;
-    const scale = 128 / avg;
-    const out = new Uint8ClampedArray(len);
-    for (let i = 0; i < len; i += 4) {
-      out[i]   = Math.min(255, pixels[i]   * scale);
-      out[i+1] = Math.min(255, pixels[i+1] * scale);
-      out[i+2] = Math.min(255, pixels[i+2] * scale);
-      out[i+3] = pixels[i+3];
-    }
-    return out;
-  }
-
   function pixelSimilarity(p1, p2) {
     if (!p1 || !p2) return null;
-    const len = Math.min(p1.length, p2.length);
-    let diff = 0;
+    const len    = Math.min(p1.length, p2.length);
+    const pixels = len / 4;
+    let sum = 0;
     for (let i = 0; i < len; i += 4) {
-      const dr = (p1[i]   - p2[i])   / 255;
-      const dg = (p1[i+1] - p2[i+1]) / 255;
-      const db = (p1[i+2] - p2[i+2]) / 255;
-      diff += Math.abs(dr * 0.299 + dg * 0.587 + db * 0.114);
+      const dr = Math.abs(p1[i]     - p2[i])     / 255;
+      const dg = Math.abs(p1[i + 1] - p2[i + 1]) / 255;
+      const db = Math.abs(p1[i + 2] - p2[i + 2]) / 255;
+      sum += (dr + dg + db) / 3;
     }
-    return parseFloat(((1 - diff / (len / 4)) * 100).toFixed(1));
-  }
-
-  function pHashSimilarity(p1, p2) {
-    if (!p1 || !p2) return null;
-    const size = SAMPLE_SIZE;
-    const lum  = (d, i) => d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
-    const g1 = new Float32Array(size * size);
-    const g2 = new Float32Array(size * size);
-    for (let i = 0; i < size * size; i++) { g1[i] = lum(p1, i*4); g2[i] = lum(p2, i*4); }
-    const H = 8;
-    const dct1 = new Float32Array(H * H);
-    const dct2 = new Float32Array(H * H);
-    const c = u => u === 0 ? 1 / Math.sqrt(size) : Math.sqrt(2 / size);
-    for (let u = 0; u < H; u++) {
-      for (let v = 0; v < H; v++) {
-        let s1 = 0, s2 = 0;
-        for (let x = 0; x < size; x++) {
-          const cx = Math.cos((2*x+1)*u*Math.PI/(2*size));
-          for (let y = 0; y < size; y++) {
-            const cy = Math.cos((2*y+1)*v*Math.PI/(2*size));
-            s1 += g1[y*size+x] * cx * cy;
-            s2 += g2[y*size+x] * cx * cy;
-          }
-        }
-        dct1[u*H+v] = c(u)*c(v)*s1;
-        dct2[u*H+v] = c(u)*c(v)*s2;
-      }
-    }
-    const vals1 = Array.from(dct1).slice(1);
-    const vals2 = Array.from(dct2).slice(1);
-    const med1  = [...vals1].sort((a,b)=>a-b)[Math.floor(vals1.length/2)];
-    const med2  = [...vals2].sort((a,b)=>a-b)[Math.floor(vals2.length/2)];
-    let hamming = 0;
-    for (let i = 0; i < vals1.length; i++)
-      if ((vals1[i] > med1) !== (vals2[i] > med2)) hamming++;
-    return parseFloat(((1 - hamming / vals1.length) * 100).toFixed(1));
-  }
-
-  function dHashSimilarity(p1, p2) {
-    if (!p1 || !p2) return null;
-    const size = SAMPLE_SIZE;
-    const W = 9, H = 8;
-    const lum = (p, x, y) => {
-      const px = Math.round(x * (size-1) / (W-1));
-      const py = Math.round(y * (size-1) / (H-1));
-      const i  = (py * size + px) * 4;
-      return p[i] * 0.299 + p[i+1] * 0.587 + p[i+2] * 0.114;
-    };
-    let hamming = 0;
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W-1; x++)
-        if ((lum(p1,x,y) > lum(p1,x+1,y)) !== (lum(p2,x,y) > lum(p2,x+1,y))) hamming++;
-    return parseFloat(((1 - hamming / (H*(W-1))) * 100).toFixed(1));
-  }
-
-  function combinedSimilarity(p1, p2, tokenSrc) {
-    // URL exact match → 100%
-    if (tokenSrc && referenceSource) {
-      const id1 = extractUrlId(referenceSource);
-      const id2 = extractUrlId(tokenSrc);
-      if (id1 && id2 && id1 === id2) return 100;
-      if (id1 && id2 && id1 !== id2) console.log(`🔍 URL IDs differ: ref="${id1}" tok="${id2}"`);
-    }
-    if (!p1 || !p2) return null;
-    const n1 = normalizeBrightness(p1);
-    const n2 = normalizeBrightness(p2);
-    const ps = pixelSimilarity(n1, n2);
-    const ph = pHashSimilarity(n1, n2);
-    const pd = dHashSimilarity(n1, n2);
-    const scores = [ps, ph, pd].filter(v => v !== null);
-    if (!scores.length) return null;
-    // weights: pixel 15%, pHash 65%, dHash 20%
-    const weights = [0.15, 0.65, 0.20];
-    const active  = [ps, ph, pd];
-    let sum = 0, wsum = 0;
-    active.forEach((v, i) => { if (v !== null) { sum += v * weights[i]; wsum += weights[i]; } });
-    return parseFloat((sum / wsum).toFixed(1));
+    return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
   }
 
   function updateGradProxyBadges() {
@@ -217,7 +100,7 @@
       const data = proxy._gradData;
       if (!data || !data.imgSrc) return;
       getPixels(data.imgSrc, pixels => {
-        const pct = combinedSimilarity(referencePixels, pixels, data.imgSrc) ?? 0;
+        const pct = pixelSimilarity(referencePixels, pixels) ?? 0;
         data.match = pct;
         const badge = proxy.querySelector('.qb-sim-badge');
         if (badge) {
@@ -233,8 +116,6 @@
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
     referencePixels = null;
-    // Clear stale proxies from previous reference (only if no scan is building new ones)
-    if (!isScanning) removeGradProxyBtns();
     getPixels(src, (pixels) => {
       referencePixels = pixels;
       updateAllBadges();
@@ -344,51 +225,44 @@
     const nameTickerMatch = t => sameName(t) && sameTicker(t);
     const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
 
+    const arr = tokens; // all tokens sorted together by all criteria
+
+    const hasNameTicker = arr.some(nameTickerMatch);
+    const hasNameOnly   = !hasNameTicker && arr.some(nameOnlyMatch);
+
     const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
-    const sortByOldest    = (a, b) => b.ageHours - a.ageHours;
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
-
-    // Blue = not gold, not green. Only show if exact name/ticker match AND match > 50%
-    const special = tokens.filter(t => t.isGold || t.isGreen);
-    const blues   = tokens
-      .filter(t => !t.isGold && !t.isGreen)
-      .filter(t => (sameName(t) || sameTicker(t)) && t.match > 50)
-      .sort(sortByOldest);
 
     function sortRest(list) {
       const ageDays = t => t.ageHours / 24;
       const tier1   = list.filter(t => ageDays(t) < 7 && t.match > 72);
       const t1High  = tier1.filter(t => t.match > 92).sort(sortByRecent);
       const t1Low   = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
-      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByRecent);
-      const tier3   = list.filter(t => ageDays(t) >= 7 && t.match >= 75 && t.match <= 80).sort(sortByRecent);
+      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
+      const tier3   = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
       const tier4   = list.filter(t => t.match >= 58.21 && t.match < 75).sort(sortByAgeMC);
       const tier5   = list.filter(t => t.match < 58.21).sort(sortByAgeMC);
       return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
 
-    let sortedSpecial;
-    const hasNameTicker = special.some(nameTickerMatch);
-    const hasNameOnly   = !hasNameTicker && special.some(nameOnlyMatch);
-
     if (hasNameTicker) {
-      const nt     = special.filter(nameTickerMatch);
-      const ultra  = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
-      const rest   = nt.filter(t => t.match <= 85).sort(sortByRecent);
-      const others = special.filter(t => !nameTickerMatch(t));
-      sortedSpecial = [...ultra, ...rest, ...sortRest(others)];
-    } else if (hasNameOnly) {
-      const no     = special.filter(nameOnlyMatch);
-      const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
-      const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
-      const others = special.filter(t => !nameOnlyMatch(t));
-      sortedSpecial = [...recent, ...old, ...sortRest(others)];
-    } else {
-      sortedSpecial = sortRest(special);
+      const nt    = arr.filter(nameTickerMatch);
+      const ultra = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
+      const rest  = nt.filter(t => t.match <= 85).sort(sortByRecent);
+      const others = arr.filter(t => !nameTickerMatch(t));
+      return [...ultra, ...rest, ...sortRest(others)];
     }
 
-    return [...sortedSpecial, ...blues];
+    if (hasNameOnly) {
+      const no    = arr.filter(nameOnlyMatch);
+      const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
+      const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
+      const others = arr.filter(t => !nameOnlyMatch(t));
+      return [...recent, ...old, ...sortRest(others)];
+    }
+
+    return sortRest(arr);
   }
 
   function getNewestBtn() {
@@ -432,7 +306,7 @@
     if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; return; }
     if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; return; }
     getPixels(coinImg.src, (rowPixels) => {
-      const pct = combinedSimilarity(referencePixels, rowPixels, coinImg.src);
+      const pct = pixelSimilarity(referencePixels, rowPixels);
       newBtn._matchPct = pct ?? 0;
       if (pct === null) {
         badge.textContent = '?'; badge.style.color = '#888';
@@ -615,14 +489,6 @@
     return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim() === 'Graduated') || null;
   }
 
-  function getRowCA(row) {
-    const link = row.querySelector('a[href*="/meme/"], a[href*="pump.fun/coin/"]');
-    if (link) return link.pathname.split('/').pop().split('?')[0] || null;
-    const img = row.querySelector('img[src*="axiomtrading"]');
-    if (img) return img.src.split('/').pop().replace('.webp', '') || null;
-    return null;
-  }
-
   function extractGradTokenInfo(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
     if (!row) return null;
@@ -650,8 +516,7 @@
     }
     // Clone the real QB button now (before panel toggles back) to preserve Axiom's internal HTML
     const btnClone = originalBtn.cloneNode(true);
-    const ca = getRowCA(row);
-    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone, ca };
+    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone };
   }
 
   function computeGradSimilarities(candidates, cb) {
@@ -663,12 +528,12 @@
     const oneDone = () => { done++; if (done === candidates.length) { clearTimeout(timeout); finish(); } };
     candidates.forEach(data => {
       if (data.directPixels) {
-        data.match = combinedSimilarity(referencePixels, data.directPixels, data.imgSrc) ?? 0;
+        data.match = pixelSimilarity(referencePixels, data.directPixels) ?? 0;
         oneDone(); return;
       }
       if (!data.imgSrc) { data.match = 0; oneDone(); return; }
       getPixels(data.imgSrc, pixels => {
-        data.match = combinedSimilarity(referencePixels, pixels, data.imgSrc) ?? 0;
+        data.match = pixelSimilarity(referencePixels, pixels) ?? 0;
         oneDone();
       });
     });
@@ -745,10 +610,12 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
+    // Wait until normal panel has at least 5 QB buttons AND referencePixels is ready
     const startWait = Date.now();
     const waitAndScan = () => {
-      const elapsed = Date.now() - startWait;
-      if (!referencePixels && elapsed < 2000) {
+      const btnCount = lastPanel?.querySelectorAll('[class*="group/quickBuyButton"]').length || 0;
+      const elapsed  = Date.now() - startWait;
+      if ((btnCount < 5 || !referencePixels) && elapsed < 2000) {
         setTimeout(waitAndScan, 80);
         return;
       }
@@ -756,67 +623,44 @@
     };
 
     function doScan() {
-    const normalCAKeys = new Set();
+    // Compound "ticker|name" keys — only exact duplicates (same ticker AND name) are excluded
+    const normalTokenKeys = new Set();
     addedBtns.forEach(btn => {
-      const row = btn._original?.closest('[class*="max-h-[64px]"]');
-      const ca  = row ? getRowCA(row) : null;
-      if (ca) normalCAKeys.add(ca);
+      const t = (btn._ticker || '').toLowerCase();
+      const n = (btn._name   || '').toLowerCase();
+      normalTokenKeys.add(`${t}|${n}`);
     });
 
-    // Always look up toggle button live from current panel — panel may have re-rendered
-    // since scanGraduated() captured the outer `toggleBtn`
-    const liveToggle = () => {
-      const panelEl = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
-        .find(el => isSearchPanel(el));
-      if (panelEl && panelEl !== lastPanel) lastPanel = panelEl;
-      return lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
-    };
-
-    const tb1 = liveToggle();
-    if (!tb1) { isScanning = false; flushQueue(); return; }
-
     isScanning = true;
-    inGraduatedView = true;
-    tb1.click();
+    toggleBtn.click();
     console.log('🎓 Scanning graduated...');
 
     setTimeout(() => {
-      if (!lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
+      if (!lastPanel) { isScanning = false; flushQueue(); return; }
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
-        inGraduatedView = false;
-        const tb2 = liveToggle(); if (tb2) tb2.click();
-        setTimeout(() => { isScanning = false; flushQueue(); }, 350);
+        toggleBtn.click();
+        setTimeout(() => { isScanning = false; flushQueue(); }, 700);
         return;
       }
 
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
 
       computeGradSimilarities(candidates, (withScores) => {
+        // Exclude tokens already visible in the normal section
         const unique = withScores.filter(d => {
-          if (!d.ca) return true;
-          return !normalCAKeys.has(d.ca);
+          const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
+          return !normalTokenKeys.has(key);
         });
-        // Sort graduated by same tier system as normal tokens
-        const sortedGrad = (() => {
-          const ageDays = d => d.ageHours / 24;
-          const t1High = unique.filter(d => ageDays(d) < 7 && d.match > 92).sort((a,b) => a.ageHours - b.ageHours);
-          const t1Low  = unique.filter(d => ageDays(d) < 7 && d.match > 72 && d.match <= 92).sort((a,b) => b.match - a.match);
-          const tier2  = unique.filter(d => ageDays(d) >= 7 && d.match > 80).sort((a,b) => a.ageHours - b.ageHours);
-          const tier3  = unique.filter(d => ageDays(d) >= 7 && d.match >= 75 && d.match <= 80).sort((a,b) => a.ageHours - b.ageHours);
-          const tier4  = unique.filter(d => d.match >= 58.21 && d.match < 75).sort((a,b) => a.ageHours - b.ageHours || b.match - a.match);
-          const tier5  = unique.filter(d => d.match < 58.21).sort((a,b) => a.ageHours - b.ageHours || b.match - a.match);
-          return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
-        })();
-        console.log('🎓 Graduated:', sortedGrad.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
+        const top3 = unique.slice(0, 3);
+        console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
-        inGraduatedView = false;
-        const tb3 = liveToggle(); if (tb3) tb3.click();
+        toggleBtn.click();
 
         setTimeout(() => {
           removeGradProxyBtns();
-          sortedGrad.forEach(data => {
+          top3.forEach(data => {
             const proxy = createGradProxy(data);
             document.body.appendChild(proxy);
             gradProxyBtns.push(proxy);
@@ -825,9 +669,9 @@
           isScanning = false;
           scheduleUpdate();
           flushQueue();
-        }, 350);
+        }, 700);
       });
-    }, 350);
+    }, 700);
     } // end doScan
 
     waitAndScan();
@@ -840,7 +684,6 @@
 
     frozen = true;
     isScanning = true;
-    inGraduatedView = true;
     clickQueue = null;
     removeGradProxyBtns();
     if (freezeTimer) clearTimeout(freezeTimer);
@@ -848,7 +691,7 @@
     toggleBtn.click();
 
     setTimeout(() => {
-      if (!lastPanel) { inGraduatedView = false; isScanning = false; frozen = false; return; }
+      if (!lastPanel) { isScanning = false; frozen = false; return; }
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       let targetBtn = null;
       for (const btn of btns) {
@@ -867,10 +710,9 @@
         console.log('✅ Grad click:', data.ticker || data.name);
       }
 
-      inGraduatedView = false;
       toggleBtn.click();
-      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 350);
-    }, 350);
+      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 700);
+    }, 700);
   }
 
   // ======= POSITION & LAYOUT =======
@@ -906,16 +748,16 @@
 
     // No normal visible but grad proxies exist — use panel's first QB button for geometry
     if (sortedNormal.length === 0) {
-      const firstBtn  = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      const firstRect = firstBtn?.getBoundingClientRect();
-      const rowEl2    = firstBtn?.closest('[class*="max-h-[64px]"]');
+      const firstBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      if (!firstBtn) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
+      const firstRect = firstBtn.getBoundingClientRect();
+      const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
-      const lp2       = firstRect ? firstRect.left - 621.5 : 40;
-      const top0      = firstRect ? firstRect.top : 120;
+      const lp2       = firstRect.left - 621.5;
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
         proxy.style.left    = lp2 + 'px';
-        proxy.style.top     = (top0 + i * rowH2) + 'px';
+        proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
         proxy.style.display = '';
         proxy.style.opacity = '1';
       });
@@ -1026,11 +868,13 @@
     freezeButtons();
     removeGradProxyBtns();
     if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
-    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 50);
+    // Wait for normal panel results to fully load before scanning
+    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 800);
   });
 
   function addButtons() {
-    if (inGraduatedView) return;
+    // Block during graduated scan to prevent graduated panel buttons from registering as normal
+    if (isScanning) return;
 
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
     const panel      = [...candidates].find(el => isSearchPanel(el));
