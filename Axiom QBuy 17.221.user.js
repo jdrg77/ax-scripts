@@ -28,6 +28,7 @@
   let freezeTimer     = null;
   let isScanning      = false;
   let scanDebounceTimer = null;
+  let referenceLocked = false;
 
   function freezeButtons() {
     frozen = true;
@@ -452,7 +453,7 @@
 
   let lastTopSrc = null;
   function checkTopPulseReference() {
-    if (isPanelVisible) return; // don't auto-change reference while panel is open
+    if (referenceLocked) return;
     const topImg = getTopPulseRowImage();
     if (topImg?.src && topImg.src !== lastTopSrc) {
       lastTopSrc = topImg.src;
@@ -811,12 +812,17 @@
     const hadSearch  = hasActiveSearch;
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
     hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
+    if (!hadSearch && hasActiveSearch) referenceLocked = true;
     if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
   }
 
   document.addEventListener('click', (e) => {
     const qbImg = e.target.closest('img.qb-coin-img');
-    if (qbImg?.src && !qbImg.src.startsWith('data:')) { setReference(qbImg.src); return; }
+    if (qbImg?.src && !qbImg.src.startsWith('data:')) {
+      referenceLocked = false;
+      setReference(qbImg.src);
+      return;
+    }
 
     let clickedImg = e.target.closest('img[class*="object-cover"]');
     if (!clickedImg) {
@@ -830,11 +836,13 @@
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (panel && panel.contains(clickedImg)) return;
+    referenceLocked = false;
     setReference(clickedImg.src);
   }, true);
 
   // On prefetch: freeze, clear grad proxies, schedule graduated scan
   window.addEventListener('axiomPrefetchStart', () => {
+    referenceLocked = true;
     freezeButtons();
     removeGradProxyBtns();
     if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
