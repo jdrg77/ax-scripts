@@ -601,13 +601,12 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
-    // Snapshot normal panel tickers/names using cached values (immune to virtual scroll DOM removal)
+    // Compound "ticker|name" keys — only exact duplicates (same ticker AND name) are excluded
     const normalTokenKeys = new Set();
     addedBtns.forEach(btn => {
       const t = (btn._ticker || '').toLowerCase();
       const n = (btn._name   || '').toLowerCase();
-      if (t) normalTokenKeys.add(t);
-      if (n) normalTokenKeys.add(n);
+      normalTokenKeys.add(`${t}|${n}`);
     });
 
     isScanning = true;
@@ -628,10 +627,10 @@
 
       computeGradSimilarities(candidates, (withScores) => {
         // Exclude tokens already visible in the normal section
-        const unique = withScores.filter(d =>
-          !normalTokenKeys.has(d.ticker.toLowerCase()) &&
-          !normalTokenKeys.has(d.name.toLowerCase())
-        );
+        const unique = withScores.filter(d => {
+          const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
+          return !normalTokenKeys.has(key);
+        });
         const top3 = [...unique]
           .sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours))
           .slice(0, 3);
