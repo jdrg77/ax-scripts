@@ -763,9 +763,21 @@
       if (ca) normalCAKeys.add(ca);
     });
 
+    // Always look up toggle button live from current panel — panel may have re-rendered
+    // since scanGraduated() captured the outer `toggleBtn`
+    const liveToggle = () => {
+      const panelEl = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+        .find(el => isSearchPanel(el));
+      if (panelEl && panelEl !== lastPanel) lastPanel = panelEl;
+      return lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
+    };
+
+    const tb1 = liveToggle();
+    if (!tb1) { isScanning = false; flushQueue(); return; }
+
     isScanning = true;
     inGraduatedView = true;
-    toggleBtn.click();
+    tb1.click();
     console.log('🎓 Scanning graduated...');
 
     setTimeout(() => {
@@ -774,13 +786,12 @@
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
         inGraduatedView = false;
-        toggleBtn.click();
+        const tb2 = liveToggle(); if (tb2) tb2.click();
         setTimeout(() => { isScanning = false; flushQueue(); }, 350);
         return;
       }
 
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
-      inGraduatedView = false;
 
       computeGradSimilarities(candidates, (withScores) => {
         const unique = withScores.filter(d => {
@@ -800,7 +811,8 @@
         })();
         console.log('🎓 Graduated:', sortedGrad.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
-        toggleBtn.click();
+        inGraduatedView = false;
+        const tb3 = liveToggle(); if (tb3) tb3.click();
 
         setTimeout(() => {
           removeGradProxyBtns();
