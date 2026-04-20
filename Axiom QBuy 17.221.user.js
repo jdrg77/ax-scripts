@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.99
+// @version      7.991
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -471,7 +471,7 @@
   }
 
   function shouldShowButton(originalBtn) {
-    if (isPanelVisible) return true;
+    if (lastPanel && lastPanel.isConnected) return true;
     const bgColor = originalBtn.style.background || '';
     return bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
   }
