@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.8.2
+// @version      7.85
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -31,6 +31,7 @@
   let scanDebounceTimer = null;
   let scanId            = 0;
   let referenceLocked   = false;
+  let waitingForNewPair = false;
 
   function freezeButtons() {
     frozen = true;
@@ -460,7 +461,11 @@
   }
 
   function removeButtons() {
-    addedBtns.forEach(btn => btn.remove()); addedBtns.length = 0;
+    addedBtns.forEach(btn => {
+      if (btn._original) delete btn._original.dataset.qbAdded;
+      btn.remove();
+    });
+    addedBtns.length = 0;
     removeGradProxyBtns();
   }
 
@@ -689,7 +694,7 @@
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
         const tb2 = liveToggle(); if (tb2) tb2.click();
-        setTimeout(() => { if (live()) { inGraduatedView = false; isScanning = false; flushQueue(); } }, 350);
+        setTimeout(() => { if (live()) { inGraduatedView = false; isScanning = false; addButtons(); flushQueue(); } }, 350);
         return;
       }
 
@@ -718,6 +723,7 @@
           });
 
           isScanning = false;
+          addButtons();
           scheduleUpdate();
           flushQueue();
         }, 350);
@@ -892,14 +898,18 @@
   document.addEventListener('click', (e) => {
     const qbImg = e.target.closest('img.qb-coin-img');
     if (qbImg) {
-      // Click on coin photo → open the token (navigate like clicking the row)
-      const parentBtn = qbImg.closest('[data-qb-btn]') ||
-        addedBtns.find(b => b.contains(qbImg));
-      const originalBtn = parentBtn?._original;
-      if (originalBtn) {
-        const rowBtn = originalBtn.closest('div[role="button"]');
+      // Normal button: click the row's div[role="button"] to open the token
+      const parentBtn = addedBtns.find(b => b.contains(qbImg));
+      if (parentBtn?._original) {
+        const row    = parentBtn._original.closest('[class*="max-h-[64px]"]');
+        const link   = row?.querySelector('a[href*="/meme/"]');
+        if (link) { window.location.href = link.href; return; }
+        const rowBtn = parentBtn._original.closest('div[role="button"]');
         if (rowBtn) { fireClick(rowBtn); return; }
       }
+      // Grad proxy button: navigate via CA
+      const proxyBtn = gradProxyBtns.find(b => b.contains(qbImg));
+      if (proxyBtn?._gradData?.ca) { window.location.href = `/meme/${proxyBtn._gradData.ca}`; return; }
       return;
     }
 
@@ -921,15 +931,18 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
-    // Abort any in-progress graduated scan — inGraduatedView goes false immediately
-    // so addButtons runs right away and normal buttons appear with zero delay
     const wasInGrad = abortScan();
-    removeButtons();        // clear ALL previous buttons instantly
+    removeButtons();
     removeGradProxyBtns();
     freezeButtons();
-    // Delay by one tick so MutationObserver fires first — addButtons recreates
-    // normal buttons instantly before doScan sets inGraduatedView=true
-    setTimeout(() => scanGraduated(), wasInGrad ? 350 : 0);
+    if (wasInGrad) {
+      // Panel is returning from graduated view — wait for it, then scan
+      setTimeout(() => scanGraduated(), 350);
+    } else {
+      // Normal case: wait for new pair to render in panel, then scan
+      // addButtons will trigger scanGraduated once new pair's buttons appear
+      waitingForNewPair = true;
+    }
   });
 
   function addButtons() {
@@ -1024,6 +1037,12 @@
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
     });
+
+    // New pair's buttons just appeared — kick off graduated scan now
+    if (waitingForNewPair && addedBtns.length > 0) {
+      waitingForNewPair = false;
+      setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+    }
   }
 
   const observer = new MutationObserver(() => {
