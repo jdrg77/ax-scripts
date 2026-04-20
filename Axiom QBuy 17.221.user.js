@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      5.5
+// @version      5.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -468,7 +468,9 @@
       if (labelSpan) { mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, match: 0 };
+    // Clone the real QB button now (before panel toggles back) to preserve Axiom's internal HTML
+    const btnClone = originalBtn.cloneNode(true);
+    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, match: 0, btnClone };
   }
 
   function computeGradSimilarities(candidates, cb) {
@@ -493,16 +495,24 @@
   }
 
   function createGradProxy(data) {
-    const proxy = document.createElement('button');
+    // Use the cloned real QB button as base — preserves Axiom's internal HTML/structure
+    const proxy = data.btnClone || document.createElement('button');
     proxy._gradData = data;
-    const refStyle = addedBtns[0] ? addedBtns[0].style.cssText : '';
-    proxy.style.cssText  = refStyle;
-    proxy.style.position = 'fixed';
-    proxy.style.zIndex   = '9999';
-    proxy.style.overflow = 'visible';
+
+    // Copy sizing/shape from a real added button, then override position props
+    const refBtn = addedBtns[0];
+    if (refBtn) proxy.style.cssText = refBtn.style.cssText;
+    proxy.style.position   = 'fixed';
+    proxy.style.zIndex     = '9999';
+    proxy.style.overflow   = 'visible';
     proxy.style.background = 'rgb(255, 215, 0)';
-    proxy.style.color    = '#000';
-    proxy.style.display  = 'none';
+    proxy.style.color      = '#000';
+    proxy.style.display    = 'none';
+    proxy.style.left       = '0px';
+    proxy.style.top        = '0px';
+
+    // Remove any stale qb overlays from the clone before adding fresh ones
+    proxy.querySelectorAll('.qb-coin-img, .qb-name-label, .qb-sim-badge, .qb-info-bar').forEach(el => el.remove());
 
     if (data.imgSrc) {
       const imgEl = document.createElement('img');
@@ -555,6 +565,20 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
+    // Snapshot normal panel tickers/names BEFORE toggling to filter duplicates later
+    const normalTokenKeys = new Set();
+    addedBtns.forEach(newBtn => {
+      const orig = newBtn._original;
+      if (!orig) return;
+      const row = orig.closest('[class*="max-h-[64px]"]');
+      if (!row) return;
+      const divs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+      const t = divs[0]?.textContent.trim().toLowerCase() || '';
+      const n = (divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '').toLowerCase();
+      if (t) normalTokenKeys.add(t);
+      if (n) normalTokenKeys.add(n);
+    });
+
     isScanning = true;
     toggleBtn.click();
     console.log('🎓 Scanning graduated...');
@@ -572,7 +596,12 @@
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
 
       computeGradSimilarities(candidates, (withScores) => {
-        const top3 = [...withScores]
+        // Exclude tokens already visible in the normal section
+        const unique = withScores.filter(d =>
+          !normalTokenKeys.has(d.ticker.toLowerCase()) &&
+          !normalTokenKeys.has(d.name.toLowerCase())
+        );
+        const top3 = [...unique]
           .sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours))
           .slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
@@ -652,35 +681,37 @@
       if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    // Gold buttons from normal panel are always hidden — graduated tokens come via proxy buttons
+    // Split: green/blue = normal stack | gold from normal panel = graduated subsection (v5.4 behavior)
     const normalCandidates = visible.filter(v => !v.data.isGold);
-    visible.filter(v => v.data.isGold).forEach(({ newBtn }) => { newBtn.style.display = 'none'; });
+    const gradCandidates   = visible.filter(v => v.data.isGold);
 
     let sortedNormal = normalCandidates;
     if (newPair && normalCandidates.length > 0) {
       const datas      = normalCandidates.map(v => v.data);
       const sorted     = sortNormal(datas, newPair);
       const sortedVis  = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
-      normalCandidates.forEach(v => {
-        if (!sortedVis.find(s => s.newBtn === v.newBtn)) sortedVis.push(v);
-      });
+      // Remaining (blue) tokens sorted by match desc, then age asc
+      const remaining = normalCandidates.filter(v => !sortedVis.find(s => s.newBtn === v.newBtn));
+      remaining.sort((a, b) => (b.data.match - a.data.match) || (a.data.ageHours - b.data.ageHours));
+      remaining.forEach(v => sortedVis.push(v));
       sortedNormal = sortedVis;
     }
 
-    // Need at least normal buttons to establish reference geometry
-    if (sortedNormal.length === 0 && gradProxyBtns.length === 0) return;
-    if (sortedNormal.length === 0) {
-      // Hide proxies if no reference geometry
-      gradProxyBtns.forEach(p => { p.style.display = 'none'; });
-      return;
-    }
+    // Sort gold from normal panel: best match first, then most recent — top 3 (same as v5.4)
+    const sortedGold = [...gradCandidates]
+      .sort((a, b) => (b.data.match - a.data.match) || (a.data.ageHours - b.data.ageHours))
+      .slice(0, 3);
+
+    const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGold;
+    if (refGroup.length === 0 && gradProxyBtns.length === 0) return;
+    if (refGroup.length === 0) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
 
     const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? sortedNormal[0].rect.top;
-    const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? refGroup[0].rect.top;
+    const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (sortedNormal.length > 1 ? sortedNormal[1].rect.top - sortedNormal[0].rect.top : 64);
-    const leftPos   = sortedNormal[0].rect.left - 621.5;
+                      (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
+    const leftPos   = refGroup[0].rect.left - 621.5;
 
     // Position normal buttons (sorted)
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
@@ -695,14 +726,31 @@
       updateNameLabel(newBtn);
     });
 
-    // Position graduated proxy buttons: 1-slot gap after normal stack
+    // Position gold buttons from normal panel — 1-slot gap after normal (v5.4 behavior)
     const gradStart = sortedNormal.length + 1;
+    sortedGold.forEach(({ newBtn, originalBtn }, i) => {
+      newBtn.style.left    = leftPos + 'px';
+      newBtn.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
+      newBtn.style.display = '';
+      newBtn.style.opacity = '1';
+      const coinImg = getCoinImage(originalBtn);
+      const imgEl   = newBtn.querySelector('img.qb-coin-img');
+      if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
+    });
+    gradCandidates.forEach(({ newBtn }) => {
+      if (!sortedGold.find(s => s.newBtn === newBtn)) newBtn.style.display = 'none';
+    });
+
+    // Position scan-based grad proxies — continuing right after gold section
+    const proxyStart = gradStart + sortedGold.length;
     const showProxies = !(isPanelVisible && hasActiveSearch);
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
       if (!showProxies) { proxy.style.display = 'none'; return; }
       proxy.style.left    = leftPos + 'px';
-      proxy.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
+      proxy.style.top     = (slot1Top + (proxyStart + i) * rowHeight) + 'px';
       proxy.style.display = '';
       proxy.style.opacity = '1';
     });
