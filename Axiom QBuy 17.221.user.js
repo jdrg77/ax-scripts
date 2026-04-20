@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.2
+// @version      7.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -738,12 +738,19 @@
         setTimeout(waitAndScan, 80);
         return;
       }
-      // Skip graduated scan if a good currently-visible normal match exists (T1H/T1L/T2/T3)
+      // Skip graduated scan only if current new pair itself has a good match (T1H/T1L/T2/T3)
       const panelNow = lastPanel;
+      const np       = getNewPair();
+      const norm     = s => (s || '').toLowerCase().trim();
       const hasGoodMatch = addedBtns.some(btn => {
         if (!btn._original || !panelNow?.contains(btn._original)) return false;
         const rect = btn._original.getBoundingClientRect();
         if (rect.top < 50 || rect.bottom > window.innerHeight + 200) return false;
+        if (np) {
+          const sameT = norm(btn._ticker) === norm(np.ticker);
+          const sameN = norm(btn._name)   === norm(np.name);
+          if (!sameT && !sameN) return false;
+        }
         const pct     = btn._matchPct ?? 0;
         const data    = getTokenData(btn);
         if (!data) return false;
