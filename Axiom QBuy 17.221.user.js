@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.87
+// @version      7.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -23,15 +23,16 @@
   let referencePixels = null;
   let referenceSource = null;
 
-  let frozen            = false;
-  let clickQueue        = null;
-  let freezeTimer       = null;
-  let isScanning        = false;
-  let inGraduatedView   = false;
-  let scanDebounceTimer = null;
-  let scanId            = 0;
-  let referenceLocked   = false;
-  let waitingForNewPair = false;
+  let frozen              = false;
+  let clickQueue          = null;
+  let freezeTimer         = null;
+  let isScanning          = false;
+  let inGraduatedView     = false;
+  let scanDebounceTimer   = null;
+  let scanId              = 0;
+  let referenceLocked     = false;
+  let waitingForNewPair   = false;
+  let panelIsGraduated    = false; // tracks actual panel toggle state
 
   function freezeButtons() {
     frozen = true;
@@ -74,6 +75,7 @@
     frozen = false;
     if (freezeTimer) clearTimeout(freezeTimer);
     if (wasInGrad) {
+      panelIsGraduated = false;
       const tb = lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
       if (tb) tb.click();
     }
@@ -513,7 +515,16 @@
   // ======= GRADUATED SCAN =======
 
   function getGraduatedToggleBtn(panel) {
-    return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim() === 'Graduated') || null;
+    return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim().includes('Graduated')) || null;
+  }
+
+  function ensureNormalView() {
+    if (!panelIsGraduated) return;
+    const panel = lastPanel || [...document.querySelectorAll(
+      '[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')].find(el => isSearchPanel(el));
+    if (!panel) { panelIsGraduated = false; return; }
+    const tb = getGraduatedToggleBtn(panel);
+    if (tb) { panelIsGraduated = false; tb.click(); }
   }
 
   function getRowCA(row) {
@@ -634,6 +645,9 @@
 
     proxy.addEventListener('click', e => {
       e.stopPropagation(); e.preventDefault();
+      if (e.target.closest('img.qb-coin-img')) {
+        if (data.ca) { window.location.href = `/meme/${data.ca}`; return; }
+      }
       if (isScanning) return;
       executeGradClick(data);
     });
@@ -679,18 +693,26 @@
 
     isScanning = true;
     inGraduatedView = true;
+    panelIsGraduated = true;
     const myId = ++scanId;
     const live = () => scanId === myId;
 
     tb1.click();
     console.log('🎓 Scanning graduated...');
 
+    const toggleBack = () => {
+      panelIsGraduated = false;
+      const tb = liveToggle();
+      if (tb) tb.click();
+      else console.warn('🎓 toggleBack: button not found, panel may stay in graduated');
+    };
+
     setTimeout(() => {
       if (!live() || !lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
-        const tb2 = liveToggle(); if (tb2) tb2.click();
+        toggleBack();
         setTimeout(() => { if (live()) { inGraduatedView = false; isScanning = false; addButtons(); flushQueue(); } }, 350);
         return;
       }
@@ -707,7 +729,7 @@
         const top3 = unique.slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
-        const tb3 = liveToggle(); if (tb3) tb3.click();
+        toggleBack();
 
         setTimeout(() => {
           if (!live()) return; // aborted between toggle and timeout
@@ -738,6 +760,7 @@
 
     frozen = true;
     isScanning = true;
+    panelIsGraduated = true;
     clickQueue = null;
     removeGradProxyBtns();
     if (freezeTimer) clearTimeout(freezeTimer);
@@ -764,6 +787,7 @@
         console.log('✅ Grad click:', data.ticker || data.name);
       }
 
+      panelIsGraduated = false;
       toggleBtn.click();
       setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 350);
     }, 350);
@@ -928,11 +952,11 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
-    abortScan(); // clicks toggle back if in graduated; invalidates any in-flight scan
+    abortScan();
+    ensureNormalView(); // no delay — just clicks toggle if panel got stuck in graduated
     removeButtons();
     removeGradProxyBtns();
     freezeButtons();
-    // Always wait for new pair's buttons to appear before starting graduated scan
     waitingForNewPair = true;
   });
 
@@ -1011,9 +1035,17 @@
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
+        // Coin image click → navigate to token page
+        if (e.target.closest('img.qb-coin-img')) {
+          const row  = originalBtn.closest('[class*="max-h-[64px]"]');
+          const link = row?.querySelector('a[href*="/meme/"]');
+          if (link) { window.location.href = link.href; return; }
+          const rowBtn = originalBtn.closest('div[role="button"]');
+          if (rowBtn) { fireClick(rowBtn); return; }
+          return;
+        }
         if (frozen || isScanning) {
           clickQueue = newBtn;
-          // Abort graduated scan, toggle back if needed, then execute click
           const wasInGrad = abortScan();
           if (wasInGrad) {
             setTimeout(() => flushQueue(), 370);
