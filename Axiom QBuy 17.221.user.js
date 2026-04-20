@@ -610,6 +610,19 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
+    // Wait until normal panel has at least 5 QB buttons AND referencePixels is ready
+    const startWait = Date.now();
+    const waitAndScan = () => {
+      const btnCount = lastPanel?.querySelectorAll('[class*="group/quickBuyButton"]').length || 0;
+      const elapsed  = Date.now() - startWait;
+      if ((btnCount < 5 || !referencePixels) && elapsed < 2000) {
+        setTimeout(waitAndScan, 80);
+        return;
+      }
+      doScan();
+    };
+
+    function doScan() {
     // Compound "ticker|name" keys — only exact duplicates (same ticker AND name) are excluded
     const normalTokenKeys = new Set();
     addedBtns.forEach(btn => {
@@ -661,6 +674,9 @@
         }, 700);
       });
     }, 700);
+    } // end doScan
+
+    waitAndScan();
   }
 
   function executeGradClick(data) {
