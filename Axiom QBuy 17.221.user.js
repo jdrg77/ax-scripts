@@ -739,10 +739,12 @@
       return;
     }
 
-    const slot1Top  = refGroup[0].rect.top;
+    // slot1Top = topmost visible original button position (not the first sorted, which may be lower)
+    const allVisible = [...sortedNormal, ...sortedGold];
+    const slot1Top  = Math.min(...allVisible.map(v => v.rect.top));
     const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
+                      (refGroup.length > 1 ? Math.abs(refGroup[1].rect.top - refGroup[0].rect.top) : 64);
     const leftPos   = refGroup[0].rect.left - 621.5;
 
     // Position normal buttons (sorted)
