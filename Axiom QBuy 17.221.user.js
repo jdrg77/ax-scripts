@@ -233,6 +233,8 @@
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
     referencePixels = null;
+    // Clear stale proxies from previous reference (only if no scan is building new ones)
+    if (!isScanning) removeGradProxyBtns();
     getPixels(src, (pixels) => {
       referencePixels = pixels;
       updateAllBadges();
