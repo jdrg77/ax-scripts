@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      5.3
+// @version      5.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -15,7 +15,6 @@
   const SAMPLE_SIZE = 16;
   const addedBtns     = [];
   const ghostBtns     = [];
-  const graduatedBtns = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -23,6 +22,23 @@
   let updateTimeout   = null;
   let referencePixels = null;
   let referenceSource = null;
+
+  // Frozen state: while panel is loading new results, queue clicks
+  let frozen       = false;
+  let clickQueue   = null; // originalBtn to click once unfrozen
+  let freezeTimer  = null;
+
+  function freezeButtons() {
+    frozen = true;
+    clickQueue = null;
+    if (freezeTimer) clearTimeout(freezeTimer);
+    freezeTimer = setTimeout(() => { frozen = false; flushQueue(); }, 1000);
+  }
+
+  function flushQueue() {
+    frozen = false;
+    if (clickQueue) { fireClick(clickQueue); clickQueue = null; }
+  }
 
   function getPixels(src, cb) {
     if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
@@ -85,12 +101,13 @@
   function getNewPair() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
-    const row = rows[0];
+    const row      = rows[0];
     const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
     const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
-    const ticker   = tickerEl?.textContent.trim() || '';
-    const name     = nameEl?.textContent.trim()   || '';
-    return { ticker, name };
+    return {
+      ticker: tickerEl?.textContent.trim() || '',
+      name:   nameEl?.textContent.trim()   || ''
+    };
   }
 
   function ageToSeconds(ageStr) {
@@ -139,19 +156,16 @@
     const ageHours = ageSecs / 3600;
 
     let mc = '';
-    const mcContainers = [...(row.querySelectorAll('div[class*="gap-[4px]"]') || [])];
-    for (const container of mcContainers) {
-      const spans = [...container.querySelectorAll('span')];
+    for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
+      const spans     = [...container.querySelectorAll('span')];
       const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
       if (labelSpan) {
-        const valueSpan = spans.find(s => s !== labelSpan && s.textContent.trim().length > 0);
-        mc = valueSpan?.textContent?.trim() || '';
+        mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || '';
         break;
       }
     }
     if (!mc) {
-      const allSpans = [...row.querySelectorAll('span')];
-      const mcLabel  = allSpans.find(s => s.textContent.trim() === 'MC');
+      const mcLabel = [...row.querySelectorAll('span')].find(s => s.textContent.trim() === 'MC');
       if (mcLabel) {
         let next = mcLabel.nextElementSibling;
         while (next) {
@@ -161,20 +175,18 @@
       }
     }
 
-    const marketCap = mcToNumber(mc);
-    const match     = newBtn._matchPct ?? 0;
-
-    return { newBtn, ticker, name, ageHours, marketCap, isGold, isGreen, match };
+    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0 };
   }
 
-  function sortQBuy(tokens, newPair) {
+  // Sort non-gold (green/blue) buttons
+  function sortNormal(tokens, newPair) {
     const normalize       = s => (s || '').toLowerCase().trim();
     const sameName        = t => normalize(t.name)   === normalize(newPair.name);
     const sameTicker      = t => normalize(t.ticker) === normalize(newPair.ticker);
     const nameTickerMatch = t => sameName(t) && sameTicker(t);
     const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
 
-    let arr = tokens.filter(t => t.isGold || t.isGreen);
+    let arr = tokens.filter(t => t.isGreen);
 
     const anyAbove58 = arr.some(t => t.match >= 58.21);
     if (anyAbove58) arr = arr.filter(t => t.match >= 58.21);
@@ -188,45 +200,39 @@
     function sortRest(list) {
       const ageDays   = t => t.ageHours / 24;
       const tier1     = list.filter(t => ageDays(t) < 7 && t.match > 72);
-      const gold      = tier1.filter(t => t.isGold);
-      const greenHigh = tier1.filter(t => t.isGreen && t.match > 92);
-      const greenLow  = tier1.filter(t => t.isGreen && t.match <= 92);
-
-      const tier1Mixed    = [...gold, ...greenHigh].sort(sortByRecent);
-      const tier1GreenLow = greenLow.sort(sortByMatchDesc);
-      const tier2 = list.filter(t => ageDays(t) >= 7 && t.isGold  && t.match > 80).sort(sortByMatchDesc);
-      const tier3 = list.filter(t => ageDays(t) >= 7 && t.isGreen && t.match > 80).sort(sortByMatchDesc);
-      const tier4 = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
-      const tier5 = list.filter(t => t.match >= 58.21 && t.match < 75).sort((a, b) => {
-        if (a.isGold !== b.isGold) return a.isGold ? -1 : 1;
+      const greenHigh = tier1.filter(t => t.match > 92).sort(sortByRecent);
+      const greenLow  = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
+      const tier2 = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
+      const tier3 = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
+      const tier4 = list.filter(t => t.match >= 58.21 && t.match < 75).sort((a, b) => {
         if (a.ageHours !== b.ageHours) return a.ageHours - b.ageHours;
         return b.marketCap - a.marketCap;
       });
-
-      return [...tier1Mixed, ...tier1GreenLow, ...tier2, ...tier3, ...tier4, ...tier5];
+      return [...greenHigh, ...greenLow, ...tier2, ...tier3, ...tier4];
     }
 
     if (hasNameTicker) {
       const nt    = arr.filter(nameTickerMatch);
       const ultra = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
-      const rest  = nt.filter(t => t.match <= 85);
-      const gold  = rest.filter(t => t.isGold).sort(sortByRecent);
-      const green = rest.filter(t => t.isGreen).sort(sortByRecent);
+      const rest  = nt.filter(t => t.match <= 85).sort(sortByRecent);
       const others = arr.filter(t => !nameTickerMatch(t));
-      return [...ultra, ...gold, ...green, ...sortRest(others)];
+      return [...ultra, ...rest, ...sortRest(others)];
     }
 
     if (hasNameOnly) {
-      const no          = arr.filter(nameOnlyMatch);
-      const goldRecent  = no.filter(t => t.isGold  && t.ageHours < 24).sort(sortByRecent);
-      const goldOld     = no.filter(t => t.isGold  && t.ageHours >= 24).sort(sortByMatchDesc);
-      const greenRecent = no.filter(t => t.isGreen && t.ageHours < 24).sort(sortByRecent);
-      const greenOld    = no.filter(t => t.isGreen && t.ageHours >= 24).sort(sortByMatchDesc);
-      const others      = arr.filter(t => !nameOnlyMatch(t));
-      return [...goldRecent, ...goldOld, ...greenRecent, ...greenOld, ...sortRest(others)];
+      const no    = arr.filter(nameOnlyMatch);
+      const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
+      const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
+      const others = arr.filter(t => !nameOnlyMatch(t));
+      return [...recent, ...old, ...sortRest(others)];
     }
 
     return sortRest(arr);
+  }
+
+  // Sort graduated (gold) buttons: best match first, then most recent
+  function sortGraduated(tokens) {
+    return [...tokens].sort((a, b) => (b.match - a.match) || (a.ageHours - b.ageHours));
   }
 
   function getNewestBtn() {
@@ -265,13 +271,10 @@
     const badge       = getOrCreateBadge(newBtn);
     const originalBtn = newBtn._original;
     if (!originalBtn) return;
-
     const row     = originalBtn.closest('[class*="max-h-[64px]"]');
     const coinImg = getRealImage(row);
-
     if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; return; }
     if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; return; }
-
     getPixels(coinImg.src, (rowPixels) => {
       const pct = pixelSimilarity(referencePixels, rowPixels);
       newBtn._matchPct = pct ?? 0;
@@ -329,24 +332,19 @@
   function getTokenInfo(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
     if (!row) return { age: '', mc: '' };
-
     const ageEl = row.querySelector('span[class*="pointer-events-none"]');
     const age   = ageEl?.textContent?.trim() || '';
-
     let mc = '';
-    const mcContainers = [...row.querySelectorAll('div[class*="gap-[4px]"]')];
-    for (const container of mcContainers) {
-      const spans = [...container.querySelectorAll('span')];
+    for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
+      const spans     = [...container.querySelectorAll('span')];
       const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
       if (labelSpan) {
-        const valueSpan = spans.find(s => s !== labelSpan && s.textContent.trim().length > 0);
-        mc = valueSpan?.textContent?.trim() || '';
+        mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || '';
         break;
       }
     }
     if (!mc) {
-      const allSpans = [...row.querySelectorAll('span')];
-      const mcLabel  = allSpans.find(s => s.textContent.trim() === 'MC');
+      const mcLabel = [...row.querySelectorAll('span')].find(s => s.textContent.trim() === 'MC');
       if (mcLabel) {
         let next = mcLabel.nextElementSibling;
         while (next) {
@@ -375,7 +373,6 @@
     const { age, mc } = getTokenInfo(originalBtn);
     const bar = getOrCreateInfoBar(newBtn);
     bar.innerHTML = '';
-
     if (age) {
       const isNewest = (getNewestBtn() === newBtn);
       const ageSpan  = document.createElement('span');
@@ -385,12 +382,10 @@
         : 'color:#78ffa0;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
       bar.appendChild(ageSpan);
     }
-
     if (mc) {
-      const mcVal  = mcToNumber(mc);
       const mcSpan = document.createElement('span');
       mcSpan.textContent = 'MC ' + mc;
-      mcSpan.style.cssText = `color:${mcVal > 10000 ? '#ff4444' : '#5bb8ff'};background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;`;
+      mcSpan.style.cssText = `color:${mcToNumber(mc) > 10000 ? '#ff4444' : '#5bb8ff'};background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;`;
       bar.appendChild(mcSpan);
     }
   }
@@ -401,77 +396,9 @@
     });
   }
 
-  function removeGraduatedBtns() {
-    graduatedBtns.forEach(b => b.remove());
-    graduatedBtns.length = 0;
-  }
-
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove()); addedBtns.length = 0;
     ghostBtns.forEach(btn => btn.remove()); ghostBtns.length = 0;
-    removeGraduatedBtns();
-  }
-
-  function addGraduatedBtns(results) {
-    removeGraduatedBtns();
-    if (!results || !results.length) return;
-
-    const normalVisible = addedBtns.filter(b => b.style.display !== 'none');
-    if (!normalVisible.length) return;
-
-    const maxGrad = Math.min(3, 10 - normalVisible.length);
-    if (maxGrad <= 0) return;
-
-    normalVisible.sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
-    const lastNormal = normalVisible[normalVisible.length - 1];
-    const leftPos    = parseFloat(lastNormal.style.left);
-    const lastTop    = parseFloat(lastNormal.style.top);
-    const rowHeight  = normalVisible.length > 1
-      ? parseFloat(normalVisible[1].style.top) - parseFloat(normalVisible[0].style.top)
-      : 34;
-    const refWidth   = lastNormal.offsetWidth || 60;
-
-    const sep = document.createElement('div');
-    sep.className = 'qb-grad-separator';
-    sep.style.cssText = `position:fixed;z-index:9999;left:${leftPos}px;top:${lastTop + rowHeight + 1}px;width:${refWidth}px;height:2px;background:rgba(255,215,0,0.5);pointer-events:none;border-radius:1px;`;
-    document.body.appendChild(sep);
-    graduatedBtns.push(sep);
-
-    results.slice(0, maxGrad).forEach((result, i) => {
-      const ticker = (result.ticker || result.symbol || result.name || '').slice(0, 8);
-      const mint   = result.mint || result.address || result.pumpMint || '';
-      const imgSrc = result.image || result.logo || result.img || '';
-      const mc     = result.mc || result.marketCap || result.market_cap || '';
-
-      const btn = document.createElement('div');
-      btn.className = 'qb-graduated-btn';
-      btn.style.cssText = `position:fixed;z-index:9999;overflow:visible;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgb(255,215,0);color:#000;font-weight:800;font-size:11px;font-family:monospace;border-radius:6px;padding:4px 8px;height:${rowHeight - 4}px;left:${leftPos}px;top:${lastTop + rowHeight + 6 + i * rowHeight}px;box-shadow:0 0 8px rgba(255,215,0,0.4);white-space:nowrap;`;
-      btn.textContent = ticker || '?';
-
-      if (imgSrc) {
-        const imgEl = document.createElement('img');
-        imgEl.src = imgSrc;
-        imgEl.style.cssText = 'width:50px;height:50px;border-radius:50%;object-fit:cover;position:absolute;left:-56px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
-        btn.appendChild(imgEl);
-      }
-
-      if (mc) {
-        const mcEl = document.createElement('div');
-        mcEl.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;font-size:10px;font-weight:700;font-family:monospace;color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
-        mcEl.textContent = 'MC ' + mc;
-        btn.appendChild(mcEl);
-      }
-
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (mint) window.location.href = `https://axiom.trade/meme/${mint}`;
-      });
-
-      btn._result = result;
-      document.body.appendChild(btn);
-      graduatedBtns.push(btn);
-    });
   }
 
   function shouldShowButton(originalBtn) {
@@ -483,8 +410,7 @@
   }
 
   function getCoinImage(originalBtn) {
-    const row = originalBtn.closest('[class*="max-h-[64px]"]');
-    return getRealImage(row);
+    return getRealImage(originalBtn.closest('[class*="max-h-[64px]"]'));
   }
 
   let lastTopSrc = null;
@@ -502,21 +428,15 @@
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (!panel) return;
-
     if (clickSearchCheckTimeout) clearTimeout(clickSearchCheckTimeout);
     clickSearchCheckTimeout = setTimeout(() => {
-      const input = panel.querySelector('input');
-      const query = input?.value?.trim().toLowerCase();
+      const query = panel.querySelector('input')?.value?.trim().toLowerCase();
       if (!query) return;
-
-      const rows = document.querySelectorAll('[class*="group/pulseRow"]');
-      for (const row of rows) {
+      for (const row of document.querySelectorAll('[class*="group/pulseRow"]')) {
         const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
         const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
-        if (
-          tickerEl?.textContent.trim().toLowerCase().includes(query) ||
-          nameEl?.textContent.trim().toLowerCase().includes(query)
-        ) {
+        if (tickerEl?.textContent.trim().toLowerCase().includes(query) ||
+            nameEl?.textContent.trim().toLowerCase().includes(query)) {
           const realImg = getRealImage(row);
           if (realImg?.src) { setReference(realImg.src); break; }
         }
@@ -533,79 +453,86 @@
       if (!originalBtn) return;
       const rect = originalBtn.getBoundingClientRect();
       if (rect.top < 50 || rect.bottom > window.innerHeight + 200 || !shouldShowButton(originalBtn)) {
-        newBtn.style.display = 'none';
+        if (!frozen) newBtn.style.display = 'none';
         return;
       }
       const data = getTokenData(newBtn);
       if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    let sorted = visible;
-    if (newPair && visible.length > 0) {
-      const tokenDatas    = visible.map(v => v.data);
-      const sortedDatas   = sortQBuy(tokenDatas, newPair);
-      const sortedVisible = sortedDatas
-        .map(d => visible.find(v => v.newBtn === d.newBtn))
-        .filter(Boolean);
-      visible.forEach(v => {
-        if (!sortedVisible.find(s => s.newBtn === v.newBtn)) sortedVisible.push(v);
+    // Split: green/blue = normal stack | gold = graduated section
+    const normalCandidates = visible.filter(v => !v.data.isGold);
+    const gradCandidates   = visible.filter(v => v.data.isGold);
+
+    // Sort normal
+    let sortedNormal = normalCandidates;
+    if (newPair && normalCandidates.length > 0) {
+      const datas      = normalCandidates.map(v => v.data);
+      const sorted     = sortNormal(datas, newPair);
+      const sortedVis  = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
+      // Append any not in sorted result (e.g. blue buttons when panel open)
+      normalCandidates.forEach(v => {
+        if (!sortedVis.find(s => s.newBtn === v.newBtn)) sortedVis.push(v);
       });
-      sorted = sortedVisible;
+      sortedNormal = sortedVis;
     }
 
-    if (sorted.length > 0) {
-      const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? sorted[0].rect.top;
-      const rowEl     = sorted[0].originalBtn?.closest('[class*="max-h-[64px]"]');
-      const rowHeight = rowEl?.getBoundingClientRect().height ||
-                        (sorted.length > 1 ? sorted[1].rect.top - sorted[0].rect.top : 64);
-      const leftPos   = sorted[0].rect.left - 621.5;
+    // Sort graduated: best match desc, then most recent; take top 3
+    const sortedGrad = sortGraduated(gradCandidates.map(v => v.data))
+      .slice(0, 3)
+      .map(d => gradCandidates.find(v => v.newBtn === d.newBtn))
+      .filter(Boolean);
 
-      sorted.forEach(({ newBtn, originalBtn }, i) => {
-        newBtn.style.left    = leftPos + 'px';
-        newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
-        newBtn.style.display = '';
-        newBtn.style.opacity = '1';
+    const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGrad;
+    if (refGroup.length === 0) return;
 
-        const coinImg = getCoinImage(originalBtn);
-        const imgEl   = newBtn.querySelector('img.qb-coin-img');
-        if (coinImg && imgEl && imgEl.src !== coinImg.src) {
-          imgEl.src = coinImg.src;
-          updateBadge(newBtn);
-        }
+    const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+    const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? refGroup[0].rect.top;
+    const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+    const rowHeight = rowEl?.getBoundingClientRect().height ||
+                      (refGroup.length > 1 ? refGroup[1].rect.top - refGroup[0].rect.top : 64);
+    const leftPos   = refGroup[0].rect.left - 621.5;
 
-        updateInfoBar(newBtn);
-        updateNameLabel(newBtn);
-      });
+    // Position normal buttons
+    sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
+      newBtn.style.left    = leftPos + 'px';
+      newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
+      newBtn.style.display = '';
+      newBtn.style.opacity = '1';
+      const coinImg = getCoinImage(originalBtn);
+      const imgEl   = newBtn.querySelector('img.qb-coin-img');
+      if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
+    });
 
-      // Graduated buttons positions
-      if (graduatedBtns.length) {
-        const lastTop  = slot1Top + (sorted.length - 1) * rowHeight;
-        const refWidth = sorted[0]?.newBtn?.offsetWidth || 60;
-        let gradIdx = 0;
-        graduatedBtns.forEach(btn => {
-          if (btn.classList.contains('qb-grad-separator')) {
-            btn.style.left  = leftPos + 'px';
-            btn.style.top   = (lastTop + rowHeight + 1) + 'px';
-            btn.style.width = refWidth + 'px';
-          } else {
-            btn.style.left = leftPos + 'px';
-            btn.style.top  = (lastTop + rowHeight + 6 + gradIdx * rowHeight) + 'px';
-            gradIdx++;
-          }
-        });
-      }
-    }
+    // Position graduated buttons — 1 slot gap after normal
+    const gradStart = sortedNormal.length + 1;
+    sortedGrad.forEach(({ newBtn, originalBtn }, i) => {
+      newBtn.style.left    = leftPos + 'px';
+      newBtn.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
+      newBtn.style.display = '';
+      newBtn.style.opacity = '1';
+      const coinImg = getCoinImage(originalBtn);
+      const imgEl   = newBtn.querySelector('img.qb-coin-img');
+      if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
+    });
 
+    // Hide graduated buttons not in top 3
+    gradCandidates.forEach(({ newBtn }) => {
+      if (!sortedGrad.find(s => s.newBtn === newBtn)) newBtn.style.display = 'none';
+    });
+
+    // Ghost buttons at natural positions
     ghostBtns.forEach(ghostBtn => {
       const originalBtn = ghostBtn._original;
       if (!originalBtn) return;
       const rect = originalBtn.getBoundingClientRect();
       ghostBtn.style.left = (rect.left - 621.5) + 'px';
       ghostBtn.style.top  = rect.top + 'px';
-      if (rect.top < 50 || rect.bottom > window.innerHeight + 200) {
-        ghostBtn.style.display = 'none'; return;
-      }
+      if (rect.top < 50 || rect.bottom > window.innerHeight + 200) { ghostBtn.style.display = 'none'; return; }
       ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
       ghostBtn.style.opacity = '0.2';
     });
@@ -643,25 +570,19 @@
 
   function checkPanelState(panel) {
     if (!panel) { isPanelVisible = false; hasActiveSearch = false; return; }
-    const wrapper    = panel.parentElement;
-    const zIndex     = wrapper?.style.zIndex;
+    const zIndex     = panel.parentElement?.style.zIndex;
     const wasVisible = isPanelVisible;
     const hadSearch  = hasActiveSearch;
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
-    const input      = panel.querySelector('input');
-    hasActiveSearch  = (input?.value?.trim() || '').length > 0;
+    hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
     if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
   }
 
   document.addEventListener('click', (e) => {
     const qbImg = e.target.closest('img.qb-coin-img');
-    if (qbImg?.src && !qbImg.src.startsWith('data:')) {
-      setReference(qbImg.src);
-      return;
-    }
+    if (qbImg?.src && !qbImg.src.startsWith('data:')) { setReference(qbImg.src); return; }
 
     let clickedImg = e.target.closest('img[class*="object-cover"]');
-
     if (!clickedImg) {
       const imgWrapper = e.target.closest('[class*="h-[72px]"][class*="w-[72px]"]');
       if (imgWrapper) {
@@ -669,15 +590,15 @@
           .find(img => !img.src.startsWith('data:') && img.src) || null;
       }
     }
-
     if (!clickedImg?.src || clickedImg.src.startsWith('data:')) return;
-
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (panel && panel.contains(clickedImg)) return;
-
     setReference(clickedImg.src);
   }, true);
+
+  // Freeze when prefetch changes token (panel is reloading results)
+  window.addEventListener('axiomPrefetchStart', () => freezeButtons());
 
   function addButtons() {
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
@@ -700,19 +621,15 @@
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
       lastPanel = panel;
       expandPanel(panel);
-      if (!scrollEl) {
-        scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
-        scrollEl.addEventListener('scroll', updatePositions);
-      }
+      scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
+      scrollEl.addEventListener('scroll', updatePositions);
     }
 
     for (let i = addedBtns.length - 1; i >= 0; i--) {
-      const btn = addedBtns[i];
-      if (!panel.contains(btn._original)) { btn.remove(); addedBtns.splice(i, 1); }
+      if (!panel.contains(addedBtns[i]._original)) { addedBtns[i].remove(); addedBtns.splice(i, 1); }
     }
     for (let i = ghostBtns.length - 1; i >= 0; i--) {
-      const btn = ghostBtns[i];
-      if (!panel.contains(btn._original)) { btn.remove(); ghostBtns.splice(i, 1); }
+      if (!panel.contains(ghostBtns[i]._original)) { ghostBtns[i].remove(); ghostBtns.splice(i, 1); }
     }
 
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
@@ -755,11 +672,10 @@
       });
       colorSync.observe(originalBtn, { attributes: true, attributeFilter: ['style'] });
 
-      const rect           = originalBtn.getBoundingClientRect();
+      const rect = originalBtn.getBoundingClientRect();
       newBtn.style.left    = (rect.left - 621.5) + 'px';
       newBtn.style.top     = rect.top + 'px';
       newBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
-
       ghostBtn.style.left    = (rect.left - 621.5) + 'px';
       ghostBtn.style.top     = rect.top + 'px';
       ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
@@ -769,35 +685,25 @@
       document.body.appendChild(ghostBtn);
       ghostBtns.push(ghostBtn);
 
-      newBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); fireClick(originalBtn); });
-      ghostBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); fireClick(originalBtn); });
+      newBtn.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (frozen) { clickQueue = originalBtn; }
+        else { fireClick(originalBtn); }
+      });
+      ghostBtn.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (frozen) { clickQueue = originalBtn; }
+        else { fireClick(originalBtn); }
+      });
 
       updateBadge(newBtn);
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
+
+      // Unfreeze once new results arrive
+      if (frozen) flushQueue();
     });
   }
-
-  // ─── Graduated results ────────────────────────────────────────────────────
-
-  window.addEventListener('axiomGraduated', (e) => {
-    const { query, ticker, results } = e.detail || {};
-    if (!results || !results.length) { removeGraduatedBtns(); return; }
-
-    const q = (query  || '').toLowerCase();
-    const t = (ticker || '').toLowerCase();
-
-    const matched = results.filter(r => {
-      const rName   = (r.name   || '').toLowerCase();
-      const rTicker = (r.ticker || r.symbol || '').toLowerCase();
-      return (q && (rName === q || rName.includes(q))) ||
-             (t && (rTicker === t || rTicker.includes(t)));
-    });
-
-    addGraduatedBtns(matched.length ? matched : results.slice(0, 3));
-  });
-
-  // ─── MutationObserver ─────────────────────────────────────────────────────
 
   const observer = new MutationObserver(() => {
     checkClickSearchReference();

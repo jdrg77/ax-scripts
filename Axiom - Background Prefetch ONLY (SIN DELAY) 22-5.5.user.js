@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.4
+// @version      5.5
 // @match        https://axiom.trade/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.4.user.js
-// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.4.user.js
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
+// @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
 // ==/UserScript==
 
 (function () {
@@ -23,17 +23,14 @@
     if (userOpen || window.axiomUserOpen) return;
     const panel = getPanel();
     if (!panel) return;
-
     const wrapper = panel.parentElement;
     const overlay = wrapper?.parentElement;
-
     if (wrapper) {
       wrapper.style.setProperty('z-index', '-9999', 'important');
       wrapper.style.setProperty('pointer-events', 'none', 'important');
       wrapper.style.setProperty('transition', 'none', 'important');
       wrapper.style.setProperty('animation', 'none', 'important');
     }
-
     if (overlay) {
       overlay.style.setProperty('z-index', '-9999', 'important');
       overlay.style.setProperty('pointer-events', 'none', 'important');
@@ -44,25 +41,17 @@
     }
   }
 
-  function sendToBack() {
-    if (userOpen || window.axiomUserOpen) return;
-    forceHidePanelInstant();
-  }
-
   function bringToFront() {
     const panel = getPanel();
     if (!panel) return;
-
     const wrapper = panel.parentElement;
     const overlay = wrapper?.parentElement;
-
     if (wrapper) {
       wrapper.style.removeProperty('z-index');
       wrapper.style.removeProperty('pointer-events');
       wrapper.style.removeProperty('transition');
       wrapper.style.removeProperty('animation');
     }
-
     if (overlay) {
       overlay.style.removeProperty('z-index');
       overlay.style.removeProperty('pointer-events');
@@ -84,59 +73,30 @@
   function getTokenName(row) {
     const button = row.querySelector('div[role="button"]');
     if (!button) return null;
-
     let nameSpan = button.querySelector('span[class*="text-\\[16px\\]"]');
     if (!nameSpan) nameSpan = button.querySelector('span.text-\\[16px\\]');
-    if (!nameSpan) {
-      const spans = button.querySelectorAll('span');
-      nameSpan = spans[0];
-    }
-
+    if (!nameSpan) nameSpan = button.querySelectorAll('span')[0];
     return nameSpan ? nameSpan.textContent.trim() : null;
-  }
-
-  function getTokenTicker(row) {
-    const tickerEl = row.querySelector('[style*="max-width"]');
-    return tickerEl ? tickerEl.textContent.trim() : null;
   }
 
   function forceLoadImages() {
     const panel = getPanel();
     if (!panel) return;
-    const images = panel.querySelectorAll('img');
-    images.forEach(img => {
+    panel.querySelectorAll('img').forEach(img => {
       if (img.loading === 'lazy') img.loading = 'eager';
       if (img.dataset.src && !img.src) img.src = img.dataset.src;
       img.getBoundingClientRect();
     });
   }
 
-  async function fetchGraduated(name, ticker) {
-    window.axiomFetchingGraduated = true;
-    try {
-      const params = `searchQuery=${encodeURIComponent(name)}&isOg=false&isPumpSearch=false&isBonkSearch=false&isBagsSearch=false&sortBy=trending&onlyBonded=false&v=${Date.now()}`;
-      const results = await fetch(`https://api3.axiom.trade/search-v4?${params}`).then(r => r.json());
-      window.axiomGraduatedResults = {
-        query: name,
-        ticker: ticker || '',
-        results: Array.isArray(results) ? results : []
-      };
-      window.dispatchEvent(new CustomEvent('axiomGraduated', { detail: window.axiomGraduatedResults }));
-    } catch (e) {
-      window.axiomGraduatedResults = { query: name, ticker: ticker || '', results: [] };
-      window.dispatchEvent(new CustomEvent('axiomGraduated', { detail: window.axiomGraduatedResults }));
-    } finally {
-      window.axiomFetchingGraduated = false;
-    }
-  }
-
-  function prefetch(name, ticker) {
+  function prefetch(name) {
     if (!name || userOpen || window.axiomUserOpen || name === lastPrefetched) return;
 
-    console.log('🔄 Prefetch:', name, ticker);
+    console.log('🔄 Prefetch:', name);
     lastPrefetched = name;
 
-    fetchGraduated(name, ticker);
+    // Signal QBuy to freeze buttons while results reload
+    window.dispatchEvent(new CustomEvent('axiomPrefetchStart', { detail: { name } }));
 
     if (!getPanel()) {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
@@ -156,16 +116,10 @@
 
   document.addEventListener('click', (e) => {
     const searchBtn = e.target.closest('[class*="ri-search"]')?.closest('button');
-    if (searchBtn) {
-      userOpen = true;
-      setTimeout(() => bringToFront(), 10);
-      return;
-    }
-
+    if (searchBtn) { userOpen = true; setTimeout(() => bringToFront(), 10); return; }
     const menuItem = e.target.closest('[role="menuitem"]');
     if (menuItem && menuItem.textContent?.includes('Search for')) {
-      userOpen = true;
-      setTimeout(() => bringToFront(), 10);
+      userOpen = true; setTimeout(() => bringToFront(), 10);
     }
   }, true);
 
@@ -174,41 +128,29 @@
       userOpen = false;
       window.axiomUserOpen = false;
       lastPrefetched = null;
-
       setTimeout(() => {
         const rows = document.querySelectorAll('[class*="group/pulseRow"]');
         if (rows.length) {
-          const name   = getTokenName(rows[0]);
-          const ticker = getTokenTicker(rows[0]);
-          if (name) {
-            lastRowName = name;
-            prefetch(name, ticker);
-          }
+          const name = getTokenName(rows[0]);
+          if (name) { lastRowName = name; prefetch(name); }
         }
       }, 500);
     }
   }, true);
 
   const observer = new MutationObserver(() => {
-    if (!userOpen && !window.axiomUserOpen) {
-      forceHidePanelInstant();
-    }
+    if (!userOpen && !window.axiomUserOpen) forceHidePanelInstant();
 
     const panelExists = !!getPanel();
 
     if (userOpen && !panelExists) {
       userOpen = false;
       lastPrefetched = null;
-
       setTimeout(() => {
         const rows = document.querySelectorAll('[class*="group/pulseRow"]');
         if (rows.length) {
-          const name   = getTokenName(rows[0]);
-          const ticker = getTokenTicker(rows[0]);
-          if (name) {
-            lastRowName = name;
-            prefetch(name, ticker);
-          }
+          const name = getTokenName(rows[0]);
+          if (name) { lastRowName = name; prefetch(name); }
         }
       }, 500);
     }
@@ -216,17 +158,12 @@
     if (!userOpen && !window.axiomUserOpen) {
       const rows = document.querySelectorAll('[class*="group/pulseRow"]');
       if (!rows.length) return;
-
-      const name   = getTokenName(rows[0]);
-      const ticker = getTokenTicker(rows[0]);
-      if (name && name !== lastRowName) {
-        lastRowName = name;
-        prefetch(name, ticker);
-      }
+      const name = getTokenName(rows[0]);
+      if (name && name !== lastRowName) { lastRowName = name; prefetch(name); }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  console.log('🚀 Axiom Prefetch v5.4 (SIN DELAY)');
+  console.log('🚀 Axiom Prefetch v5.5 (SIN DELAY)');
 })();
