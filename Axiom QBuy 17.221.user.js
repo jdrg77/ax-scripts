@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.85
+// @version      7.87
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -461,10 +461,7 @@
   }
 
   function removeButtons() {
-    addedBtns.forEach(btn => {
-      if (btn._original) delete btn._original.dataset.qbAdded;
-      btn.remove();
-    });
+    addedBtns.forEach(btn => btn.remove());
     addedBtns.length = 0;
     removeGradProxyBtns();
   }
@@ -602,7 +599,7 @@
       const imgEl = document.createElement('img');
       imgEl.src = data.imgSrc;
       imgEl.className = 'qb-coin-img';
-      imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+      imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
       proxy.appendChild(imgEl);
     }
 
@@ -931,18 +928,12 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
-    const wasInGrad = abortScan();
+    abortScan(); // clicks toggle back if in graduated; invalidates any in-flight scan
     removeButtons();
     removeGradProxyBtns();
     freezeButtons();
-    if (wasInGrad) {
-      // Panel is returning from graduated view — wait for it, then scan
-      setTimeout(() => scanGraduated(), 350);
-    } else {
-      // Normal case: wait for new pair to render in panel, then scan
-      // addButtons will trigger scanGraduated once new pair's buttons appear
-      waitingForNewPair = true;
-    }
+    // Always wait for new pair's buttons to appear before starting graduated scan
+    waitingForNewPair = true;
   });
 
   function addButtons() {
@@ -999,7 +990,7 @@
         const imgEl     = document.createElement('img');
         imgEl.src       = coinImg.src;
         imgEl.className = 'qb-coin-img';
-        imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+        imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
         newBtn.appendChild(imgEl);
       }
 
