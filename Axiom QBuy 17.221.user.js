@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.6
+// @version      6.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -240,8 +240,8 @@
       const tier1   = list.filter(t => ageDays(t) < 7 && t.match > 72);
       const t1High  = tier1.filter(t => t.match > 92).sort(sortByRecent);
       const t1Low   = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
-      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
-      const tier3   = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
+      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByRecent);
+      const tier3   = list.filter(t => ageDays(t) >= 7 && t.match >= 75 && t.match <= 80).sort(sortByRecent);
       const tier4   = list.filter(t => t.match >= 58.21 && t.match < 75).sort(sortByAgeMC);
       const tier5   = list.filter(t => t.match < 58.21).sort(sortByAgeMC);
       return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
@@ -618,8 +618,12 @@
         setTimeout(waitAndScan, 80);
         return;
       }
-      // Skip graduated scan if a good normal match exists (T1H/T1L/T2/T3)
+      // Skip graduated scan if a good currently-visible normal match exists (T1H/T1L/T2/T3)
+      const panelNow = lastPanel;
       const hasGoodMatch = addedBtns.some(btn => {
+        if (!btn._original || !panelNow?.contains(btn._original)) return false;
+        const rect = btn._original.getBoundingClientRect();
+        if (rect.top < 50 || rect.bottom > window.innerHeight + 200) return false;
         const pct     = btn._matchPct ?? 0;
         const data    = getTokenData(btn);
         if (!data) return false;
