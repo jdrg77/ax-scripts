@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      5.6
+// @version      5.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -40,7 +40,25 @@
 
   function flushQueue() {
     frozen = false;
-    if (clickQueue) { fireClick(clickQueue); clickQueue = null; }
+    if (!clickQueue) return;
+    const queued = clickQueue;
+    clickQueue = null;
+    const orig = queued._original;
+    if (orig && orig.isConnected) {
+      fireClick(orig);
+    } else if (lastPanel && (queued._ticker || queued._name)) {
+      // Original DOM element gone after panel re-render — re-find by cached ticker/name
+      for (const btn of lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')) {
+        const row = btn.closest('[class*="max-h-[64px]"]');
+        if (!row) continue;
+        const divs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+        const t = divs[0]?.textContent.trim() || '';
+        const n = divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '';
+        if ((queued._ticker && t === queued._ticker) || (queued._name && n === queued._name)) {
+          fireClick(btn); break;
+        }
+      }
+    }
   }
 
   function getPixels(src, cb) {
@@ -565,16 +583,11 @@
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
     if (!toggleBtn) { isScanning = false; flushQueue(); return; }
 
-    // Snapshot normal panel tickers/names BEFORE toggling to filter duplicates later
+    // Snapshot normal panel tickers/names using cached values (immune to virtual scroll DOM removal)
     const normalTokenKeys = new Set();
-    addedBtns.forEach(newBtn => {
-      const orig = newBtn._original;
-      if (!orig) return;
-      const row = orig.closest('[class*="max-h-[64px]"]');
-      if (!row) return;
-      const divs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
-      const t = divs[0]?.textContent.trim().toLowerCase() || '';
-      const n = (divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '').toLowerCase();
+    addedBtns.forEach(btn => {
+      const t = (btn._ticker || '').toLowerCase();
+      const n = (btn._name   || '').toLowerCase();
       if (t) normalTokenKeys.add(t);
       if (n) normalTokenKeys.add(n);
     });
@@ -879,6 +892,11 @@
       const newBtn = originalBtn.cloneNode(true);
       newBtn._original      = originalBtn;
       newBtn._matchPct      = null;
+      // Cache ticker/name while row is still in DOM (virtual scroll may remove it later)
+      const _cacheRow  = originalBtn.closest('[class*="max-h-[64px]"]');
+      const _cacheDivs = _cacheRow ? _cacheRow.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]') : [];
+      newBtn._ticker = _cacheDivs[0]?.textContent.trim() || '';
+      newBtn._name   = _cacheDivs[1]?.textContent.trim() || _cacheDivs[0]?.textContent.trim() || '';
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
@@ -926,12 +944,12 @@
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (frozen || isScanning) { clickQueue = originalBtn; }
+        if (frozen || isScanning) { clickQueue = newBtn; }
         else { fireClick(originalBtn); }
       });
       ghostBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        if (frozen || isScanning) { clickQueue = originalBtn; }
+        if (frozen || isScanning) { clickQueue = newBtn; }
         else { fireClick(originalBtn); }
       });
 
