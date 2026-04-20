@@ -497,6 +497,14 @@
     return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim() === 'Graduated') || null;
   }
 
+  function getRowCA(row) {
+    const link = row.querySelector('a[href*="/meme/"], a[href*="pump.fun/coin/"]');
+    if (link) return link.pathname.split('/').pop().split('?')[0] || null;
+    const img = row.querySelector('img[src*="axiomtrading"]');
+    if (img) return img.src.split('/').pop().replace('.webp', '') || null;
+    return null;
+  }
+
   function extractGradTokenInfo(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
     if (!row) return null;
@@ -524,7 +532,8 @@
     }
     // Clone the real QB button now (before panel toggles back) to preserve Axiom's internal HTML
     const btnClone = originalBtn.cloneNode(true);
-    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone };
+    const ca = getRowCA(row);
+    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone, ca };
   }
 
   function computeGradSimilarities(candidates, cb) {
@@ -631,11 +640,11 @@
     };
 
     function doScan() {
-    const normalTokenKeys = new Set();
+    const normalCAKeys = new Set();
     addedBtns.forEach(btn => {
-      const t = (btn._ticker || '').toLowerCase();
-      const n = (btn._name   || '').toLowerCase();
-      normalTokenKeys.add(`${t}|${n}`);
+      const row = btn._original?.closest('[class*="max-h-[64px]"]');
+      const ca  = row ? getRowCA(row) : null;
+      if (ca) normalCAKeys.add(ca);
     });
 
     // Always look up toggle button live — panel may have re-rendered since scanGraduated() ran
@@ -669,8 +678,8 @@
 
       computeGradSimilarities(candidates, (withScores) => {
         const unique = withScores.filter(d => {
-          const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
-          return !normalTokenKeys.has(key);
+          if (!d.ca) return true;
+          return !normalCAKeys.has(d.ca);
         });
         const top3 = unique.slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
