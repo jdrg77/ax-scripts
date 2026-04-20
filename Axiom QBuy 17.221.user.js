@@ -93,6 +93,24 @@
     return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
   }
 
+  function updateGradProxyBadges() {
+    if (!referencePixels || !gradProxyBtns.length) return;
+    gradProxyBtns.forEach(proxy => {
+      const data = proxy._gradData;
+      if (!data || !data.imgSrc) return;
+      getPixels(data.imgSrc, pixels => {
+        const pct = pixelSimilarity(referencePixels, pixels) ?? 0;
+        data.match = pct;
+        const badge = proxy.querySelector('.qb-sim-badge');
+        if (badge) {
+          badge.textContent = pct.toFixed(1) + '%';
+          badge.style.borderColor = badgeColor(pct);
+        }
+        scheduleUpdate();
+      });
+    });
+  }
+
   function setReference(src) {
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
@@ -100,6 +118,7 @@
     getPixels(src, (pixels) => {
       referencePixels = pixels;
       updateAllBadges();
+      updateGradProxyBadges();
       scheduleUpdate();
     });
   }
