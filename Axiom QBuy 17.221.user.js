@@ -504,28 +504,37 @@
       if (labelSpan) { mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
+    // Capture pixels directly from the loaded img element (synchronous, no network request)
+    let directPixels = null;
+    if (coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = SAMPLE_SIZE;
+        c.getContext('2d').drawImage(coinImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+        directPixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+      } catch (e) {}
+    }
     // Clone the real QB button now (before panel toggles back) to preserve Axiom's internal HTML
     const btnClone = originalBtn.cloneNode(true);
-    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, match: 0, btnClone };
+    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone };
   }
 
   function computeGradSimilarities(candidates, cb) {
     if (!referencePixels || !candidates.length) { cb(candidates); return; }
     let done = 0;
     let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) { resolved = true; cb(candidates); }
-    }, 400);
+    const finish = () => { if (!resolved) { resolved = true; cb(candidates); } };
+    const timeout = setTimeout(finish, 600);
+    const oneDone = () => { done++; if (done === candidates.length) { clearTimeout(timeout); finish(); } };
     candidates.forEach(data => {
-      if (!data.imgSrc) {
-        data.match = 0; done++;
-        if (done === candidates.length && !resolved) { resolved = true; clearTimeout(timeout); cb(candidates); }
-        return;
+      if (data.directPixels) {
+        data.match = pixelSimilarity(referencePixels, data.directPixels) ?? 0;
+        oneDone(); return;
       }
+      if (!data.imgSrc) { data.match = 0; oneDone(); return; }
       getPixels(data.imgSrc, pixels => {
         data.match = pixelSimilarity(referencePixels, pixels) ?? 0;
-        done++;
-        if (done === candidates.length && !resolved) { resolved = true; clearTimeout(timeout); cb(candidates); }
+        oneDone();
       });
     });
   }
