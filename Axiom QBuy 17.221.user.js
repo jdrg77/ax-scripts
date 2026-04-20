@@ -730,10 +730,8 @@
       const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
       const lp2       = firstRect.left - 621.5;
-      const showP     = !(isPanelVisible && hasActiveSearch);
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
-        if (!showP) { proxy.style.display = 'none'; return; }
         proxy.style.left    = lp2 + 'px';
         proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
         proxy.style.display = '';
@@ -763,11 +761,9 @@
     });
 
     // Graduated proxies (from panel toggle scan only) — 1-slot gap after normal
-    const proxyStart  = sortedNormal.length + 1;
-    const showProxies = !(isPanelVisible && hasActiveSearch);
+    const proxyStart = sortedNormal.length + 1;
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
-      if (!showProxies) { proxy.style.display = 'none'; return; }
       proxy.style.left    = leftPos + 'px';
       proxy.style.top     = (slot1Top + (proxyStart + i) * rowHeight) + 'px';
       proxy.style.display = '';
