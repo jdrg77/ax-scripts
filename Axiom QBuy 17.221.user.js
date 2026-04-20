@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      4.4
+// @version      5.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -13,11 +13,10 @@
   'use strict';
 
   const SAMPLE_SIZE = 16;
-
-  const addedBtns      = [];
-  const ghostBtns      = [];
-  const graduatedBtns  = [];
-  let scrollEl         = null;
+  const addedBtns     = [];
+  const ghostBtns     = [];
+  const graduatedBtns = [];
+  let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
@@ -25,12 +24,10 @@
   let referencePixels = null;
   let referenceSource = null;
 
-  // ─── Pixel helpers ────────────────────────────────────────────────────────
-
   function getPixels(src, cb) {
-    if (!src || src.startsWith('blob:')) return cb(null);
+    if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
     const img = new Image();
-    if (!src.startsWith('data:')) img.crossOrigin = 'anonymous';
+    img.crossOrigin = 'anonymous';
     img.onload = function () {
       try {
         const canvas = document.createElement('canvas');
@@ -43,7 +40,7 @@
       } catch (e) { cb(null); }
     };
     img.onerror = () => cb(null);
-    img.src = src.startsWith('data:') ? src : (src.includes('?') ? src : src + '?qb=1');
+    img.src = src.includes('?') ? src : src + '?qb=1';
   }
 
   function pixelSimilarity(p1, p2) {
@@ -60,31 +57,45 @@
     return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
   }
 
-  // ─── Reference image ──────────────────────────────────────────────────────
-
   function setReference(src) {
-    if (!src || src === referenceSource) return;
+    if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
     referencePixels = null;
     getPixels(src, (pixels) => {
       referencePixels = pixels;
       updateAllBadges();
+      scheduleUpdate();
     });
+  }
+
+  function getRealImage(containerEl) {
+    if (!containerEl) return null;
+    return Array.from(containerEl.querySelectorAll('img[class*="object-cover"]'))
+      .find(img => img.src && !img.src.startsWith('data:')) || null;
   }
 
   function getTopPulseRowImage() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
-    return rows[0].querySelector('img[class*="object-cover"]') || null;
+    return getRealImage(rows[0]);
   }
 
   window.qbSetReference = function (src) { setReference(src); };
 
-  // ─── Age parser: returns seconds ─────────────────────────────────────────
+  function getNewPair() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    if (!rows.length) return null;
+    const row = rows[0];
+    const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
+    const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
+    const ticker   = tickerEl?.textContent.trim() || '';
+    const name     = nameEl?.textContent.trim()   || '';
+    return { ticker, name };
+  }
 
   function ageToSeconds(ageStr) {
     if (!ageStr) return Infinity;
-    const s = ageStr.trim().toLowerCase();
+    const s   = ageStr.trim().toLowerCase();
     const num = parseFloat(s);
     if (isNaN(num)) return Infinity;
     if (s.endsWith('mo')) return num * 30 * 24 * 3600;
@@ -96,11 +107,9 @@
     return Infinity;
   }
 
-  // ─── MC parser: returns number ────────────────────────────────────────────
-
   function mcToNumber(mcStr) {
     if (!mcStr) return 0;
-    const s = mcStr.replace('$', '').trim().toUpperCase();
+    const s   = mcStr.replace('$', '').trim().toUpperCase();
     const num = parseFloat(s);
     if (isNaN(num)) return 0;
     if (s.endsWith('T')) return num * 1e12;
@@ -110,24 +119,129 @@
     return num;
   }
 
-  // ─── Find newest visible button ──────────────────────────────────────────
+  function getTokenData(newBtn) {
+    const originalBtn = newBtn._original;
+    if (!originalBtn) return null;
+
+    const bgColor = originalBtn.style.background || '';
+    const isGold  = bgColor.includes('255, 215, 0');
+    const isGreen = bgColor.includes('120, 255, 160');
+
+    const row = originalBtn.closest('[class*="max-h-[64px]"]');
+    if (!row) return null;
+
+    const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+    const ticker = truncateDivs[0]?.textContent.trim() || '';
+    const name   = truncateDivs[1]?.textContent.trim() || truncateDivs[0]?.textContent.trim() || '';
+
+    const ageEl    = row.querySelector('span[class*="pointer-events-none"]');
+    const ageSecs  = ageToSeconds(ageEl?.textContent?.trim() || '');
+    const ageHours = ageSecs / 3600;
+
+    let mc = '';
+    const mcContainers = [...(row.querySelectorAll('div[class*="gap-[4px]"]') || [])];
+    for (const container of mcContainers) {
+      const spans = [...container.querySelectorAll('span')];
+      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
+      if (labelSpan) {
+        const valueSpan = spans.find(s => s !== labelSpan && s.textContent.trim().length > 0);
+        mc = valueSpan?.textContent?.trim() || '';
+        break;
+      }
+    }
+    if (!mc) {
+      const allSpans = [...row.querySelectorAll('span')];
+      const mcLabel  = allSpans.find(s => s.textContent.trim() === 'MC');
+      if (mcLabel) {
+        let next = mcLabel.nextElementSibling;
+        while (next) {
+          if (next.textContent.trim() && next.textContent.trim() !== 'MC') { mc = next.textContent.trim(); break; }
+          next = next.nextElementSibling;
+        }
+      }
+    }
+
+    const marketCap = mcToNumber(mc);
+    const match     = newBtn._matchPct ?? 0;
+
+    return { newBtn, ticker, name, ageHours, marketCap, isGold, isGreen, match };
+  }
+
+  function sortQBuy(tokens, newPair) {
+    const normalize       = s => (s || '').toLowerCase().trim();
+    const sameName        = t => normalize(t.name)   === normalize(newPair.name);
+    const sameTicker      = t => normalize(t.ticker) === normalize(newPair.ticker);
+    const nameTickerMatch = t => sameName(t) && sameTicker(t);
+    const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
+
+    let arr = tokens.filter(t => t.isGold || t.isGreen);
+
+    const anyAbove58 = arr.some(t => t.match >= 58.21);
+    if (anyAbove58) arr = arr.filter(t => t.match >= 58.21);
+
+    const hasNameTicker = arr.some(nameTickerMatch);
+    const hasNameOnly   = !hasNameTicker && arr.some(nameOnlyMatch);
+
+    const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
+    const sortByMatchDesc = (a, b) => b.match - a.match;
+
+    function sortRest(list) {
+      const ageDays   = t => t.ageHours / 24;
+      const tier1     = list.filter(t => ageDays(t) < 7 && t.match > 72);
+      const gold      = tier1.filter(t => t.isGold);
+      const greenHigh = tier1.filter(t => t.isGreen && t.match > 92);
+      const greenLow  = tier1.filter(t => t.isGreen && t.match <= 92);
+
+      const tier1Mixed    = [...gold, ...greenHigh].sort(sortByRecent);
+      const tier1GreenLow = greenLow.sort(sortByMatchDesc);
+      const tier2 = list.filter(t => ageDays(t) >= 7 && t.isGold  && t.match > 80).sort(sortByMatchDesc);
+      const tier3 = list.filter(t => ageDays(t) >= 7 && t.isGreen && t.match > 80).sort(sortByMatchDesc);
+      const tier4 = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
+      const tier5 = list.filter(t => t.match >= 58.21 && t.match < 75).sort((a, b) => {
+        if (a.isGold !== b.isGold) return a.isGold ? -1 : 1;
+        if (a.ageHours !== b.ageHours) return a.ageHours - b.ageHours;
+        return b.marketCap - a.marketCap;
+      });
+
+      return [...tier1Mixed, ...tier1GreenLow, ...tier2, ...tier3, ...tier4, ...tier5];
+    }
+
+    if (hasNameTicker) {
+      const nt    = arr.filter(nameTickerMatch);
+      const ultra = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
+      const rest  = nt.filter(t => t.match <= 85);
+      const gold  = rest.filter(t => t.isGold).sort(sortByRecent);
+      const green = rest.filter(t => t.isGreen).sort(sortByRecent);
+      const others = arr.filter(t => !nameTickerMatch(t));
+      return [...ultra, ...gold, ...green, ...sortRest(others)];
+    }
+
+    if (hasNameOnly) {
+      const no          = arr.filter(nameOnlyMatch);
+      const goldRecent  = no.filter(t => t.isGold  && t.ageHours < 24).sort(sortByRecent);
+      const goldOld     = no.filter(t => t.isGold  && t.ageHours >= 24).sort(sortByMatchDesc);
+      const greenRecent = no.filter(t => t.isGreen && t.ageHours < 24).sort(sortByRecent);
+      const greenOld    = no.filter(t => t.isGreen && t.ageHours >= 24).sort(sortByMatchDesc);
+      const others      = arr.filter(t => !nameOnlyMatch(t));
+      return [...goldRecent, ...goldOld, ...greenRecent, ...greenOld, ...sortRest(others)];
+    }
+
+    return sortRest(arr);
+  }
 
   function getNewestBtn() {
-    let best = null;
-    let bestSecs = Infinity;
+    let best = null, bestSecs = Infinity;
     addedBtns.forEach(newBtn => {
       if (newBtn.style.display === 'none') return;
       const originalBtn = newBtn._original;
       if (!originalBtn) return;
-      const row = originalBtn.closest('[class*="max-h-[64px]"]');
-      const timeEl = row?.querySelector('span[class*="text-primaryGreen"]');
-      const secs = ageToSeconds(timeEl?.textContent?.trim() || '');
+      const row   = originalBtn.closest('[class*="max-h-[64px]"]');
+      const ageEl = row?.querySelector('span[class*="pointer-events-none"]');
+      const secs  = ageToSeconds(ageEl?.textContent?.trim() || '');
       if (secs < bestSecs) { bestSecs = secs; best = newBtn; }
     });
     return best;
   }
-
-  // ─── Badge ────────────────────────────────────────────────────────────────
 
   function badgeColor(pct) {
     if (pct === null) return '#888';
@@ -141,23 +255,7 @@
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'qb-sim-badge';
-      badge.style.cssText = `
-        position: absolute;
-        left: -66px;
-        top: -10px;
-        font-size: 11px;
-        font-weight: 700;
-        font-family: monospace;
-        color: #fff;
-        background: rgba(0,0,0,0.72);
-        border-radius: 8px;
-        padding: 1px 5px;
-        pointer-events: none;
-        white-space: nowrap;
-        border: 1px solid currentColor;
-        z-index: 10001;
-        transition: color 0.3s;
-      `;
+      badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;transition:color 0.3s;';
       newBtn.appendChild(badge);
     }
     return badge;
@@ -167,15 +265,16 @@
     const badge       = getOrCreateBadge(newBtn);
     const originalBtn = newBtn._original;
     if (!originalBtn) return;
-    const coinImg = getCoinImage(originalBtn);
-    if (!coinImg || !coinImg.src) {
-      badge.textContent = '—'; badge.style.color = '#888'; return;
-    }
-    if (!referencePixels) {
-      badge.textContent = '…'; badge.style.color = '#888'; return;
-    }
+
+    const row     = originalBtn.closest('[class*="max-h-[64px]"]');
+    const coinImg = getRealImage(row);
+
+    if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; return; }
+    if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; return; }
+
     getPixels(coinImg.src, (rowPixels) => {
       const pct = pixelSimilarity(referencePixels, rowPixels);
+      newBtn._matchPct = pct ?? 0;
       if (pct === null) {
         badge.textContent = '?'; badge.style.color = '#888';
       } else {
@@ -183,18 +282,17 @@
         badge.style.color       = badgeColor(pct);
         badge.style.borderColor = badgeColor(pct);
       }
+      scheduleUpdate();
     });
   }
 
   function updateAllBadges() { addedBtns.forEach(btn => updateBadge(btn)); }
 
-  // ─── Token name ───────────────────────────────────────────────────────────
-
   function getTokenName(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
     if (!row) return '';
-    const nameEls = [...row.querySelectorAll('div[class*="truncate"][class*="whitespace-nowrap"]')];
-    return nameEls[1]?.textContent?.trim() || nameEls[0]?.textContent?.trim() || '';
+    const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+    return truncateDivs[1]?.textContent?.trim() || truncateDivs[0]?.textContent?.trim() || '';
   }
 
   function getSearchQuery() {
@@ -208,24 +306,7 @@
     if (!label) {
       label = document.createElement('div');
       label.className = 'qb-name-label';
-      label.style.cssText = `
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        margin-bottom: 2px;
-        text-align: center;
-        font-size: 10px;
-        font-weight: 600;
-        font-family: monospace;
-        color: #ccc;
-        background: rgba(0,0,0,0.65);
-        border-radius: 4px;
-        padding: 1px 4px;
-        pointer-events: none;
-        white-space: nowrap;
-        z-index: 10001;
-      `;
+      label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;text-align:center;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
       newBtn.appendChild(label);
     }
     return label;
@@ -237,29 +318,23 @@
     const name  = getTokenName(originalBtn);
     const label = getOrCreateNameLabel(newBtn);
     label.textContent = name;
-
-    // Gold if search query matches token name or ticker
     const query = getSearchQuery();
     if (query && name.toLowerCase().includes(query)) {
-      label.style.color      = '#ffd700';
-      label.style.fontWeight = '800';
+      label.style.color = '#ffd700'; label.style.fontWeight = '800';
     } else {
-      label.style.color      = '#ccc';
-      label.style.fontWeight = '600';
+      label.style.color = '#ccc'; label.style.fontWeight = '600';
     }
   }
-
-  // ─── Token info (age + MC) ────────────────────────────────────────────────
 
   function getTokenInfo(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
     if (!row) return { age: '', mc: '' };
 
-    const timeEl = row.querySelector('span[class*="text-primaryGreen"]');
-    const age = timeEl?.textContent?.trim() || '';
+    const ageEl = row.querySelector('span[class*="pointer-events-none"]');
+    const age   = ageEl?.textContent?.trim() || '';
 
-    const mcContainers = [...row.querySelectorAll('div[class*="gap-[4px]"]')];
     let mc = '';
+    const mcContainers = [...row.querySelectorAll('div[class*="gap-[4px]"]')];
     for (const container of mcContainers) {
       const spans = [...container.querySelectorAll('span')];
       const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
@@ -269,7 +344,17 @@
         break;
       }
     }
-
+    if (!mc) {
+      const allSpans = [...row.querySelectorAll('span')];
+      const mcLabel  = allSpans.find(s => s.textContent.trim() === 'MC');
+      if (mcLabel) {
+        let next = mcLabel.nextElementSibling;
+        while (next) {
+          if (next.textContent.trim() && next.textContent.trim() !== 'MC') { mc = next.textContent.trim(); break; }
+          next = next.nextElementSibling;
+        }
+      }
+    }
     return { age, mc };
   }
 
@@ -278,24 +363,7 @@
     if (!bar) {
       bar = document.createElement('div');
       bar.className = 'qb-info-bar';
-      bar.style.cssText = `
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        margin-top: 2px;
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        font-size: 13px;
-        font-weight: 700;
-        font-family: monospace;
-        pointer-events: none;
-        white-space: nowrap;
-        z-index: 10001;
-      `;
+      bar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
       newBtn.appendChild(bar);
     }
     return bar;
@@ -308,44 +376,24 @@
     const bar = getOrCreateInfoBar(newBtn);
     bar.innerHTML = '';
 
-    // Age span — gold + glow if newest, otherwise green
     if (age) {
-      const newestBtn = getNewestBtn();
-      const isNewest  = (newestBtn === newBtn);
-      const ageSpan   = document.createElement('span');
+      const isNewest = (getNewestBtn() === newBtn);
+      const ageSpan  = document.createElement('span');
       ageSpan.textContent = age;
-      if (isNewest) {
-        ageSpan.style.cssText = `
-          color: #ffd700;
-          background: rgba(0,0,0,0.7);
-          border-radius: 4px;
-          padding: 1px 5px;
-          box-shadow: 0 0 6px 2px #ffd700, 0 0 12px 4px rgba(255,215,0,0.4);
-          text-shadow: 0 0 6px #ffd700;
-        `;
-      } else {
-        ageSpan.style.cssText = 'color: #78ffa0; background: rgba(0,0,0,0.7); border-radius: 4px; padding: 1px 5px;';
-      }
+      ageSpan.style.cssText = isNewest
+        ? 'color:#ffd700;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;box-shadow:0 0 6px 2px #ffd700,0 0 12px 4px rgba(255,215,0,0.4);text-shadow:0 0 6px #ffd700;'
+        : 'color:#78ffa0;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
       bar.appendChild(ageSpan);
     }
 
-    // MC span — red if > $10K, blue otherwise
     if (mc) {
       const mcVal  = mcToNumber(mc);
-      const mcOver = mcVal > 10000;
       const mcSpan = document.createElement('span');
       mcSpan.textContent = 'MC ' + mc;
-      mcSpan.style.cssText = `
-        color: ${mcOver ? '#ff4444' : '#5bb8ff'};
-        background: rgba(0,0,0,0.7);
-        border-radius: 4px;
-        padding: 1px 5px;
-      `;
+      mcSpan.style.cssText = `color:${mcVal > 10000 ? '#ff4444' : '#5bb8ff'};background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;`;
       bar.appendChild(mcSpan);
     }
   }
-
-  // ─── Core helpers ─────────────────────────────────────────────────────────
 
   function fireClick(el) {
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev => {
@@ -359,10 +407,8 @@
   }
 
   function removeButtons() {
-    addedBtns.forEach(btn => btn.remove());
-    addedBtns.length = 0;
-    ghostBtns.forEach(btn => btn.remove());
-    ghostBtns.length = 0;
+    addedBtns.forEach(btn => btn.remove()); addedBtns.length = 0;
+    ghostBtns.forEach(btn => btn.remove()); ghostBtns.length = 0;
     removeGraduatedBtns();
   }
 
@@ -399,26 +445,19 @@
 
       const btn = document.createElement('div');
       btn.className = 'qb-graduated-btn';
-      btn.style.cssText = `
-        position:fixed;z-index:9999;overflow:visible;cursor:pointer;
-        display:flex;align-items:center;justify-content:center;
-        background:rgb(255,215,0);color:#000;font-weight:800;font-size:11px;font-family:monospace;
-        border-radius:6px;padding:4px 8px;height:${rowHeight - 4}px;
-        left:${leftPos}px;top:${lastTop + rowHeight + 6 + i * rowHeight}px;
-        box-shadow:0 0 8px rgba(255,215,0,0.4);white-space:nowrap;
-      `;
+      btn.style.cssText = `position:fixed;z-index:9999;overflow:visible;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgb(255,215,0);color:#000;font-weight:800;font-size:11px;font-family:monospace;border-radius:6px;padding:4px 8px;height:${rowHeight - 4}px;left:${leftPos}px;top:${lastTop + rowHeight + 6 + i * rowHeight}px;box-shadow:0 0 8px rgba(255,215,0,0.4);white-space:nowrap;`;
       btn.textContent = ticker || '?';
 
       if (imgSrc) {
         const imgEl = document.createElement('img');
         imgEl.src = imgSrc;
-        imgEl.style.cssText = `width:50px;height:50px;border-radius:50%;object-fit:cover;position:absolute;left:-56px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);`;
+        imgEl.style.cssText = 'width:50px;height:50px;border-radius:50%;object-fit:cover;position:absolute;left:-56px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
         btn.appendChild(imgEl);
       }
 
       if (mc) {
         const mcEl = document.createElement('div');
-        mcEl.style.cssText = `position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;font-size:10px;font-weight:700;font-family:monospace;color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;`;
+        mcEl.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;font-size:10px;font-weight:700;font-family:monospace;color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
         mcEl.textContent = 'MC ' + mc;
         btn.appendChild(mcEl);
       }
@@ -445,10 +484,48 @@
 
   function getCoinImage(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
-    return row?.querySelector('img[class*="object-cover"]') || null;
+    return getRealImage(row);
+  }
+
+  let lastTopSrc = null;
+  function checkTopPulseReference() {
+    const topImg = getTopPulseRowImage();
+    if (topImg?.src && topImg.src !== lastTopSrc) {
+      lastTopSrc = topImg.src;
+      setReference(topImg.src);
+    }
+  }
+
+  let clickSearchCheckTimeout = null;
+  function checkClickSearchReference() {
+    if (!window.axiomUserOpen) return;
+    const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+      .find(el => isSearchPanel(el));
+    if (!panel) return;
+
+    if (clickSearchCheckTimeout) clearTimeout(clickSearchCheckTimeout);
+    clickSearchCheckTimeout = setTimeout(() => {
+      const input = panel.querySelector('input');
+      const query = input?.value?.trim().toLowerCase();
+      if (!query) return;
+
+      const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+      for (const row of rows) {
+        const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
+        const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
+        if (
+          tickerEl?.textContent.trim().toLowerCase().includes(query) ||
+          nameEl?.textContent.trim().toLowerCase().includes(query)
+        ) {
+          const realImg = getRealImage(row);
+          if (realImg?.src) { setReference(realImg.src); break; }
+        }
+      }
+    }, 150);
   }
 
   function updatePositions() {
+    const newPair = getNewPair();
     const visible = [];
 
     addedBtns.forEach(newBtn => {
@@ -459,20 +536,32 @@
         newBtn.style.display = 'none';
         return;
       }
-      visible.push({ newBtn, originalBtn, rect });
+      const data = getTokenData(newBtn);
+      if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    visible.sort((a, b) => a.rect.top - b.rect.top);
+    let sorted = visible;
+    if (newPair && visible.length > 0) {
+      const tokenDatas    = visible.map(v => v.data);
+      const sortedDatas   = sortQBuy(tokenDatas, newPair);
+      const sortedVisible = sortedDatas
+        .map(d => visible.find(v => v.newBtn === d.newBtn))
+        .filter(Boolean);
+      visible.forEach(v => {
+        if (!sortedVisible.find(s => s.newBtn === v.newBtn)) sortedVisible.push(v);
+      });
+      sorted = sortedVisible;
+    }
 
-    if (visible.length > 0) {
+    if (sorted.length > 0) {
       const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      const slot1Top      = firstOriginal?.getBoundingClientRect().top ?? visible[0].rect.top;
-      const rowEl         = visible[0].originalBtn?.closest('[class*="max-h-[64px]"]');
-      const rowHeight     = rowEl?.getBoundingClientRect().height ||
-                            (visible.length > 1 ? visible[1].rect.top - visible[0].rect.top : 64);
-      const leftPos       = visible[0].rect.left - 621.5;
+      const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? sorted[0].rect.top;
+      const rowEl     = sorted[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+      const rowHeight = rowEl?.getBoundingClientRect().height ||
+                        (sorted.length > 1 ? sorted[1].rect.top - sorted[0].rect.top : 64);
+      const leftPos   = sorted[0].rect.left - 621.5;
 
-      visible.forEach(({ newBtn, originalBtn }, i) => {
+      sorted.forEach(({ newBtn, originalBtn }, i) => {
         newBtn.style.left    = leftPos + 'px';
         newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
         newBtn.style.display = '';
@@ -484,12 +573,30 @@
           imgEl.src = coinImg.src;
           updateBadge(newBtn);
         }
+
         updateInfoBar(newBtn);
         updateNameLabel(newBtn);
       });
+
+      // Graduated buttons positions
+      if (graduatedBtns.length) {
+        const lastTop  = slot1Top + (sorted.length - 1) * rowHeight;
+        const refWidth = sorted[0]?.newBtn?.offsetWidth || 60;
+        let gradIdx = 0;
+        graduatedBtns.forEach(btn => {
+          if (btn.classList.contains('qb-grad-separator')) {
+            btn.style.left  = leftPos + 'px';
+            btn.style.top   = (lastTop + rowHeight + 1) + 'px';
+            btn.style.width = refWidth + 'px';
+          } else {
+            btn.style.left = leftPos + 'px';
+            btn.style.top  = (lastTop + rowHeight + 6 + gradIdx * rowHeight) + 'px';
+            gradIdx++;
+          }
+        });
+      }
     }
 
-    // Ghost buttons at natural positions
     ghostBtns.forEach(ghostBtn => {
       const originalBtn = ghostBtn._original;
       if (!originalBtn) return;
@@ -497,45 +604,16 @@
       ghostBtn.style.left = (rect.left - 621.5) + 'px';
       ghostBtn.style.top  = rect.top + 'px';
       if (rect.top < 50 || rect.bottom > window.innerHeight + 200) {
-        ghostBtn.style.display = 'none';
-        return;
+        ghostBtn.style.display = 'none'; return;
       }
       ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
       ghostBtn.style.opacity = '0.2';
     });
-
-    // Graduated buttons positions
-    if (graduatedBtns.length && visible.length > 0) {
-      const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? visible[0].rect.top;
-      const rowEl     = visible[0].originalBtn?.closest('[class*="max-h-[64px]"]');
-      const rowHeight = rowEl?.getBoundingClientRect().height ||
-                        (visible.length > 1 ? visible[1].rect.top - visible[0].rect.top : 64);
-      const leftPos   = visible[0].rect.left - 621.5;
-      const lastTop   = slot1Top + (visible.length - 1) * rowHeight;
-      const refWidth  = visible[0]?.newBtn?.offsetWidth || 60;
-
-      let gradIdx = 0;
-      graduatedBtns.forEach(btn => {
-        if (btn.classList.contains('qb-grad-separator')) {
-          btn.style.left  = leftPos + 'px';
-          btn.style.top   = (lastTop + rowHeight + 1) + 'px';
-          btn.style.width = refWidth + 'px';
-        } else {
-          btn.style.left = leftPos + 'px';
-          btn.style.top  = (lastTop + rowHeight + 6 + gradIdx * rowHeight) + 'px';
-          gradIdx++;
-        }
-      });
-    }
   }
 
   function scheduleUpdate() {
     if (updateTimeout) return;
-    updateTimeout = setTimeout(() => {
-      updatePositions();
-      updateTimeout = null;
-    }, 50);
+    updateTimeout = setTimeout(() => { updatePositions(); updateTimeout = null; }, 50);
   }
 
   function isSearchPanel(el) {
@@ -564,36 +642,42 @@
   }
 
   function checkPanelState(panel) {
-    if (!panel) {
-      isPanelVisible  = false;
-      hasActiveSearch = false;
-      return;
-    }
+    if (!panel) { isPanelVisible = false; hasActiveSearch = false; return; }
     const wrapper    = panel.parentElement;
     const zIndex     = wrapper?.style.zIndex;
     const wasVisible = isPanelVisible;
     const hadSearch  = hasActiveSearch;
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
     const input      = panel.querySelector('input');
-    const inputValue = input?.value?.trim() || '';
-    hasActiveSearch  = inputValue.length > 0;
-    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) {
-      scheduleUpdate();
-    }
+    hasActiveSearch  = (input?.value?.trim() || '').length > 0;
+    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
   }
 
-  // ─── Click: set reference from pulse rows outside panel ──────────────────
-
   document.addEventListener('click', (e) => {
-    const clickedImg = e.target.closest('img[class*="object-cover"]');
+    const qbImg = e.target.closest('img.qb-coin-img');
+    if (qbImg?.src && !qbImg.src.startsWith('data:')) {
+      setReference(qbImg.src);
+      return;
+    }
+
+    let clickedImg = e.target.closest('img[class*="object-cover"]');
+
+    if (!clickedImg) {
+      const imgWrapper = e.target.closest('[class*="h-[72px]"][class*="w-[72px]"]');
+      if (imgWrapper) {
+        clickedImg = Array.from(imgWrapper.querySelectorAll('img[class*="object-cover"]'))
+          .find(img => !img.src.startsWith('data:') && img.src) || null;
+      }
+    }
+
     if (!clickedImg?.src || clickedImg.src.startsWith('data:')) return;
+
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (panel && panel.contains(clickedImg)) return;
+
     setReference(clickedImg.src);
   }, true);
-
-  // ─── Main addButtons ──────────────────────────────────────────────────────
 
   function addButtons() {
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
@@ -602,9 +686,7 @@
     if (!panel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
-      lastPanel       = null;
-      isPanelVisible  = false;
-      hasActiveSearch = false;
+      lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
       return;
     }
 
@@ -634,13 +716,13 @@
     }
 
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-
     btns.forEach(originalBtn => {
       if (originalBtn.dataset.qbAdded) return;
       originalBtn.dataset.qbAdded = 'true';
 
       const newBtn = originalBtn.cloneNode(true);
       newBtn._original      = originalBtn;
+      newBtn._matchPct      = null;
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
@@ -651,21 +733,18 @@
         const imgEl     = document.createElement('img');
         imgEl.src       = coinImg.src;
         imgEl.className = 'qb-coin-img';
-        imgEl.style.cssText = `
-          width: 60px;
-          height: 60px;
-          border-radius: 50%;
-          object-fit: cover;
-          flex-shrink: 0;
-          position: absolute;
-          left: -66px;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-        `;
+        imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
         newBtn.appendChild(imgEl);
       }
+
+      const ghostBtn = document.createElement('button');
+      ghostBtn._original      = originalBtn;
+      ghostBtn.style.cssText  = originalBtn.style.cssText;
+      ghostBtn.style.position = 'fixed';
+      ghostBtn.style.zIndex   = '9998';
+      ghostBtn.style.overflow = 'visible';
+      ghostBtn.style.opacity  = '0.2';
+      ghostBtn.innerHTML      = originalBtn.innerHTML;
 
       const colorSync = new MutationObserver(() => {
         newBtn.style.background   = originalBtn.style.background;
@@ -681,37 +760,21 @@
       newBtn.style.top     = rect.top + 'px';
       newBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
 
+      ghostBtn.style.left    = (rect.left - 621.5) + 'px';
+      ghostBtn.style.top     = rect.top + 'px';
+      ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
+
       document.body.appendChild(newBtn);
       addedBtns.push(newBtn);
+      document.body.appendChild(ghostBtn);
+      ghostBtns.push(ghostBtn);
 
-      newBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        e.preventDefault();
-        fireClick(originalBtn);
-      });
+      newBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); fireClick(originalBtn); });
+      ghostBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); fireClick(originalBtn); });
 
       updateBadge(newBtn);
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
-
-      // Ghost button — natural position, low opacity
-      const ghostBtn          = newBtn.cloneNode(true);
-      ghostBtn._original      = originalBtn;
-      ghostBtn.style.position = 'fixed';
-      ghostBtn.style.zIndex   = '9998';
-      ghostBtn.style.overflow = 'visible';
-      ghostBtn.style.opacity  = '0.2';
-      ghostBtn.style.left     = (rect.left - 621.5) + 'px';
-      ghostBtn.style.top      = rect.top + 'px';
-      ghostBtn.style.display  = shouldShowButton(originalBtn) ? '' : 'none';
-      document.body.appendChild(ghostBtn);
-      ghostBtns.push(ghostBtn);
-
-      ghostBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        e.preventDefault();
-        fireClick(originalBtn);
-      });
     });
   }
 
@@ -736,18 +799,13 @@
 
   // ─── MutationObserver ─────────────────────────────────────────────────────
 
-  const observer = new MutationObserver(() => addButtons());
+  const observer = new MutationObserver(() => {
+    checkClickSearchReference();
+    addButtons();
+    checkTopPulseReference();
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // ─── Reference sync ───────────────────────────────────────────────────────
-
-  setInterval(() => {
-    if (!isPanelVisible) {
-      const topImg = getTopPulseRowImage();
-      if (topImg?.src && !topImg.src.startsWith('data:') && topImg.src !== referenceSource) {
-        setReference(topImg.src);
-      }
-    }
-  }, 2000);
+  setInterval(() => { checkTopPulseReference(); }, 500);
 
 })();
