@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.0
+// @version      7.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -191,8 +191,8 @@
     const pd = dHashSimilarity(n1, n2);
     const scores = [ps, ph, pd].filter(v => v !== null);
     if (!scores.length) return null;
-    // weights: pixel 25%, pHash 35%, dHash 40%
-    const weights = [0.25, 0.35, 0.40];
+    // weights: pixel 15%, pHash 65%, dHash 20%
+    const weights = [0.15, 0.65, 0.20];
     const active  = [ps, ph, pd];
     let sum = 0, wsum = 0;
     active.forEach((v, i) => { if (v !== null) { sum += v * weights[i]; wsum += weights[i]; } });
@@ -330,14 +330,17 @@
     const nameTickerMatch = t => sameName(t) && sameTicker(t);
     const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
 
-    const arr = tokens; // all tokens sorted together by all criteria
-
-    const hasNameTicker = arr.some(nameTickerMatch);
-    const hasNameOnly   = !hasNameTicker && arr.some(nameOnlyMatch);
-
     const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
+    const sortByOldest    = (a, b) => b.ageHours - a.ageHours;
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
+
+    // Blue = not gold, not green. Only show if exact name/ticker match AND match > 50%
+    const special = tokens.filter(t => t.isGold || t.isGreen);
+    const blues   = tokens
+      .filter(t => !t.isGold && !t.isGreen)
+      .filter(t => (sameName(t) || sameTicker(t)) && t.match > 50)
+      .sort(sortByOldest);
 
     function sortRest(list) {
       const ageDays = t => t.ageHours / 24;
@@ -351,23 +354,27 @@
       return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
 
-    if (hasNameTicker) {
-      const nt    = arr.filter(nameTickerMatch);
-      const ultra = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
-      const rest  = nt.filter(t => t.match <= 85).sort(sortByRecent);
-      const others = arr.filter(t => !nameTickerMatch(t));
-      return [...ultra, ...rest, ...sortRest(others)];
-    }
+    let sortedSpecial;
+    const hasNameTicker = special.some(nameTickerMatch);
+    const hasNameOnly   = !hasNameTicker && special.some(nameOnlyMatch);
 
-    if (hasNameOnly) {
-      const no    = arr.filter(nameOnlyMatch);
+    if (hasNameTicker) {
+      const nt     = special.filter(nameTickerMatch);
+      const ultra  = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
+      const rest   = nt.filter(t => t.match <= 85).sort(sortByRecent);
+      const others = special.filter(t => !nameTickerMatch(t));
+      sortedSpecial = [...ultra, ...rest, ...sortRest(others)];
+    } else if (hasNameOnly) {
+      const no     = special.filter(nameOnlyMatch);
       const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
       const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
-      const others = arr.filter(t => !nameOnlyMatch(t));
-      return [...recent, ...old, ...sortRest(others)];
+      const others = special.filter(t => !nameOnlyMatch(t));
+      sortedSpecial = [...recent, ...old, ...sortRest(others)];
+    } else {
+      sortedSpecial = sortRest(special);
     }
 
-    return sortRest(arr);
+    return [...sortedSpecial, ...blues];
   }
 
   function getNewestBtn() {
