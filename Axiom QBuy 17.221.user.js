@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.8
+// @version      6.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const SAMPLE_SIZE = 16;
+  const SAMPLE_SIZE = 32;
   const addedBtns     = [];
   const gradProxyBtns = [];
   let scrollEl        = null;
@@ -83,16 +83,89 @@
 
   function pixelSimilarity(p1, p2) {
     if (!p1 || !p2) return null;
-    const len    = Math.min(p1.length, p2.length);
+    const size = SAMPLE_SIZE;
+    const len  = Math.min(p1.length, p2.length);
     const pixels = len / 4;
-    let sum = 0;
+
+    function lum(d, i) { return (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) / 255; }
+
+    // Color similarity — perceptual luminance weighting
+    let colorDiff = 0;
     for (let i = 0; i < len; i += 4) {
-      const dr = Math.abs(p1[i]     - p2[i])     / 255;
-      const dg = Math.abs(p1[i + 1] - p2[i + 1]) / 255;
-      const db = Math.abs(p1[i + 2] - p2[i + 2]) / 255;
-      sum += (dr + dg + db) / 3;
+      const dr = (p1[i]   - p2[i])   / 255;
+      const dg = (p1[i+1] - p2[i+1]) / 255;
+      const db = (p1[i+2] - p2[i+2]) / 255;
+      colorDiff += Math.abs(dr * 0.299 + dg * 0.587 + db * 0.114);
     }
-    return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
+    const colorSim = 1 - colorDiff / pixels;
+
+    // Structural similarity — gradient comparison (avoids false matches on color-dominant images)
+    let structDiff = 0, structCount = 0;
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const gx1 = lum(p1, (y*size+(x+1))*4) - lum(p1, (y*size+(x-1))*4);
+        const gy1 = lum(p1, ((y+1)*size+x)*4) - lum(p1, ((y-1)*size+x)*4);
+        const gx2 = lum(p2, (y*size+(x+1))*4) - lum(p2, (y*size+(x-1))*4);
+        const gy2 = lum(p2, ((y+1)*size+x)*4) - lum(p2, ((y-1)*size+x)*4);
+        structDiff += Math.abs(Math.sqrt(gx1*gx1+gy1*gy1) - Math.sqrt(gx2*gx2+gy2*gy2));
+        structCount++;
+      }
+    }
+    const structSim = 1 - structDiff / structCount;
+
+    return parseFloat(((colorSim * 0.4 + structSim * 0.6) * 100).toFixed(1));
+  }
+
+  function pHashSimilarity(p1, p2) {
+    if (!p1 || !p2) return null;
+    const size = SAMPLE_SIZE;
+    function lum(d, i) { return d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114; }
+
+    // Build grayscale grids
+    const g1 = new Float32Array(size * size);
+    const g2 = new Float32Array(size * size);
+    for (let i = 0; i < size * size; i++) { g1[i] = lum(p1, i*4); g2[i] = lum(p2, i*4); }
+
+    // 2D DCT — compute only top 8x8 coefficients
+    const H = 8;
+    const dct1 = new Float32Array(H * H);
+    const dct2 = new Float32Array(H * H);
+    const c = (u) => u === 0 ? 1 / Math.sqrt(size) : Math.sqrt(2 / size);
+    for (let u = 0; u < H; u++) {
+      for (let v = 0; v < H; v++) {
+        let s1 = 0, s2 = 0;
+        for (let x = 0; x < size; x++) {
+          const cx = Math.cos((2*x+1)*u*Math.PI/(2*size));
+          for (let y = 0; y < size; y++) {
+            const cy = Math.cos((2*y+1)*v*Math.PI/(2*size));
+            s1 += g1[y*size+x] * cx * cy;
+            s2 += g2[y*size+x] * cx * cy;
+          }
+        }
+        dct1[u*H+v] = c(u)*c(v)*s1;
+        dct2[u*H+v] = c(u)*c(v)*s2;
+      }
+    }
+
+    // Skip DC (0,0), compute hash from remaining 63 values
+    const vals1 = Array.from(dct1).slice(1);
+    const vals2 = Array.from(dct2).slice(1);
+    const med1  = [...vals1].sort((a,b)=>a-b)[Math.floor(vals1.length/2)];
+    const med2  = [...vals2].sort((a,b)=>a-b)[Math.floor(vals2.length/2)];
+    let hamming = 0;
+    for (let i = 0; i < vals1.length; i++) {
+      if ((vals1[i] > med1) !== (vals2[i] > med2)) hamming++;
+    }
+    return parseFloat(((1 - hamming / vals1.length) * 100).toFixed(1));
+  }
+
+  function combinedSimilarity(p1, p2) {
+    const ps = pixelSimilarity(p1, p2);
+    const ph = pHashSimilarity(p1, p2);
+    if (ps === null && ph === null) return null;
+    if (ps === null) return ph;
+    if (ph === null) return ps;
+    return parseFloat(((ps + ph) / 2).toFixed(1));
   }
 
   function updateGradProxyBadges() {
@@ -101,7 +174,7 @@
       const data = proxy._gradData;
       if (!data || !data.imgSrc) return;
       getPixels(data.imgSrc, pixels => {
-        const pct = pixelSimilarity(referencePixels, pixels) ?? 0;
+        const pct = combinedSimilarity(referencePixels, pixels) ?? 0;
         data.match = pct;
         const badge = proxy.querySelector('.qb-sim-badge');
         if (badge) {
@@ -307,7 +380,7 @@
     if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; return; }
     if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; return; }
     getPixels(coinImg.src, (rowPixels) => {
-      const pct = pixelSimilarity(referencePixels, rowPixels);
+      const pct = combinedSimilarity(referencePixels, rowPixels);
       newBtn._matchPct = pct ?? 0;
       if (pct === null) {
         badge.textContent = '?'; badge.style.color = '#888';
@@ -538,12 +611,12 @@
     const oneDone = () => { done++; if (done === candidates.length) { clearTimeout(timeout); finish(); } };
     candidates.forEach(data => {
       if (data.directPixels) {
-        data.match = pixelSimilarity(referencePixels, data.directPixels) ?? 0;
+        data.match = combinedSimilarity(referencePixels, data.directPixels) ?? 0;
         oneDone(); return;
       }
       if (!data.imgSrc) { data.match = 0; oneDone(); return; }
       getPixels(data.imgSrc, pixels => {
-        data.match = pixelSimilarity(referencePixels, pixels) ?? 0;
+        data.match = combinedSimilarity(referencePixels, pixels) ?? 0;
         oneDone();
       });
     });
