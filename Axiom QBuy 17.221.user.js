@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.3
+// @version      7.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -23,12 +23,13 @@
   let referencePixels = null;
   let referenceSource = null;
 
-  let frozen          = false;
-  let clickQueue      = null;
-  let freezeTimer     = null;
-  let isScanning      = false;
+  let frozen            = false;
+  let clickQueue        = null;
+  let freezeTimer       = null;
+  let isScanning        = false;
+  let inGraduatedView   = false;
   let scanDebounceTimer = null;
-  let referenceLocked = false;
+  let referenceLocked   = false;
 
   function freezeButtons() {
     frozen = true;
@@ -225,44 +226,51 @@
     const nameTickerMatch = t => sameName(t) && sameTicker(t);
     const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
 
-    const arr = tokens; // all tokens sorted together by all criteria
-
-    const hasNameTicker = arr.some(nameTickerMatch);
-    const hasNameOnly   = !hasNameTicker && arr.some(nameOnlyMatch);
-
     const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
+    const sortByOldest    = (a, b) => b.ageHours - a.ageHours;
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
+
+    // Gold/green = special (always above). Blue = only if exact name/ticker + match > 50%, oldest first
+    const special = tokens.filter(t => t.isGold || t.isGreen);
+    const blues   = tokens
+      .filter(t => !t.isGold && !t.isGreen)
+      .filter(t => (sameName(t) || sameTicker(t)) && t.match > 50)
+      .sort(sortByOldest);
 
     function sortRest(list) {
       const ageDays = t => t.ageHours / 24;
       const tier1   = list.filter(t => ageDays(t) < 7 && t.match > 72);
       const t1High  = tier1.filter(t => t.match > 92).sort(sortByRecent);
       const t1Low   = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
-      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
-      const tier3   = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
+      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByRecent);
+      const tier3   = list.filter(t => ageDays(t) >= 7 && t.match >= 75 && t.match <= 80).sort(sortByRecent);
       const tier4   = list.filter(t => t.match >= 58.21 && t.match < 75).sort(sortByAgeMC);
       const tier5   = list.filter(t => t.match < 58.21).sort(sortByAgeMC);
       return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
 
-    if (hasNameTicker) {
-      const nt    = arr.filter(nameTickerMatch);
-      const ultra = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
-      const rest  = nt.filter(t => t.match <= 85).sort(sortByRecent);
-      const others = arr.filter(t => !nameTickerMatch(t));
-      return [...ultra, ...rest, ...sortRest(others)];
-    }
+    let sortedSpecial;
+    const hasNameTicker = special.some(nameTickerMatch);
+    const hasNameOnly   = !hasNameTicker && special.some(nameOnlyMatch);
 
-    if (hasNameOnly) {
-      const no    = arr.filter(nameOnlyMatch);
+    if (hasNameTicker) {
+      const nt     = special.filter(nameTickerMatch);
+      const ultra  = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
+      const rest   = nt.filter(t => t.match <= 85).sort(sortByRecent);
+      const others = special.filter(t => !nameTickerMatch(t));
+      sortedSpecial = [...ultra, ...rest, ...sortRest(others)];
+    } else if (hasNameOnly) {
+      const no     = special.filter(nameOnlyMatch);
       const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
       const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
-      const others = arr.filter(t => !nameOnlyMatch(t));
-      return [...recent, ...old, ...sortRest(others)];
+      const others = special.filter(t => !nameOnlyMatch(t));
+      sortedSpecial = [...recent, ...old, ...sortRest(others)];
+    } else {
+      sortedSpecial = sortRest(special);
     }
 
-    return sortRest(arr);
+    return [...sortedSpecial, ...blues];
   }
 
   function getNewestBtn() {
@@ -480,7 +488,7 @@
           if (realImg?.src) { setReference(realImg.src); break; }
         }
       }
-    }, 150);
+    }, 50);
   }
 
   // ======= GRADUATED SCAN =======
@@ -606,24 +614,23 @@
   }
 
   function scanGraduated() {
-    if (!lastPanel) { isScanning = false; flushQueue(); return; }
+    if (isScanning) return;
+    if (!lastPanel) { flushQueue(); return; }
     const toggleBtn = getGraduatedToggleBtn(lastPanel);
-    if (!toggleBtn) { isScanning = false; flushQueue(); return; }
+    if (!toggleBtn) { flushQueue(); return; }
 
-    // Wait until normal panel has at least 5 QB buttons AND referencePixels is ready
+    // Wait only for referencePixels (max 1000ms, poll every 30ms)
     const startWait = Date.now();
     const waitAndScan = () => {
-      const btnCount = lastPanel?.querySelectorAll('[class*="group/quickBuyButton"]').length || 0;
-      const elapsed  = Date.now() - startWait;
-      if ((btnCount < 5 || !referencePixels) && elapsed < 2000) {
-        setTimeout(waitAndScan, 80);
+      const elapsed = Date.now() - startWait;
+      if (!referencePixels && elapsed < 1000) {
+        setTimeout(waitAndScan, 30);
         return;
       }
       doScan();
     };
 
     function doScan() {
-    // Compound "ticker|name" keys — only exact duplicates (same ticker AND name) are excluded
     const normalTokenKeys = new Set();
     addedBtns.forEach(btn => {
       const t = (btn._ticker || '').toLowerCase();
@@ -631,24 +638,36 @@
       normalTokenKeys.add(`${t}|${n}`);
     });
 
+    // Always look up toggle button live — panel may have re-rendered since scanGraduated() ran
+    const liveToggle = () => {
+      const panelEl = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+        .find(el => isSearchPanel(el));
+      if (panelEl && panelEl !== lastPanel) lastPanel = panelEl;
+      return lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
+    };
+
+    const tb1 = liveToggle();
+    if (!tb1) { isScanning = false; flushQueue(); return; }
+
     isScanning = true;
-    toggleBtn.click();
+    inGraduatedView = true;
+    tb1.click();
     console.log('🎓 Scanning graduated...');
 
     setTimeout(() => {
-      if (!lastPanel) { isScanning = false; flushQueue(); return; }
+      if (!lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
-        toggleBtn.click();
-        setTimeout(() => { isScanning = false; flushQueue(); }, 700);
+        inGraduatedView = false;
+        const tb2 = liveToggle(); if (tb2) tb2.click();
+        setTimeout(() => { isScanning = false; flushQueue(); }, 200);
         return;
       }
 
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
 
       computeGradSimilarities(candidates, (withScores) => {
-        // Exclude tokens already visible in the normal section
         const unique = withScores.filter(d => {
           const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
           return !normalTokenKeys.has(key);
@@ -656,7 +675,8 @@
         const top3 = unique.slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
-        toggleBtn.click();
+        inGraduatedView = false;
+        const tb3 = liveToggle(); if (tb3) tb3.click();
 
         setTimeout(() => {
           removeGradProxyBtns();
@@ -669,9 +689,9 @@
           isScanning = false;
           scheduleUpdate();
           flushQueue();
-        }, 700);
+        }, 200);
       });
-    }, 700);
+    }, 200);
     } // end doScan
 
     waitAndScan();
@@ -711,8 +731,8 @@
       }
 
       toggleBtn.click();
-      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 700);
-    }, 700);
+      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 200);
+    }, 200);
   }
 
   // ======= POSITION & LAYOUT =======
@@ -799,7 +819,7 @@
 
   function scheduleUpdate() {
     if (updateTimeout) return;
-    updateTimeout = setTimeout(() => { updatePositions(); updateTimeout = null; }, 50);
+    updateTimeout = setTimeout(() => { updatePositions(); updateTimeout = null; }, 16);
   }
 
   function isSearchPanel(el) {
@@ -869,12 +889,11 @@
     removeGradProxyBtns();
     if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
     // Wait for normal panel results to fully load before scanning
-    scanDebounceTimer = setTimeout(() => { scanGraduated(); }, 800);
+    scanGraduated();
   });
 
   function addButtons() {
-    // Block during graduated scan to prevent graduated panel buttons from registering as normal
-    if (isScanning) return;
+    if (inGraduatedView) return;
 
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
     const panel      = [...candidates].find(el => isSearchPanel(el));
