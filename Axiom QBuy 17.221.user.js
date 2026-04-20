@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      4.3
+// @version      4.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -14,9 +14,10 @@
 
   const SAMPLE_SIZE = 16;
 
-  const addedBtns     = [];
-  const ghostBtns     = [];
-  let scrollEl        = null;
+  const addedBtns      = [];
+  const ghostBtns      = [];
+  const graduatedBtns  = [];
+  let scrollEl         = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
@@ -352,11 +353,86 @@
     });
   }
 
+  function removeGraduatedBtns() {
+    graduatedBtns.forEach(b => b.remove());
+    graduatedBtns.length = 0;
+  }
+
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove());
     addedBtns.length = 0;
     ghostBtns.forEach(btn => btn.remove());
     ghostBtns.length = 0;
+    removeGraduatedBtns();
+  }
+
+  function addGraduatedBtns(results) {
+    removeGraduatedBtns();
+    if (!results || !results.length) return;
+
+    const normalVisible = addedBtns.filter(b => b.style.display !== 'none');
+    if (!normalVisible.length) return;
+
+    const maxGrad = Math.min(3, 10 - normalVisible.length);
+    if (maxGrad <= 0) return;
+
+    normalVisible.sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+    const lastNormal = normalVisible[normalVisible.length - 1];
+    const leftPos    = parseFloat(lastNormal.style.left);
+    const lastTop    = parseFloat(lastNormal.style.top);
+    const rowHeight  = normalVisible.length > 1
+      ? parseFloat(normalVisible[1].style.top) - parseFloat(normalVisible[0].style.top)
+      : 34;
+    const refWidth   = lastNormal.offsetWidth || 60;
+
+    const sep = document.createElement('div');
+    sep.className = 'qb-grad-separator';
+    sep.style.cssText = `position:fixed;z-index:9999;left:${leftPos}px;top:${lastTop + rowHeight + 1}px;width:${refWidth}px;height:2px;background:rgba(255,215,0,0.5);pointer-events:none;border-radius:1px;`;
+    document.body.appendChild(sep);
+    graduatedBtns.push(sep);
+
+    results.slice(0, maxGrad).forEach((result, i) => {
+      const ticker = (result.ticker || result.symbol || result.name || '').slice(0, 8);
+      const mint   = result.mint || result.address || result.pumpMint || '';
+      const imgSrc = result.image || result.logo || result.img || '';
+      const mc     = result.mc || result.marketCap || result.market_cap || '';
+
+      const btn = document.createElement('div');
+      btn.className = 'qb-graduated-btn';
+      btn.style.cssText = `
+        position:fixed;z-index:9999;overflow:visible;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;
+        background:rgb(255,215,0);color:#000;font-weight:800;font-size:11px;font-family:monospace;
+        border-radius:6px;padding:4px 8px;height:${rowHeight - 4}px;
+        left:${leftPos}px;top:${lastTop + rowHeight + 6 + i * rowHeight}px;
+        box-shadow:0 0 8px rgba(255,215,0,0.4);white-space:nowrap;
+      `;
+      btn.textContent = ticker || '?';
+
+      if (imgSrc) {
+        const imgEl = document.createElement('img');
+        imgEl.src = imgSrc;
+        imgEl.style.cssText = `width:50px;height:50px;border-radius:50%;object-fit:cover;position:absolute;left:-56px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);`;
+        btn.appendChild(imgEl);
+      }
+
+      if (mc) {
+        const mcEl = document.createElement('div');
+        mcEl.style.cssText = `position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;font-size:10px;font-weight:700;font-family:monospace;color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;`;
+        mcEl.textContent = 'MC ' + mc;
+        btn.appendChild(mcEl);
+      }
+
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (mint) window.location.href = `https://axiom.trade/meme/${mint}`;
+      });
+
+      btn._result = result;
+      document.body.appendChild(btn);
+      graduatedBtns.push(btn);
+    });
   }
 
   function shouldShowButton(originalBtn) {
@@ -427,6 +503,31 @@
       ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
       ghostBtn.style.opacity = '0.2';
     });
+
+    // Graduated buttons positions
+    if (graduatedBtns.length && visible.length > 0) {
+      const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      const slot1Top  = firstOriginal?.getBoundingClientRect().top ?? visible[0].rect.top;
+      const rowEl     = visible[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+      const rowHeight = rowEl?.getBoundingClientRect().height ||
+                        (visible.length > 1 ? visible[1].rect.top - visible[0].rect.top : 64);
+      const leftPos   = visible[0].rect.left - 621.5;
+      const lastTop   = slot1Top + (visible.length - 1) * rowHeight;
+      const refWidth  = visible[0]?.newBtn?.offsetWidth || 60;
+
+      let gradIdx = 0;
+      graduatedBtns.forEach(btn => {
+        if (btn.classList.contains('qb-grad-separator')) {
+          btn.style.left  = leftPos + 'px';
+          btn.style.top   = (lastTop + rowHeight + 1) + 'px';
+          btn.style.width = refWidth + 'px';
+        } else {
+          btn.style.left = leftPos + 'px';
+          btn.style.top  = (lastTop + rowHeight + 6 + gradIdx * rowHeight) + 'px';
+          gradIdx++;
+        }
+      });
+    }
   }
 
   function scheduleUpdate() {
@@ -613,6 +714,25 @@
       });
     });
   }
+
+  // ─── Graduated results ────────────────────────────────────────────────────
+
+  window.addEventListener('axiomGraduated', (e) => {
+    const { query, ticker, results } = e.detail || {};
+    if (!results || !results.length) { removeGraduatedBtns(); return; }
+
+    const q = (query  || '').toLowerCase();
+    const t = (ticker || '').toLowerCase();
+
+    const matched = results.filter(r => {
+      const rName   = (r.name   || '').toLowerCase();
+      const rTicker = (r.ticker || r.symbol || '').toLowerCase();
+      return (q && (rName === q || rName.includes(q))) ||
+             (t && (rTicker === t || rTicker.includes(t)));
+    });
+
+    addGraduatedBtns(matched.length ? matched : results.slice(0, 3));
+  });
 
   // ─── MutationObserver ─────────────────────────────────────────────────────
 
