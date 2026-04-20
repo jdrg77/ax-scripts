@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.93
+// @version      7.94
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -671,7 +671,7 @@
     const waitAndScan = () => {
       if (scanId !== startScanId) return; // aborted while waiting for pixels
       const elapsed = Date.now() - startWait;
-      if (!referencePixels && elapsed < 1000) {
+      if (!referencePixels && elapsed < 150) {
         setTimeout(waitAndScan, 30);
         return;
       }
