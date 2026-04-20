@@ -205,29 +205,25 @@
     const nameTickerMatch = t => sameName(t) && sameTicker(t);
     const nameOnlyMatch   = t => sameName(t) && !sameTicker(t);
 
-    let arr = tokens; // all non-gold tokens (green + blue) sorted together
-
-    const anyAbove58 = arr.some(t => t.match >= 58.21);
-    if (anyAbove58) arr = arr.filter(t => t.match >= 58.21);
+    const arr = tokens; // all tokens sorted together by all criteria
 
     const hasNameTicker = arr.some(nameTickerMatch);
     const hasNameOnly   = !hasNameTicker && arr.some(nameOnlyMatch);
 
     const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
     const sortByMatchDesc = (a, b) => b.match - a.match;
+    const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
 
     function sortRest(list) {
-      const ageDays   = t => t.ageHours / 24;
-      const tier1     = list.filter(t => ageDays(t) < 7 && t.match > 72);
-      const greenHigh = tier1.filter(t => t.match > 92).sort(sortByRecent);
-      const greenLow  = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
-      const tier2 = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
-      const tier3 = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
-      const tier4 = list.filter(t => t.match >= 58.21 && t.match < 75).sort((a, b) => {
-        if (a.ageHours !== b.ageHours) return a.ageHours - b.ageHours;
-        return b.marketCap - a.marketCap;
-      });
-      return [...greenHigh, ...greenLow, ...tier2, ...tier3, ...tier4];
+      const ageDays = t => t.ageHours / 24;
+      const tier1   = list.filter(t => ageDays(t) < 7 && t.match > 72);
+      const t1High  = tier1.filter(t => t.match > 92).sort(sortByRecent);
+      const t1Low   = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
+      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByMatchDesc);
+      const tier3   = list.filter(t => t.match >= 75 && t.match <= 80).sort(sortByMatchDesc);
+      const tier4   = list.filter(t => t.match >= 58.21 && t.match < 75).sort(sortByAgeMC);
+      const tier5   = list.filter(t => t.match < 58.21).sort(sortByAgeMC);
+      return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
 
     if (hasNameTicker) {
@@ -695,32 +691,20 @@
       if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    // Split: green/blue = normal stack | gold from normal panel = graduated subsection (v5.4 behavior)
-    const normalCandidates = visible.filter(v => !v.data.isGold);
-    const gradCandidates   = visible.filter(v => v.data.isGold);
+    // All visible buttons (gold included) go into the normal section
+    const normalCandidates = visible;
 
     let sortedNormal = normalCandidates;
     if (newPair && normalCandidates.length > 0) {
-      const datas      = normalCandidates.map(v => v.data);
-      const sorted     = sortNormal(datas, newPair);
-      const sortedVis  = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
-      // Remaining (blue) tokens sorted by match desc, then age asc
-      const remaining = normalCandidates.filter(v => !sortedVis.find(s => s.newBtn === v.newBtn));
-      remaining.sort((a, b) => (b.data.match - a.data.match) || (a.data.ageHours - b.data.ageHours));
-      remaining.forEach(v => sortedVis.push(v));
-      sortedNormal = sortedVis;
+      const datas     = normalCandidates.map(v => v.data);
+      const sorted    = sortNormal(datas, newPair);
+      sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
     }
 
-    // Sort gold from normal panel: best match first, then most recent — top 3 (same as v5.4)
-    const sortedGold = [...gradCandidates]
-      .sort((a, b) => (b.data.match - a.data.match) || (a.data.ageHours - b.data.ageHours))
-      .slice(0, 3);
+    if (sortedNormal.length === 0 && gradProxyBtns.length === 0) return;
 
-    const refGroup = sortedNormal.length > 0 ? sortedNormal : sortedGold;
-    if (refGroup.length === 0 && gradProxyBtns.length === 0) return;
-
-    // No normal/gold visible but grad proxies exist — use panel's first QB button for geometry
-    if (refGroup.length === 0) {
+    // No normal visible but grad proxies exist — use panel's first QB button for geometry
+    if (sortedNormal.length === 0) {
       const firstBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
       if (!firstBtn) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
       const firstRect = firstBtn.getBoundingClientRect();
@@ -739,15 +723,14 @@
       return;
     }
 
-    // slot1Top = topmost visible original button position (not the first sorted, which may be lower)
-    const allVisible = [...sortedNormal, ...sortedGold];
-    const slot1Top  = Math.min(...allVisible.map(v => v.rect.top));
-    const rowEl     = refGroup[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+    // slot1Top = topmost visible original button position
+    const slot1Top  = Math.min(...sortedNormal.map(v => v.rect.top));
+    const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (refGroup.length > 1 ? Math.abs(refGroup[1].rect.top - refGroup[0].rect.top) : 64);
-    const leftPos   = refGroup[0].rect.left - 621.5;
+                      (sortedNormal.length > 1 ? Math.abs(sortedNormal[1].rect.top - sortedNormal[0].rect.top) : 64);
+    const leftPos   = sortedNormal[0].rect.left - 621.5;
 
-    // Position normal buttons (sorted)
+    // Position normal buttons (sorted — includes gold)
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
       newBtn.style.left    = leftPos + 'px';
       newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
@@ -760,25 +743,8 @@
       updateNameLabel(newBtn);
     });
 
-    // Position gold buttons from normal panel — 1-slot gap after normal (v5.4 behavior)
-    const gradStart = sortedNormal.length + 1;
-    sortedGold.forEach(({ newBtn, originalBtn }, i) => {
-      newBtn.style.left    = leftPos + 'px';
-      newBtn.style.top     = (slot1Top + (gradStart + i) * rowHeight) + 'px';
-      newBtn.style.display = '';
-      newBtn.style.opacity = '1';
-      const coinImg = getCoinImage(originalBtn);
-      const imgEl   = newBtn.querySelector('img.qb-coin-img');
-      if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
-      updateInfoBar(newBtn);
-      updateNameLabel(newBtn);
-    });
-    gradCandidates.forEach(({ newBtn }) => {
-      if (!sortedGold.find(s => s.newBtn === newBtn)) newBtn.style.display = 'none';
-    });
-
-    // Position scan-based grad proxies — continuing right after gold section
-    const proxyStart = gradStart + sortedGold.length;
+    // Graduated proxies (from panel toggle scan only) — 1-slot gap after normal
+    const proxyStart  = sortedNormal.length + 1;
     const showProxies = !(isPanelVisible && hasActiveSearch);
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
