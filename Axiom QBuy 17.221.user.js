@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      3.9
+// @version      4.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -370,44 +370,31 @@
   }
 
   function updatePositions() {
-    const visible = [];
-
     addedBtns.forEach(newBtn => {
       const originalBtn = newBtn._original;
       if (!originalBtn) return;
 
       const rect = originalBtn.getBoundingClientRect();
+      newBtn.style.left = (rect.left - 621.5) + 'px';
+      newBtn.style.top  = rect.top + 'px';
 
-      if (rect.top < 50 || rect.bottom > window.innerHeight + 200 || !shouldShowButton(originalBtn)) {
+      if (rect.top < 50 || rect.bottom > window.innerHeight + 200) {
         newBtn.style.display = 'none';
         return;
       }
 
-      visible.push({ newBtn, originalBtn, rect });
+      newBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
+
+      const coinImg = getCoinImage(originalBtn);
+      const imgEl   = newBtn.querySelector('img.qb-coin-img');
+      if (coinImg && imgEl && imgEl.src !== coinImg.src) {
+        imgEl.src = coinImg.src;
+        updateBadge(newBtn);
+      }
+
+      updateInfoBar(newBtn);
+      updateNameLabel(newBtn);
     });
-
-    visible.sort((a, b) => a.rect.top - b.rect.top);
-
-    if (visible.length > 0) {
-      const startTop  = visible[0].rect.top;
-      const btnHeight = visible[0].rect.height || 64;
-
-      visible.forEach(({ newBtn, originalBtn, rect }, i) => {
-        newBtn.style.left    = (rect.left - 621.5) + 'px';
-        newBtn.style.top     = (startTop + i * btnHeight) + 'px';
-        newBtn.style.display = '';
-
-        const coinImg = getCoinImage(originalBtn);
-        const imgEl   = newBtn.querySelector('img.qb-coin-img');
-        if (coinImg && imgEl && imgEl.src !== coinImg.src) {
-          imgEl.src = coinImg.src;
-          updateBadge(newBtn);
-        }
-
-        updateInfoBar(newBtn);
-        updateNameLabel(newBtn);
-      });
-    }
   }
 
   function scheduleUpdate() {
