@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      4.1
+// @version      4.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -15,6 +15,7 @@
   const SAMPLE_SIZE = 16;
 
   const addedBtns     = [];
+  const ghostBtns     = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -354,6 +355,8 @@
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove());
     addedBtns.length = 0;
+    ghostBtns.forEach(btn => btn.remove());
+    ghostBtns.length = 0;
   }
 
   function shouldShowButton(originalBtn) {
@@ -388,12 +391,14 @@
     if (visible.length > 0) {
       const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
       const slot1Top      = firstOriginal?.getBoundingClientRect().top ?? visible[0].rect.top;
-      const btnHeight     = visible[0].rect.height || 64;
+      const rowEl         = visible[0].originalBtn?.closest('[class*="max-h-[64px]"]');
+      const rowHeight     = rowEl?.getBoundingClientRect().height ||
+                            (visible.length > 1 ? visible[1].rect.top - visible[0].rect.top : 64);
       const leftPos       = visible[0].rect.left - 621.5;
 
       visible.forEach(({ newBtn, originalBtn }, i) => {
         newBtn.style.left    = leftPos + 'px';
-        newBtn.style.top     = (slot1Top + i * btnHeight) + 'px';
+        newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
         newBtn.style.display = '';
         newBtn.style.opacity = '1';
 
@@ -407,6 +412,21 @@
         updateNameLabel(newBtn);
       });
     }
+
+    // Ghost buttons at natural positions
+    ghostBtns.forEach(ghostBtn => {
+      const originalBtn = ghostBtn._original;
+      if (!originalBtn) return;
+      const rect = originalBtn.getBoundingClientRect();
+      ghostBtn.style.left = (rect.left - 621.5) + 'px';
+      ghostBtn.style.top  = rect.top + 'px';
+      if (rect.top < 50 || rect.bottom > window.innerHeight + 200) {
+        ghostBtn.style.display = 'none';
+        return;
+      }
+      ghostBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
+      ghostBtn.style.opacity = '0.2';
+    });
   }
 
   function scheduleUpdate() {
@@ -505,10 +525,11 @@
 
     for (let i = addedBtns.length - 1; i >= 0; i--) {
       const btn = addedBtns[i];
-      if (!panel.contains(btn._original)) {
-        btn.remove();
-        addedBtns.splice(i, 1);
-      }
+      if (!panel.contains(btn._original)) { btn.remove(); addedBtns.splice(i, 1); }
+    }
+    for (let i = ghostBtns.length - 1; i >= 0; i--) {
+      const btn = ghostBtns[i];
+      if (!panel.contains(btn._original)) { btn.remove(); ghostBtns.splice(i, 1); }
     }
 
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
@@ -516,7 +537,6 @@
     btns.forEach(originalBtn => {
       if (originalBtn.dataset.qbAdded) return;
       originalBtn.dataset.qbAdded = 'true';
-      originalBtn.style.opacity = '0.2';
 
       const newBtn = originalBtn.cloneNode(true);
       newBtn._original      = originalBtn;
@@ -547,9 +567,10 @@
       }
 
       const colorSync = new MutationObserver(() => {
-        newBtn.style.background  = originalBtn.style.background;
-        newBtn.style.color       = originalBtn.style.color;
-        originalBtn.style.opacity = '0.2';
+        newBtn.style.background   = originalBtn.style.background;
+        newBtn.style.color        = originalBtn.style.color;
+        ghostBtn.style.background = originalBtn.style.background;
+        ghostBtn.style.color      = originalBtn.style.color;
         scheduleUpdate();
       });
       colorSync.observe(originalBtn, { attributes: true, attributeFilter: ['style'] });
@@ -571,6 +592,26 @@
       updateBadge(newBtn);
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
+
+      // Ghost button — natural position, low opacity
+      const ghostBtn        = originalBtn.cloneNode(false);
+      ghostBtn._original    = originalBtn;
+      ghostBtn.style.cssText = originalBtn.style.cssText;
+      ghostBtn.style.position = 'fixed';
+      ghostBtn.style.zIndex   = '9998';
+      ghostBtn.style.overflow = 'visible';
+      ghostBtn.style.opacity  = '0.2';
+      ghostBtn.style.left     = (rect.left - 621.5) + 'px';
+      ghostBtn.style.top      = rect.top + 'px';
+      ghostBtn.style.display  = shouldShowButton(originalBtn) ? '' : 'none';
+      document.body.appendChild(ghostBtn);
+      ghostBtns.push(ghostBtn);
+
+      ghostBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        fireClick(originalBtn);
+      });
     });
   }
 
