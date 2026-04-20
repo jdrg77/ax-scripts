@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      4.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -370,31 +370,43 @@
   }
 
   function updatePositions() {
+    const visible = [];
+
     addedBtns.forEach(newBtn => {
       const originalBtn = newBtn._original;
       if (!originalBtn) return;
-
       const rect = originalBtn.getBoundingClientRect();
-      newBtn.style.left = (rect.left - 621.5) + 'px';
-      newBtn.style.top  = rect.top + 'px';
-
-      if (rect.top < 50 || rect.bottom > window.innerHeight + 200) {
+      if (rect.top < 50 || rect.bottom > window.innerHeight + 200 || !shouldShowButton(originalBtn)) {
         newBtn.style.display = 'none';
         return;
       }
-
-      newBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
-
-      const coinImg = getCoinImage(originalBtn);
-      const imgEl   = newBtn.querySelector('img.qb-coin-img');
-      if (coinImg && imgEl && imgEl.src !== coinImg.src) {
-        imgEl.src = coinImg.src;
-        updateBadge(newBtn);
-      }
-
-      updateInfoBar(newBtn);
-      updateNameLabel(newBtn);
+      visible.push({ newBtn, originalBtn, rect });
     });
+
+    visible.sort((a, b) => a.rect.top - b.rect.top);
+
+    if (visible.length > 0) {
+      const firstOriginal = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      const slot1Top      = firstOriginal?.getBoundingClientRect().top ?? visible[0].rect.top;
+      const btnHeight     = visible[0].rect.height || 64;
+      const leftPos       = visible[0].rect.left - 621.5;
+
+      visible.forEach(({ newBtn, originalBtn }, i) => {
+        newBtn.style.left    = leftPos + 'px';
+        newBtn.style.top     = (slot1Top + i * btnHeight) + 'px';
+        newBtn.style.display = '';
+        newBtn.style.opacity = '1';
+
+        const coinImg = getCoinImage(originalBtn);
+        const imgEl   = newBtn.querySelector('img.qb-coin-img');
+        if (coinImg && imgEl && imgEl.src !== coinImg.src) {
+          imgEl.src = coinImg.src;
+          updateBadge(newBtn);
+        }
+        updateInfoBar(newBtn);
+        updateNameLabel(newBtn);
+      });
+    }
   }
 
   function scheduleUpdate() {
