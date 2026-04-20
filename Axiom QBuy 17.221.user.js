@@ -809,14 +809,24 @@
           if (!d.ca) return true;
           return !normalCAKeys.has(d.ca);
         });
-        const top3 = unique.slice(0, 3);
-        console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
+        // Sort graduated by same tier system as normal tokens
+        const sortedGrad = (() => {
+          const ageDays = d => d.ageHours / 24;
+          const t1High = unique.filter(d => ageDays(d) < 7 && d.match > 92).sort((a,b) => a.ageHours - b.ageHours);
+          const t1Low  = unique.filter(d => ageDays(d) < 7 && d.match > 72 && d.match <= 92).sort((a,b) => b.match - a.match);
+          const tier2  = unique.filter(d => ageDays(d) >= 7 && d.match > 80).sort((a,b) => a.ageHours - b.ageHours);
+          const tier3  = unique.filter(d => ageDays(d) >= 7 && d.match >= 75 && d.match <= 80).sort((a,b) => a.ageHours - b.ageHours);
+          const tier4  = unique.filter(d => d.match >= 58.21 && d.match < 75).sort((a,b) => a.ageHours - b.ageHours || b.match - a.match);
+          const tier5  = unique.filter(d => d.match < 58.21).sort((a,b) => a.ageHours - b.ageHours || b.match - a.match);
+          return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
+        })();
+        console.log('🎓 Graduated:', sortedGrad.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
         toggleBtn.click();
 
         setTimeout(() => {
           removeGradProxyBtns();
-          top3.forEach(data => {
+          sortedGrad.forEach(data => {
             const proxy = createGradProxy(data);
             document.body.appendChild(proxy);
             gradProxyBtns.push(proxy);
