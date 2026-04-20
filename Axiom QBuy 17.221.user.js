@@ -668,9 +668,8 @@
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
-        inGraduatedView = false;
         const tb2 = liveToggle(); if (tb2) tb2.click();
-        setTimeout(() => { isScanning = false; flushQueue(); }, 200);
+        setTimeout(() => { inGraduatedView = false; isScanning = false; flushQueue(); }, 350);
         return;
       }
 
@@ -684,10 +683,10 @@
         const top3 = unique.slice(0, 3);
         console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
 
-        inGraduatedView = false;
         const tb3 = liveToggle(); if (tb3) tb3.click();
 
         setTimeout(() => {
+          inGraduatedView = false;
           removeGradProxyBtns();
           top3.forEach(data => {
             const proxy = createGradProxy(data);
@@ -698,9 +697,9 @@
           isScanning = false;
           scheduleUpdate();
           flushQueue();
-        }, 200);
+        }, 350);
       });
-    }, 200);
+    }, 350);
     } // end doScan
 
     waitAndScan();
@@ -740,8 +739,8 @@
       }
 
       toggleBtn.click();
-      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 200);
-    }, 200);
+      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 350);
+    }, 350);
   }
 
   // ======= POSITION & LAYOUT =======
