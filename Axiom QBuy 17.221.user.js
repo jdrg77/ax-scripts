@@ -927,12 +927,9 @@
     removeButtons();        // clear ALL previous buttons instantly
     removeGradProxyBtns();
     freezeButtons();
-    // If panel was in graduated view, wait for toggle-back before new scan
-    if (wasInGrad) {
-      setTimeout(() => scanGraduated(), 350);
-    } else {
-      scanGraduated();
-    }
+    // Delay by one tick so MutationObserver fires first — addButtons recreates
+    // normal buttons instantly before doScan sets inGraduatedView=true
+    setTimeout(() => scanGraduated(), wasInGrad ? 350 : 0);
   });
 
   function addButtons() {
