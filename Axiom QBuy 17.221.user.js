@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      6.4
+// @version      6.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -26,7 +26,8 @@
   let frozen          = false;
   let clickQueue      = null;
   let freezeTimer     = null;
-  let isScanning      = false;
+  let isScanning        = false;
+  let inGraduatedView   = false;
   let scanDebounceTimer = null;
   let referenceLocked = false;
 
@@ -645,23 +646,25 @@
     });
 
     isScanning = true;
+    inGraduatedView = true;
     toggleBtn.click();
     console.log('🎓 Scanning graduated...');
 
     setTimeout(() => {
-      if (!lastPanel) { isScanning = false; flushQueue(); return; }
+      if (!lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
 
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       if (!btns.length) {
+        inGraduatedView = false;
         toggleBtn.click();
         setTimeout(() => { isScanning = false; flushQueue(); }, 350);
         return;
       }
 
       const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
+      inGraduatedView = false;
 
       computeGradSimilarities(candidates, (withScores) => {
-        // Exclude tokens already visible in the normal section
         const unique = withScores.filter(d => {
           const key = `${d.ticker.toLowerCase()}|${d.name.toLowerCase()}`;
           return !normalTokenKeys.has(key);
@@ -697,6 +700,7 @@
 
     frozen = true;
     isScanning = true;
+    inGraduatedView = true;
     clickQueue = null;
     removeGradProxyBtns();
     if (freezeTimer) clearTimeout(freezeTimer);
@@ -704,7 +708,7 @@
     toggleBtn.click();
 
     setTimeout(() => {
-      if (!lastPanel) { isScanning = false; frozen = false; return; }
+      if (!lastPanel) { inGraduatedView = false; isScanning = false; frozen = false; return; }
       const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
       let targetBtn = null;
       for (const btn of btns) {
@@ -723,9 +727,10 @@
         console.log('✅ Grad click:', data.ticker || data.name);
       }
 
+      inGraduatedView = false;
       toggleBtn.click();
-      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 700);
-    }, 700);
+      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 350);
+    }, 350);
   }
 
   // ======= POSITION & LAYOUT =======
@@ -885,8 +890,7 @@
   });
 
   function addButtons() {
-    // Block during graduated scan to prevent graduated panel buttons from registering as normal
-    if (isScanning) return;
+    if (inGraduatedView) return;
 
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
     const panel      = [...candidates].find(el => isSearchPanel(el));
