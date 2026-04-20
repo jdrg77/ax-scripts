@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.94
+// @version      7.95
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -520,11 +520,16 @@
     return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim().includes('Graduated')) || null;
   }
 
+  function isGraduatedChipActive(panel) {
+    const btn = getGraduatedToggleBtn(panel);
+    return btn ? btn.className.includes('primaryGreen') : false;
+  }
+
   function ensureNormalView() {
-    if (!panelIsGraduated) return;
     const panel = lastPanel || [...document.querySelectorAll(
       '[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')].find(el => isSearchPanel(el));
     if (!panel) { panelIsGraduated = false; return; }
+    if (!isGraduatedChipActive(panel)) { panelIsGraduated = false; return; }
     const tb = getGraduatedToggleBtn(panel);
     if (tb) { panelIsGraduated = false; tb.click(); }
   }
@@ -697,6 +702,16 @@
     const tb1 = liveToggle();
     if (!tb1) { isScanning = false; flushQueue(); return; }
 
+    // If chip is already active, panel is stuck in graduated — fix and abort
+    if (isGraduatedChipActive(lastPanel)) {
+      console.warn('🎓 doScan: chip already active at start — clicking back to normal');
+      panelIsGraduated = false;
+      tb1.click();
+      isScanning = false;
+      flushQueue();
+      return;
+    }
+
     isScanning = true;
     inGraduatedView = true;
     panelIsGraduated = true;
@@ -740,17 +755,21 @@
         setTimeout(() => {
           if (!live()) return; // aborted between toggle and timeout
           inGraduatedView = false;
-          removeGradProxyBtns();
-          top3.forEach(data => {
-            const proxy = createGradProxy(data);
-            document.body.appendChild(proxy);
-            gradProxyBtns.push(proxy);
-          });
-
           isScanning = false;
-          addButtons();
-          scheduleUpdate();
+          addButtons();      // normal buttons first
+          updatePositions(); // position them immediately before proxies exist
           flushQueue();
+
+          // Defer proxy creation one tick so normal buttons paint first
+          setTimeout(() => {
+            removeGradProxyBtns();
+            top3.forEach(data => {
+              const proxy = createGradProxy(data);
+              document.body.appendChild(proxy);
+              gradProxyBtns.push(proxy);
+            });
+            scheduleUpdate();
+          }, 0);
         }, 350);
       });
     }, 350);
@@ -978,6 +997,9 @@
       lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
       return;
     }
+
+    // Panel is physically in graduated view — don't process graduated tokens as normal
+    if (isGraduatedChipActive(panel)) return;
 
     checkPanelState(panel);
 
