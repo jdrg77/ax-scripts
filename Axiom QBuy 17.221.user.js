@@ -11,6 +11,7 @@
 
 (function () {
   'use strict';
+  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
 
   const SAMPLE_SIZE   = 16;
   const addedBtns     = [];

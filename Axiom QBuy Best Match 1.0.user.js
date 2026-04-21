@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      5.85211
+// @version      6.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,10 +11,11 @@
 
 (function () {
   'use strict';
+  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
+
+  const gradChannel = new BroadcastChannel('axiom-tabs');
 
   // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad, age, mc, solText }
-  // rowCA = Contract Address of the pulse row (unique key, no collisions)
-  // ca    = Contract Address of the best-match QB button (what to search by)
   const sessionBest = new Map();
   // Mini button pool: rowCA → DOM element
   const miniPool    = new Map();
@@ -24,11 +25,27 @@
   let prefetchCooldown = false;
   let cooldownTimer    = null;
 
+  // Graduated candidates received from Tab 2 via BroadcastChannel
+  // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
+  let gradCandidates = [];
+
+  // ======= BROADCHANNEL =======
+
+  gradChannel.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'GRAD_DATA') {
+      gradCandidates = (msg.tokens || []).map(t => ({ ...t, _isGrad: true }));
+      updateGlow(); // re-evaluate immediately with new grad data
+    }
+  };
+
+  // ======= PREFETCH COOLDOWN =======
+
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
     prefetchCooldown = true;
+    gradCandidates   = []; // clear stale grad data for previous pair
     let lastSnapshot = getQBButtons();
-    let safetyTimer;
     const checkChanged = setInterval(() => {
       const curr = getQBButtons();
       if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
@@ -37,7 +54,7 @@
         cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
       }
     }, 50);
-    safetyTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
+    setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
   });
 
   // === CA extraction ===
@@ -57,9 +74,7 @@
   }
 
   function getCAFromBtn(btn) {
-    // Grad proxies expose ca directly
-    if (btn._gradData?.ca) return btn._gradData.ca;
-    // Normal overlay buttons: read from _original's panel row
+    if (btn._isGrad) return null;
     const row = btn._original?.closest?.('[class*="max-h-[64px]"]');
     if (row) return getCAFromRow(row);
     return null;
@@ -82,6 +97,7 @@
   }
 
   function getBadgePct(btn) {
+    if (btn._isGrad) return btn.match ?? -1;
     const text = btn.querySelector('.qb-sim-badge')?.textContent?.trim() || '';
     if (!text || text === '…' || text === '?' || text === '—') return -1;
     const pct = parseFloat(text);
@@ -89,10 +105,12 @@
   }
 
   function getBtnImgSrc(btn) {
+    if (btn._isGrad) return btn.imgSrc || null;
     return btn.querySelector('img.qb-coin-img')?.src || null;
   }
 
   function getBtnSolText(btn) {
+    if (btn._isGrad) return '';
     const orig = btn._original;
     if (orig) {
       const text = orig.textContent.replace(/\s+/g, ' ').trim();
@@ -102,6 +120,7 @@
   }
 
   function getBtnInfoBar(btn) {
+    if (btn._isGrad) return { age: btn.age || '', mc: btn.mc || '' };
     const bar = btn.querySelector('.qb-info-bar');
     if (!bar) return { age: '', mc: '' };
     const spans = [...bar.querySelectorAll('span')];
@@ -109,11 +128,6 @@
       age: spans[0]?.textContent?.trim() || '',
       mc:  spans[1]?.textContent?.trim() || '',
     };
-  }
-
-  function isSpecial(btn) {
-    const bg = btn.style.background || '';
-    return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
   }
 
   function badgeColor(pct) {
@@ -125,6 +139,7 @@
   // === Glow ===
 
   function applyGlow(btn) {
+    if (btn._isGrad) return; // no DOM element to glow
     btn.style.boxShadow = '0 0 18px 5px #ffd700, 0 0 36px 10px rgba(255,215,0,0.4)';
     btn.style.outline   = '2px solid #ffd700';
     btn.setAttribute('data-qbm-glow', '1');
@@ -132,7 +147,7 @@
 
   function clearGlows() {
     lastGlowBtns.forEach(btn => {
-      if (!btn.isConnected || btn.getAttribute('data-qbm-glow') !== '1') return;
+      if (btn._isGrad || !btn.isConnected || btn.getAttribute('data-qbm-glow') !== '1') return;
       btn.style.removeProperty('box-shadow');
       btn.style.removeProperty('outline');
       btn.removeAttribute('data-qbm-glow');
@@ -141,18 +156,16 @@
   }
 
   function updateGlow() {
-    const btns = getQBButtons();
+    const normalBtns = getQBButtons(); // all are normal in v9.0
 
-    if (btns.length) {
-      const r = btns[0].getBoundingClientRect();
+    if (normalBtns.length) {
+      const r = normalBtns[0].getBoundingClientRect();
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
     }
 
-    // Pick winner: top of normal group vs top of grad group, compared by tier then %
-    const normalBtns = btns.filter(btn => !btn._gradData);
-    const gradBtns   = btns.filter(btn =>  btn._gradData);
-    const topNormal  = normalBtns[0] || null;
-    const topGrad    = gradBtns[0]   || null;
+    const topNormal = normalBtns[0] || null;
+    const topGrad   = gradCandidates[0] || null; // already sorted by match desc from Tab 2
+
     let winner;
     if (!topNormal && !topGrad) { clearGlows(); return; }
     else if (!topGrad)   winner = topNormal;
@@ -163,9 +176,9 @@
       const tN = tier(pN), tG = tier(pG);
       winner = tN !== tG ? (tN > tG ? topNormal : topGrad) : (pN >= pG ? topNormal : topGrad);
     }
+
     const overallMax = getBadgePct(winner);
 
-    // Glow: highlight the winner in the QB buttons
     clearGlows();
     if (overallMax >= 0) {
       applyGlow(winner);
@@ -173,7 +186,6 @@
     }
 
     if (overallMax < 0) return;
-    // Session Map: keyed by top pulse row CA
     const rowCA = getTopCA();
     if (!rowCA) return;
     const existing = sessionBest.get(rowCA);
@@ -182,11 +194,11 @@
       sessionBest.set(rowCA, {
         rowCA,
         ca:       getCAFromBtn(winner),
-        ticker:   winner._ticker  || '',
-        name:     winner._name    || '',
+        ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
         imgSrc:   getBtnImgSrc(winner),
         matchPct: overallMax,
-        isGrad:   !!winner._gradData,
+        isGrad:   !!winner._isGrad,
         age,
         mc,
         solText:  getBtnSolText(winner),
@@ -212,67 +224,51 @@
     el.style.transform      = 'scale(0.7842)';
     el.style.transformOrigin = 'top-left';
 
-    // Coin image (left side, same as QBuy overlay buttons)
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
     coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 0 0 1px rgba(255,255,255,0.35),0 2px 8px rgba(0,0,0,0.4);';
     coinImg.addEventListener('click', e => {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      e.preventDefault();
+      e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
       if (best?.ca) {
         const existing = document.querySelector(`a[href*="${best.ca}"]`);
-        if (existing) {
-          existing.click();
-        } else {
-          history.pushState({}, '', `/meme/${best.ca}?chain=sol`);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
+        if (existing) { existing.click(); }
+        else { history.pushState({}, '', `/meme/${best.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
       }
     });
     el.appendChild(coinImg);
 
-    // % badge at top-left corner of coin image
     const pctBadge = document.createElement('span');
     pctBadge.className = 'qbm-pct';
     pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
 
-    // SOL amount text centered in button body
     const amountEl = document.createElement('div');
     amountEl.className = 'qbm-amount';
     amountEl.style.cssText = 'font-size:11px;font-weight:700;font-family:monospace;color:#fff;pointer-events:none;text-align:center;line-height:1.2;';
     el.appendChild(amountEl);
 
-    // Ticker/name label — separate fixed element so transform:scale doesn't clip it
     const label = document.createElement('div');
     label.className = 'qbm-label';
     label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
     document.body.appendChild(label);
     el._label = label;
 
-    // Age + MC bar below button (mirrors QBuy's qb-info-bar)
     const infoBar = document.createElement('div');
     infoBar.className = 'qbm-info-bar';
     infoBar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
-
     const ageEl = document.createElement('span');
     ageEl.className = 'qbm-age';
     ageEl.style.cssText = 'color:#ffd700;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
     infoBar.appendChild(ageEl);
-
     const mcEl = document.createElement('span');
     mcEl.className = 'qbm-mc';
     mcEl.style.cssText = 'color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
     infoBar.appendChild(mcEl);
-
     el.appendChild(infoBar);
 
     el.addEventListener('click', e => {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      e.preventDefault();
+      e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
       if (best) executeBest(best);
     });
@@ -303,7 +299,7 @@
 
     const rows      = document.querySelectorAll('[class*="group/pulseRow"]');
     const activeKeys = new Set();
-    const seenCAs    = new Set(); // skip duplicate CAs (same token in multiple rows)
+    const seenCAs    = new Set();
 
     rows.forEach(row => {
       const rowCA = getCAFromRow(row);
@@ -322,7 +318,6 @@
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
-      // Center within the visible "0 SOL" div (desktop one has width > 0; mobile one is hidden)
       const solDiv = Array.from(
         row.querySelectorAll('[class*="z-20"][class*="absolute"][class*="right-0"][class*="bottom-0"]')
       ).find(el => el.getBoundingClientRect().width > 0);
@@ -373,12 +368,11 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      // Button color by match %
       const btnCol = badgeColor(best.matchPct);
-      el.style.border     = `1.5px solid ${btnCol}`;
-      el.style.boxShadow  = `0 0 8px 2px ${btnCol}40`;
+      el.style.border    = `1.5px solid ${btnCol}`;
+      el.style.boxShadow = `0 0 8px 2px ${btnCol}40`;
 
-      el.style.display        = 'flex';
+      el.style.display = 'flex';
     });
 
     miniPool.forEach((el, key) => {
@@ -423,7 +417,6 @@
     }
   }
 
-  // Only click buttons that appeared AFTER the search (not stale prefetch buttons)
   function waitForNewBtn(prevBtns, timeoutMs, cb) {
     const start = Date.now();
     const poll = () => {
@@ -446,24 +439,30 @@
   }
 
   function executeBest(best) {
+    // Graduated token: route to Tab 2 via BroadcastChannel
+    if (best.isGrad) {
+      console.log('📡 QBM → Tab2: EXECUTE_BUY_GRAD', best.ticker || best.name);
+      gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: best.ticker, name: best.name });
+      return;
+    }
+
+    // Normal token: existing local flow
     window.axiomUserOpen = true;
 
     const doExecute = () => {
       bringPanelToFront();
       const panel    = getSearchPanel();
       const query    = best.ca || best.name || best.ticker;
-      const prevBtns = getQBButtons(); // snapshot before search
+      const prevBtns = getQBButtons();
       if (panel) typeInPanel(panel, query);
 
-      // 100ms for panel to update + 500ms extra for graduated toggle
-      const preDelay = 100 + (best.isGrad ? 500 : 0);
       setTimeout(() => {
         waitForNewBtn(prevBtns, 1158, target => {
           if (target) target.click();
-          else console.log('⭐ QBM: no new QB button found after search for', query);
+          else console.log('⭐ QBM: no QB button found for', query);
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
         });
-      }, preDelay);
+      }, 100);
     };
 
     if (!getSearchPanel()) {
@@ -480,5 +479,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v5.8521');
+  console.log('⭐ Axiom QBuy Best Match v6.0 — two-tab graduated support');
 })();

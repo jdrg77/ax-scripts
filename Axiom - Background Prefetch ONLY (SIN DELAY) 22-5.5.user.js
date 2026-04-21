@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.5
+// @version      5.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -10,6 +10,9 @@
 
 (function () {
   'use strict';
+  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
+
+  const gradChannel = new BroadcastChannel('axiom-tabs');
 
   let userOpen = false;
   let lastPrefetched = null;
@@ -79,6 +82,13 @@
     return nameSpan ? nameSpan.textContent.trim() : null;
   }
 
+  function getTopRowImgSrc() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    if (!rows.length) return null;
+    return Array.from(rows[0].querySelectorAll('img[class*="object-cover"]'))
+      .find(img => img.src && !img.src.startsWith('data:'))?.src || null;
+  }
+
   function forceLoadImages() {
     const panel = getPanel();
     if (!panel) return;
@@ -95,8 +105,8 @@
     console.log('🔄 Prefetch:', name);
     lastPrefetched = name;
 
-    // Signal QBuy to freeze buttons while results reload
     window.dispatchEvent(new CustomEvent('axiomPrefetchStart', { detail: { name } }));
+    gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc() });
 
     if (!getPanel()) {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
@@ -165,5 +175,5 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  console.log('🚀 Axiom Prefetch v5.5 (SIN DELAY)');
+  console.log('🚀 Axiom Prefetch v5.6 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
 })();
