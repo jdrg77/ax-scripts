@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      6.2
+// @version      6.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -75,10 +75,15 @@
   }
 
   function getCAFromBtn(btn) {
-    if (btn._isGrad) return null;
-    const row = btn._original?.closest?.('[class*="max-h-[64px]"]');
-    if (row) return getCAFromRow(row);
-    return null;
+    if (btn._isGrad) return btn.ca || null;
+    const orig = btn._original;
+    if (!orig) return null;
+    let el = orig.parentElement, row = null;
+    for (let i = 0; i < 6; i++) {
+      if (el?.className?.includes('max-h-[64px]')) { row = el; break; }
+      el = el?.parentElement;
+    }
+    return row ? getCAFromRow(row) : null;
   }
 
   function getTopCA() {
@@ -93,7 +98,8 @@
       btn.style?.position === 'fixed' &&
       btn.style?.zIndex   === '9999'  &&
       btn.style?.display  !== 'none'  &&
-      btn.querySelector?.('.qb-sim-badge')
+      btn.querySelector?.('.qb-sim-badge') &&
+      !btn._isGradProxy
     );
   }
 
@@ -443,13 +449,26 @@
     // Graduated token: route to Tab 2 via BroadcastChannel
     if (best.isGrad) {
       console.log('📡 QBM → Tab2: EXECUTE_BUY_GRAD', best.ticker || best.name);
-      gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: best.ticker, name: best.name });
+      gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: best.ticker, name: best.name, ca: best.ca });
       return;
     }
 
-    // Normal token: existing local flow
     window.axiomUserOpen = true;
 
+    const isCurrentPrefetch = best.rowCA === getTopCA();
+
+    if (isCurrentPrefetch) {
+      // Panel already preloaded for this token — click best existing overlay button directly
+      const currentBtns = getQBButtons();
+      const sorted = [...currentBtns].sort((a, b) => getBadgePct(b) - getBadgePct(a));
+      const target = sorted[0] || null;
+      if (target) { bringPanelToFront(); target.click(); }
+      else console.log('⭐ QBM: no QB button for current prefetch', best.name);
+      setTimeout(() => { window.axiomUserOpen = false; }, 400);
+      return;
+    }
+
+    // Historical token: search by CA for precision
     const doExecute = () => {
       bringPanelToFront();
       const panel    = getSearchPanel();

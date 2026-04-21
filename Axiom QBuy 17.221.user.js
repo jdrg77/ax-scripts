@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.4
+// @version      9.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -428,7 +428,7 @@
       btnW      = r.width  || 48;
       btnH      = r.height || 48;
       rowHeight = 64;
-      startSlot = 1;
+      startSlot = 0;
     }
 
     gradCandidates.slice(0, 5).forEach((token, i) => {

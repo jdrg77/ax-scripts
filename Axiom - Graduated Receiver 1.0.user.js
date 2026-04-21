@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.7822
+// @version      1.784
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -194,7 +194,14 @@
       if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    return { ticker, name, age, mc, imgSrc: coinImg?.src || '' };
+    let ca = '';
+    const memeLink = row.querySelector('a[href*="/meme/"]');
+    if (memeLink) { const m = memeLink.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
+    if (!ca) {
+      const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
+      if (pumpLink) { const m = pumpLink.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
+    }
+    return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca };
   }
 
   function fireClick(el) {
@@ -312,19 +319,30 @@
     }
 
     if (msg.type === 'EXECUTE_BUY_GRAD') {
-      const { ticker, name } = msg;
+      const { ticker, name, ca } = msg;
       const panel = getPanel();
       if (!panel) { console.log('❌ Grad: no panel for', ticker || name); return; }
 
       const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
       let target = null;
       for (const btn of btns) {
-        const row  = btn.closest('[class*="max-h-[64px]"]');
+        let el = btn.parentElement, row = null;
+        for (let i = 0; i < 6; i++) {
+          if (el?.className?.includes('max-h-[64px]')) { row = el; break; }
+          el = el?.parentElement;
+        }
         if (!row) continue;
         const divs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
         const t    = divs[0]?.textContent.trim() || '';
         const n    = divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '';
-        if ((ticker && t === ticker) || (name && n === name)) { target = btn; break; }
+        let rowCA = '';
+        const memeLink = row.querySelector('a[href*="/meme/"]');
+        if (memeLink) { const m = memeLink.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
+        if (!rowCA) {
+          const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
+          if (pumpLink) { const m = pumpLink.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
+        }
+        if ((ca && rowCA && ca === rowCA) || (ticker && t === ticker) || (name && n === name)) { target = btn; break; }
       }
 
       if (target) {
