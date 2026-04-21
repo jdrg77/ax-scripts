@@ -768,11 +768,34 @@
           if (!live()) return; // aborted between toggle and timeout
           inGraduatedView = false;
           isScanning = false;
-          addButtons();      // normal buttons first
-          updatePositions(); // position them immediately before proxies exist
+
+          // Panel re-rendered during scan — re-associate overlay buttons with new QB elements
+          // so orphan cleanup in addButtons() doesn't destroy them (they'd appear together with proxies)
+          if (lastPanel) {
+            const newOriginals = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
+            const taken = new Set();
+            addedBtns.forEach(overlayBtn => {
+              for (const orig of newOriginals) {
+                if (taken.has(orig)) continue;
+                const row = orig.closest('[class*="max-h-[64px]"]');
+                const divs = row?.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
+                const t = divs?.[0]?.textContent.trim() || '';
+                const n = divs?.[1]?.textContent.trim() || divs?.[0]?.textContent.trim() || '';
+                if (t === overlayBtn._ticker || n === overlayBtn._name) {
+                  overlayBtn._original = orig;
+                  orig.dataset.qbAdded = 'true';
+                  taken.add(orig);
+                  break;
+                }
+              }
+            });
+          }
+
+          addButtons();      // picks up any new tokens, removes true orphans
+          updatePositions(); // position normal buttons — they paint THIS frame
           flushQueue();
 
-          // Defer proxy creation one tick so normal buttons paint first
+          // Proxies in next frame so normal buttons are visible first
           setTimeout(() => {
             removeGradProxyBtns();
             top3.forEach(data => {
