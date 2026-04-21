@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.7-debug
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -208,6 +208,7 @@
   }
 
   function doScan(id, refPixels, seq) {
+    console.log('🔔 Grad: doScan fired id:', id, 'scanId:', scanId, 'match:', id === scanId);
     if (id !== scanId) return;
     abortScan();
     scanId = id;
@@ -254,7 +255,8 @@
   }
 
   function startScan(id, refPixels, seq) {
-    if (id !== scanId) return;
+    console.log('🔄 Grad: startScan id:', id, 'scanId:', scanId);
+    if (id !== scanId) { console.log('🚫 Grad: startScan aborted'); return; }
     const panel = getPanel();
     if (!panel) { doScan(id, refPixels, seq); return; }
 
@@ -262,11 +264,13 @@
     panelObs = new MutationObserver(() => {
       if (fired) return;
       fired = true;
+      console.log('🔔 Grad: MutationObserver fired');
       if (debTimer) clearTimeout(debTimer);
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 150);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => doScan(id, refPixels, seq), 400);
+    console.log('⏱ Grad: safeTimer set 400ms');
   }
 
   // ======= MESSAGE HANDLING =======
