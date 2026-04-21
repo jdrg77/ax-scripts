@@ -1039,6 +1039,16 @@
         newBtn.appendChild(imgEl);
       }
 
+      if (referencePixels && coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
+        try {
+          const c = document.createElement('canvas');
+          c.width = c.height = SAMPLE_SIZE;
+          c.getContext('2d').drawImage(coinImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+          const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+          newBtn._matchPct = pixelSimilarity(referencePixels, pixels) ?? 0;
+        } catch(e) {}
+      }
+
       const colorSync = new MutationObserver(() => {
         newBtn.style.background = originalBtn.style.background;
         newBtn.style.color      = originalBtn.style.color;
