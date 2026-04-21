@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.1
+// @version      8.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -24,6 +24,8 @@
   let referenceSource = null;
 
   let wrapperObserver     = null;
+  let panelOpenedAt       = 0;
+  const GRAD_PROXY_DELAY  = 700;
   let frozen              = false;
   let clickQueue          = null;
   let freezeTimer         = null;
@@ -849,8 +851,10 @@
       const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
       const lp2       = firstRect.left - 621.5;
+      const proxyReady2 = isPanelVisible && (Date.now() - panelOpenedAt >= GRAD_PROXY_DELAY);
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
+        if (!proxyReady2) { proxy.style.display = 'none'; return; }
         proxy.style.left    = lp2 + 'px';
         proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
         proxy.style.display = '';
@@ -880,10 +884,12 @@
       updateNameLabel(newBtn);
     });
 
-    // Graduated proxies (from panel toggle scan only) — 1-slot gap after normal
+    // Graduated proxies — appear only after GRAD_PROXY_DELAY ms since panel opened
+    const proxyReady = isPanelVisible && (Date.now() - panelOpenedAt >= GRAD_PROXY_DELAY);
     const proxyStart = sortedNormal.length + 1;
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
+      if (!proxyReady) { proxy.style.display = 'none'; return; }
       proxy.style.left    = leftPos + 'px';
       proxy.style.top     = (slot1Top + (proxyStart + i) * rowHeight) + 'px';
       proxy.style.display = '';
@@ -930,7 +936,15 @@
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
     hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
     if (!hadSearch && hasActiveSearch) referenceLocked = true;
-    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
+    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) {
+      if (!wasVisible && isPanelVisible) {
+        panelOpenedAt = Date.now();
+        scheduleUpdate();
+        setTimeout(scheduleUpdate, GRAD_PROXY_DELAY + 16);
+      } else {
+        scheduleUpdate();
+      }
+    }
   }
 
   document.addEventListener('click', (e) => {
