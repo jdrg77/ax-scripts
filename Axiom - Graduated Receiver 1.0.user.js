@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.784
+// @version      1.785
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -194,14 +194,28 @@
       if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    let ca = '';
-    const memeLink = row.querySelector('a[href*="/meme/"]');
-    if (memeLink) { const m = memeLink.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
-    if (!ca) {
-      const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
-      if (pumpLink) { const m = pumpLink.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
+    let ca = '', platform = 'other';
+    const allLinks = [...row.querySelectorAll('a[href]')];
+    for (const a of allLinks) {
+      const h = a.href;
+      if (h.includes('pump.fun')) {
+        platform = 'pump';
+        const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/);
+        if (m) ca = m[1];
+        break;
+      }
+      if (h.includes('bonk')) {
+        platform = 'bonk';
+        const m = h.match(/\/([A-Za-z0-9]{32,})/);
+        if (m) ca = m[1];
+        break;
+      }
+      if (h.includes('/meme/')) {
+        const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/);
+        if (m) ca = m[1];
+      }
     }
-    return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca };
+    return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca, platform };
   }
 
   function fireClick(el) {
