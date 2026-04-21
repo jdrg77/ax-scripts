@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -179,6 +179,7 @@
 
     el.addEventListener('click', e => {
       e.stopPropagation();
+      e.stopImmediatePropagation();
       e.preventDefault();
       const best = sessionBest.get(pairKey);
       if (best) executeBest(best);
@@ -261,33 +262,65 @@
     return true;
   }
 
-  function executeBest(best) {
-    // Immediate: overlay button already visible
-    const live = findLiveBtn(best);
-    if (live) { fireClick(live); return; }
+  // Manually undo the prefetch z-index hiding so QBuy sees the panel as visible
+  function bringPanelToFront() {
+    const panel = getSearchPanel();
+    if (!panel) return;
+    const wrapper = panel.parentElement;
+    const overlay = wrapper?.parentElement;
+    if (wrapper) {
+      wrapper.style.removeProperty('z-index');
+      wrapper.style.removeProperty('pointer-events');
+      wrapper.style.removeProperty('transition');
+      wrapper.style.removeProperty('animation');
+    }
+    if (overlay) {
+      overlay.style.removeProperty('z-index');
+      overlay.style.removeProperty('pointer-events');
+      overlay.style.removeProperty('background');
+      overlay.style.removeProperty('backdrop-filter');
+      overlay.style.removeProperty('transition');
+      overlay.style.removeProperty('animation');
+    }
+  }
 
-    // Open panel and search for the token
+  // Poll until a live QB button appears for `best` (or timeout)
+  function waitForBtn(best, timeoutMs, cb) {
+    const start = Date.now();
+    const poll = () => {
+      const target = findLiveBtn(best);
+      if (target) { cb(target); return; }
+      if (Date.now() - start > timeoutMs) { cb(null); return; }
+      setTimeout(poll, 50);
+    };
+    poll();
+  }
+
+  function executeBest(best) {
     window.axiomUserOpen = true;
 
-    const doSearch = () => {
+    const doExecute = () => {
+      // Bring panel to front (reverses prefetch hide) so QBuy makes overlay buttons visible
+      bringPanelToFront();
       const panel = getSearchPanel();
-      if (!panel) { window.axiomUserOpen = false; return; }
-      typeInPanel(panel, best.name || best.ticker);
-      setTimeout(() => {
-        const target = findLiveBtn(best);
-        if (target) fireClick(target);
-        else console.log('⭐ QBM: token not found in panel results');
+      if (panel) typeInPanel(panel, best.name || best.ticker);
+
+      // Poll up to 700ms for the matching overlay button, then click it
+      waitForBtn(best, 700, target => {
+        if (target) target.click(); // use .click() to avoid coordinate-based visual artifacts
+        else console.log('⭐ QBM: token not found after search');
         setTimeout(() => { window.axiomUserOpen = false; }, 400);
-      }, 400);
+      });
     };
 
     if (!getSearchPanel()) {
+      // Panel doesn't exist — open it first
       const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
       if (!searchBtn) { window.axiomUserOpen = false; return; }
       searchBtn.click();
-      setTimeout(doSearch, 150);
+      setTimeout(doExecute, 150);
     } else {
-      doSearch();
+      doExecute();
     }
   }
 
@@ -295,5 +328,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.1');
+  console.log('⭐ Axiom QBuy Best Match v1.2');
 })();
