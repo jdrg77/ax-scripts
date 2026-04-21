@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.7-debug
+// @version      1.77
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -336,5 +336,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.7 active');
+  console.log('📡 Axiom Graduated Receiver v1.77 active');
 })();
