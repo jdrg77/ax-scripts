@@ -292,9 +292,7 @@
       sortedSpecial = sortRest(special);
     }
 
-    const restBlues = tokens.filter(t => !t.isGold && !t.isGreen && !blues.includes(t)).sort(sortByOldest);
-
-    return [...sortedSpecial, ...blues, ...restBlues];
+    return [...sortedSpecial, ...blues];
   }
 
   function getNewestBtn() {
@@ -473,7 +471,7 @@
   }
 
   function shouldShowButton(originalBtn) {
-    if (isPanelVisible) return true;
+    if (lastPanel && lastPanel.isConnected) return true;
     const bgColor = originalBtn.style.background || '';
     return bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
   }
