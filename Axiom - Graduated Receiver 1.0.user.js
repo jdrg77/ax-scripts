@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.77
+// @version      1.7822
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -279,8 +279,8 @@
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 400);
-    console.log('⏱ Grad: safeTimer set 400ms');
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 1000);
+    console.log('⏱ Grad: safeTimer set 1000ms');
   }
 
   // ======= MESSAGE HANDLING =======
@@ -336,5 +336,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.77 active');
+  console.log('📡 Axiom Graduated Receiver v1.7822 active');
 })();
