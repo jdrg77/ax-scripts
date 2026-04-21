@@ -272,10 +272,11 @@
     let fired = false;
     panelObs = new MutationObserver(() => {
       if (fired) return;
+      if (!panel.querySelectorAll('[class*="group/quickBuyButton"]').length) return;
       fired = true;
-      console.log('🔔 Grad: MutationObserver fired');
+      console.log('🔔 Grad: MutationObserver fired (QB buttons found)');
       if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(() => doScan(id, refPixels, seq), 150);
+      debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => doScan(id, refPixels, seq), 400);
