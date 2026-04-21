@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.94
+// @version      9.95
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -547,6 +547,7 @@
 
   let lastTopSrc = null;
   function checkTopPulseReference() {
+    if (document.querySelector('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')) return;
     const topImg = getTopPulseRowImage();
     if (!topImg?.src || topImg.src === lastTopSrc) return;
     lastTopSrc = topImg.src;
@@ -790,6 +791,7 @@
       newBtn._platform = _cacheRow
         ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk' : _cacheRow.querySelector('img[src*="pump"]') ? 'pump' : 'other')
         : 'other';
+      newBtn._hasDex = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
@@ -874,5 +876,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.4 — normal + graduated proxies from Tab2');
+  console.log('🚀 Axiom QBuy v9.95 — normal + graduated proxies from Tab2');
 })();
