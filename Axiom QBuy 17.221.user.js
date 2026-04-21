@@ -24,7 +24,7 @@
   let referenceSource = null;
 
   let wrapperObserver     = null;
-  let panelOpenedAt       = 0;
+  let proxiesReleasedAt   = 0;
   const GRAD_PROXY_DELAY  = 700;
   let frozen              = false;
   let clickQueue          = null;
@@ -467,6 +467,7 @@
   function removeGradProxyBtns() {
     gradProxyBtns.forEach(btn => btn.remove());
     gradProxyBtns.length = 0;
+    proxiesReleasedAt = 0;
   }
 
   function removeButtons() {
@@ -762,6 +763,8 @@
               document.body.appendChild(proxy);
               gradProxyBtns.push(proxy);
             });
+            proxiesReleasedAt = Date.now() + GRAD_PROXY_DELAY;
+            setTimeout(scheduleUpdate, GRAD_PROXY_DELAY + 16);
             scheduleUpdate();
           }, 0);
         }, 350);
@@ -851,7 +854,7 @@
       const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
       const lp2       = firstRect.left - 621.5;
-      const proxyReady2 = isPanelVisible && (Date.now() - panelOpenedAt >= GRAD_PROXY_DELAY);
+      const proxyReady2 = isPanelVisible && proxiesReleasedAt > 0 && Date.now() >= proxiesReleasedAt;
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
         if (!proxyReady2) { proxy.style.display = 'none'; return; }
@@ -885,7 +888,7 @@
     });
 
     // Graduated proxies — appear only after GRAD_PROXY_DELAY ms since panel opened
-    const proxyReady = isPanelVisible && (Date.now() - panelOpenedAt >= GRAD_PROXY_DELAY);
+    const proxyReady = isPanelVisible && proxiesReleasedAt > 0 && Date.now() >= proxiesReleasedAt;
     const proxyStart = sortedNormal.length + 1;
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
@@ -937,10 +940,10 @@
     hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
     if (!hadSearch && hasActiveSearch) referenceLocked = true;
     if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) {
-      if (!wasVisible && isPanelVisible) {
-        panelOpenedAt = Date.now();
+      if (!wasVisible && isPanelVisible && proxiesReleasedAt > 0) {
+        const remaining = proxiesReleasedAt - Date.now();
         scheduleUpdate();
-        setTimeout(scheduleUpdate, GRAD_PROXY_DELAY + 16);
+        if (remaining > 0) setTimeout(scheduleUpdate, remaining + 16);
       } else {
         scheduleUpdate();
       }
