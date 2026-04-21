@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.4
+// @version      7.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -90,6 +90,8 @@
 
   function getBtnHasDex(btn) {
     if (btn._isGrad) return false;
+    const bg = btn._original?.style?.background || '';
+    if (bg) return bg.includes('120, 255, 160') || bg.includes('120,255,160');
     return !!btn._hasDex;
   }
 
@@ -550,5 +552,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.4 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.5 — two-tab graduated support');
 })();
