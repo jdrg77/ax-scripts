@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.3
+// @version      9.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -404,7 +404,6 @@
     if (!gradCandidates.length) return;
 
     const visible = addedBtns.filter(b => b.style.display !== 'none');
-    if (!visible.length) return;
 
     let top0, leftPos, btnW, btnH, rowHeight, startSlot;
 
@@ -684,6 +683,7 @@
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
       lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
+      localStorage.removeItem('search-only-bonded');
       return;
     }
 
@@ -795,5 +795,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.3 — normal + graduated proxies from Tab2');
+  console.log('🚀 Axiom QBuy v9.4 — normal + graduated proxies from Tab2');
 })();
