@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -101,10 +101,16 @@
     lastGlowBtns = [];
   }
 
+  function isSpecial(btn) {
+    const bg = btn.style.background || '';
+    return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
+  }
+
   function updateGlow() {
-    const btns = getQBButtons();
+    const btns        = getQBButtons();
+    const candidates  = btns.filter(btn => !isSpecial(btn)); // specials already highlighted, no glow needed
     let maxPct = -1;
-    btns.forEach(btn => { const p = getBadgePct(btn); if (p > maxPct) maxPct = p; });
+    candidates.forEach(btn => { const p = getBadgePct(btn); if (p > maxPct) maxPct = p; });
 
     // Track reference size while buttons are visible
     if (btns.length) {
@@ -115,7 +121,7 @@
     clearGlows();
     if (maxPct < 0) return;
 
-    const winners = btns.filter(btn => getBadgePct(btn) === maxPct);
+    const winners = candidates.filter(btn => getBadgePct(btn) === maxPct);
     winners.forEach(btn => applyGlow(btn));
     lastGlowBtns = winners;
 
@@ -126,10 +132,11 @@
     if (!existing || maxPct > existing.matchPct) {
       const best = winners[0];
       sessionBest.set(key, {
-        ticker:   best._ticker || '',
-        name:     best._name   || '',
+        ticker:   best._ticker  || '',
+        name:     best._name    || '',
         imgSrc:   getBtnImgSrc(best),
-        matchPct: maxPct
+        matchPct: maxPct,
+        isGrad:   !!best._gradData
       });
     }
   }
@@ -144,7 +151,6 @@
     if (refBtn) {
       el = refBtn.cloneNode(false); // shallow: gets Axiom classes, no QBuy children
       el.removeAttribute('data-qb-added');
-      el.style.zoom = '0.75';
     } else {
       el = document.createElement('button');
       el.style.background   = 'rgba(20,20,30,0.92)';
@@ -305,12 +311,16 @@
       const panel = getSearchPanel();
       if (panel) typeInPanel(panel, best.name || best.ticker);
 
-      // Poll up to 700ms for the matching overlay button, then click it
-      waitForBtn(best, 700, target => {
-        if (target) target.click(); // use .click() to avoid coordinate-based visual artifacts
-        else console.log('⭐ QBM: token not found after search');
-        setTimeout(() => { window.axiomUserOpen = false; }, 400);
-      });
+      // Graduated tokens need extra time for panel toggle (500ms exception vs QBuy's 350ms)
+      const preDelay = best.isGrad ? 500 : 0;
+      setTimeout(() => {
+        // Poll up to 700ms for the matching overlay button, then click it
+        waitForBtn(best, 700, target => {
+          if (target) target.click();
+          else console.log('⭐ QBM: token not found after search');
+          setTimeout(() => { window.axiomUserOpen = false; }, 400);
+        });
+      }, preDelay);
     };
 
     if (!getSearchPanel()) {
@@ -328,5 +338,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.2');
+  console.log('⭐ Axiom QBuy Best Match v1.3');
 })();
