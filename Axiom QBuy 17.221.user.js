@@ -1013,14 +1013,17 @@
     }
 
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-    btns.forEach(originalBtn => {
-      if (originalBtn.dataset.qbAdded) return;
+    const toAdd = btns.filter(btn => !btn.dataset.qbAdded);
+
+    // Phase 1: read all rects + build buttons (no appendChild yet — one reflow total)
+    const prepared = toAdd.map(originalBtn => {
       originalBtn.dataset.qbAdded = 'true';
+      const rect    = originalBtn.getBoundingClientRect();
+      const coinImg = getCoinImage(originalBtn);
 
       const newBtn = originalBtn.cloneNode(true);
-      newBtn._original      = originalBtn;
-      newBtn._matchPct      = null;
-      // Cache ticker/name while row is still in DOM (virtual scroll may remove it later)
+      newBtn._original = originalBtn;
+      newBtn._matchPct = null;
       const _cacheRow  = originalBtn.closest('[class*="max-h-[64px]"]');
       const _cacheDivs = _cacheRow ? _cacheRow.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]') : [];
       newBtn._ticker = _cacheDivs[0]?.textContent.trim() || '';
@@ -1029,11 +1032,13 @@
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
       newBtn.style.overflow = 'visible';
+      newBtn.style.left     = (rect.left - 621.5) + 'px';
+      newBtn.style.top      = rect.top + 'px';
+      newBtn.style.display  = shouldShowButton(originalBtn) ? '' : 'none';
 
-      const coinImg = getCoinImage(originalBtn);
       if (coinImg) {
-        const imgEl     = document.createElement('img');
-        imgEl.src       = coinImg.src;
+        const imgEl = document.createElement('img');
+        imgEl.src = coinImg.src;
         imgEl.className = 'qb-coin-img';
         imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
         newBtn.appendChild(imgEl);
@@ -1049,6 +1054,11 @@
         } catch(e) {}
       }
 
+      return { originalBtn, newBtn, coinImg };
+    });
+
+    // Phase 2: batch append + wire up (no more layout reads after this)
+    prepared.forEach(({ originalBtn, newBtn, coinImg }) => {
       const colorSync = new MutationObserver(() => {
         newBtn.style.background = originalBtn.style.background;
         newBtn.style.color      = originalBtn.style.color;
@@ -1056,17 +1066,11 @@
       });
       colorSync.observe(originalBtn, { attributes: true, attributeFilter: ['style'] });
 
-      const rect = originalBtn.getBoundingClientRect();
-      newBtn.style.left    = (rect.left - 621.5) + 'px';
-      newBtn.style.top     = rect.top + 'px';
-      newBtn.style.display = shouldShowButton(originalBtn) ? '' : 'none';
-
       document.body.appendChild(newBtn);
       addedBtns.push(newBtn);
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        // Coin image click → navigate to token page
         if (e.target.closest('img.qb-coin-img')) {
           const row  = originalBtn.closest('[class*="max-h-[64px]"]');
           const link = row?.querySelector('a[href*="/meme/"]');
@@ -1078,11 +1082,8 @@
         if (frozen || isScanning) {
           clickQueue = newBtn;
           const wasInGrad = abortScan();
-          if (wasInGrad) {
-            setTimeout(() => flushQueue(), 370);
-          } else {
-            flushQueue();
-          }
+          if (wasInGrad) { setTimeout(() => flushQueue(), 370); }
+          else { flushQueue(); }
         }
         else { fireClick(originalBtn); }
       });
