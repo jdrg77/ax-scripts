@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.1
+// @version      7.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -396,6 +396,10 @@
       const platGlow   = best.platform === 'pump' ? 'rgba(120,255,160,0.7)'
                        : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
                        : badgeColor(best.matchPct) + '40';
+      const platBg     = best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
+                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
+                       : 'rgba(20,20,30,0.92)';
+      el.style.background = platBg;
       el.style.border    = `1.5px solid ${platBorder}`;
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
