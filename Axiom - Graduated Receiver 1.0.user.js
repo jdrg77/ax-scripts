@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.786
+// @version      1.787
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -194,26 +194,15 @@
       if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    let ca = '', platform = 'other';
-    const allLinks = [...row.querySelectorAll('a[href]')];
-    for (const a of allLinks) {
+    const isBonk = !!row.querySelector('img[src*="bonk"]');
+    const isPump  = !!row.querySelector('img[src*="pump"]');
+    const platform = isBonk ? 'bonk' : isPump ? 'pump' : 'other';
+    let ca = '';
+    for (const a of row.querySelectorAll('a[href]')) {
       const h = a.href;
-      if (h.includes('pump.fun')) {
-        platform = 'pump';
-        const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/);
-        if (m) ca = m[1];
-        break;
-      }
-      if (h.includes('bonk')) {
-        platform = 'bonk';
-        const m = h.match(/\/([A-Za-z0-9]{32,})/);
-        if (m) ca = m[1];
-        break;
-      }
-      if (h.includes('/meme/')) {
-        const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/);
-        if (m) ca = m[1];
-      }
+      if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) { ca = m[1]; break; } }
+      else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { ca = m[1]; break; } }
+      else if (h.includes('/meme/') && !ca) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
     }
     return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca, platform };
   }
