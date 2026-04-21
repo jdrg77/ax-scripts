@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -176,6 +176,8 @@
     el.style.cursor         = 'pointer';
     el.style.alignItems     = 'center';
     el.style.justifyContent = 'center';
+    el.style.transform      = 'scale(0.7842)';
+    el.style.transformOrigin = 'top-left';
 
     // Coin image (left side, same as QBuy overlay buttons)
     const coinImg = document.createElement('img');
@@ -266,8 +268,8 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 65;
-        posTop  = sr.bottom - btnH - 25;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 50;
+        posTop  = sr.bottom - btnH - 15;
       } else {
         posLeft = rect.right - btnW - 4;
         posTop  = rect.top + rect.height / 2 - btnH / 2;
@@ -400,5 +402,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.2');
+  console.log('⭐ Axiom QBuy Best Match v2.3');
 })();
