@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      3.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -197,11 +197,13 @@
       e.preventDefault();
       const best = sessionBest.get(rowCA);
       if (best?.ca) {
-        const a = document.createElement('a');
-        a.href = `/meme/${best.ca}?chain=sol`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        const existing = document.querySelector(`a[href*="${best.ca}"]`);
+        if (existing) {
+          existing.click();
+        } else {
+          history.pushState({}, '', `/meme/${best.ca}?chain=sol`);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
       }
     });
     el.appendChild(coinImg);
@@ -443,5 +445,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.9');
+  console.log('⭐ Axiom QBuy Best Match v3.0');
 })();
