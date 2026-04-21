@@ -1059,7 +1059,7 @@
       newBtn.style.overflow = 'visible';
       newBtn.style.left     = (rect.left - 621.5) + 'px';
       newBtn.style.top      = rect.top + 'px';
-      newBtn.style.display  = shouldShowButton(originalBtn) ? '' : 'none';
+      newBtn.style.display  = 'none'; // always start hidden; updatePositions reveals in correct sorted order
 
       if (coinImg) {
         const imgEl = document.createElement('img');
@@ -1121,13 +1121,13 @@
       updateNameLabel(newBtn);
     });
 
-    // New pair's buttons just appeared — position them NOW before scan starts,
-    // then kick off graduated scan. updatePositions() must run synchronously here
-    // because scheduleUpdate() has a 16ms debounce and doScan() fires in ~1ms,
-    // causing originals to detach before the first updatePositions() call.
+    // Always position synchronously when new buttons were added.
+    // Buttons start as display:none so without this they would never appear.
+    // Must be sync (not scheduleUpdate) so correct order is the very first paint.
+    if (prepared.length > 0) updatePositions();
+
     if (waitingForNewPair && addedBtns.length > 0) {
       waitingForNewPair = false;
-      updatePositions();
       setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
     }
   }
