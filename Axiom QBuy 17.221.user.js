@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.1
+// @version      9.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -15,6 +15,9 @@
 
   const SAMPLE_SIZE   = 16;
   const addedBtns     = [];
+  const gradProxyBtns = [];
+  const gradChannel   = new BroadcastChannel('axiom-tabs');
+  let   gradCandidates = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -388,6 +391,86 @@
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove());
     addedBtns.length = 0;
+    removeGradProxyBtns();
+  }
+
+  function removeGradProxyBtns() {
+    gradProxyBtns.forEach(btn => btn.remove());
+    gradProxyBtns.length = 0;
+  }
+
+  function renderGradProxies() {
+    removeGradProxyBtns();
+    if (!gradCandidates.length) return;
+
+    const visible = addedBtns.filter(b => b.style.display !== 'none');
+    if (!visible.length) return;
+
+    const top0      = parseFloat(visible[0].style.top);
+    const leftPos   = parseFloat(visible[0].style.left);
+    if (isNaN(top0) || isNaN(leftPos)) return;
+
+    const r         = visible[0].getBoundingClientRect();
+    const btnW      = r.width  || 48;
+    const btnH      = r.height || 48;
+    const rowEl     = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+    const rowHeight = rowEl?.getBoundingClientRect().height ||
+                      (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
+    const startSlot = visible.length + 1;
+
+    gradCandidates.slice(0, 5).forEach((token, i) => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `position:fixed;z-index:9999;overflow:visible;width:${btnW}px;height:${btnH}px;left:${leftPos}px;top:${top0 + (startSlot + i) * rowHeight}px;background:rgba(80,80,200,0.18);border:1px solid rgba(120,120,255,0.5);border-radius:8px;cursor:pointer;`;
+      btn._isGradProxy = true;
+      btn._gradToken   = token;
+
+      if (token.imgSrc) {
+        const img = document.createElement('img');
+        img.src = token.imgSrc;
+        img.className = 'qb-coin-img';
+        img.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+        btn.appendChild(img);
+      }
+
+      const col = badgeColor(token.match);
+      const badge = document.createElement('span');
+      badge.className = 'qb-sim-badge';
+      badge.textContent = token.match.toFixed(1) + '%';
+      badge.style.cssText = `position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:${col};background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid ${col};z-index:10001;`;
+      btn.appendChild(badge);
+
+      const label = document.createElement('div');
+      label.className = 'qb-name-label';
+      label.textContent = token.name || token.ticker;
+      label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#aaf;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
+      btn.appendChild(label);
+
+      if (token.age || token.mc) {
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;display:flex;flex-direction:row;gap:4px;font-size:13px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
+        if (token.age) {
+          const ageSpan = document.createElement('span');
+          ageSpan.textContent = token.age;
+          ageSpan.style.cssText = 'color:#78ffa0;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
+          bar.appendChild(ageSpan);
+        }
+        if (token.mc) {
+          const mcSpan = document.createElement('span');
+          mcSpan.textContent = 'MC ' + token.mc;
+          mcSpan.style.cssText = 'color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
+          bar.appendChild(mcSpan);
+        }
+        btn.appendChild(bar);
+      }
+
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name });
+      });
+
+      document.body.appendChild(btn);
+      gradProxyBtns.push(btn);
+    });
   }
 
   function shouldShowButton(originalBtn) {
@@ -493,6 +576,8 @@
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
     });
+
+    renderGradProxies();
   }
 
   function scheduleUpdate() {
@@ -565,8 +650,16 @@
   }, true);
 
   window.addEventListener('axiomPrefetchStart', () => {
+    gradCandidates = [];
     removeButtons();
   });
+
+  gradChannel.onmessage = (e) => {
+    if (e.data.type !== 'GRAD_DATA') return;
+    if (e.data.seq !== undefined && e.data.seq !== window.__gradSeq) return;
+    gradCandidates = e.data.tokens || [];
+    scheduleUpdate();
+  };
 
   function addButtons() {
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
@@ -687,5 +780,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.1 — normal only');
+  console.log('🚀 Axiom QBuy v9.2 — normal + graduated proxies from Tab2');
 })();
