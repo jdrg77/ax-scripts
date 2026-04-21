@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.2
+// @version      9.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -406,17 +406,31 @@
     const visible = addedBtns.filter(b => b.style.display !== 'none');
     if (!visible.length) return;
 
-    const top0      = parseFloat(visible[0].style.top);
-    const leftPos   = parseFloat(visible[0].style.left);
-    if (isNaN(top0) || isNaN(leftPos)) return;
+    let top0, leftPos, btnW, btnH, rowHeight, startSlot;
 
-    const r         = visible[0].getBoundingClientRect();
-    const btnW      = r.width  || 48;
-    const btnH      = r.height || 48;
-    const rowEl     = visible[0]._original?.closest('[class*="max-h-[64px]"]');
-    const rowHeight = rowEl?.getBoundingClientRect().height ||
-                      (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
-    const startSlot = visible.length + 1;
+    if (visible.length) {
+      top0      = parseFloat(visible[0].style.top);
+      leftPos   = parseFloat(visible[0].style.left);
+      if (isNaN(top0) || isNaN(leftPos)) return;
+      const r   = visible[0].getBoundingClientRect();
+      btnW      = r.width  || 48;
+      btnH      = r.height || 48;
+      const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+      rowHeight = rowEl?.getBoundingClientRect().height ||
+                  (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
+      startSlot = visible.length + 1;
+    } else {
+      const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      if (!firstPanelBtn) return;
+      const r = firstPanelBtn.getBoundingClientRect();
+      if (!r.width) return;
+      top0      = r.top;
+      leftPos   = r.left - 621.5;
+      btnW      = r.width  || 48;
+      btnH      = r.height || 48;
+      rowHeight = 64;
+      startSlot = 1;
+    }
 
     gradCandidates.slice(0, 5).forEach((token, i) => {
       const btn = document.createElement('button');
@@ -659,6 +673,7 @@
     if (e.data.seq !== undefined && e.data.seq !== window.__gradSeq) return;
     gradCandidates = e.data.tokens || [];
     scheduleUpdate();
+    setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
   };
 
   function addButtons() {
@@ -780,5 +795,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.2 — normal + graduated proxies from Tab2');
+  console.log('🚀 Axiom QBuy v9.3 — normal + graduated proxies from Tab2');
 })();
