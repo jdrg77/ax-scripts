@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -107,10 +107,7 @@
   }
 
   function updateGlow() {
-    const btns        = getQBButtons();
-    const candidates  = btns.filter(btn => !isSpecial(btn)); // specials already highlighted, no glow needed
-    let maxPct = -1;
-    candidates.forEach(btn => { const p = getBadgePct(btn); if (p > maxPct) maxPct = p; });
+    const btns = getQBButtons();
 
     // Track reference size while buttons are visible
     if (btns.length) {
@@ -118,24 +115,32 @@
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
     }
 
+    // --- Glow: non-specials only (specials are already gold/green) ---
+    const glowCandidates = btns.filter(btn => !isSpecial(btn));
+    let glowMax = -1;
+    glowCandidates.forEach(btn => { const p = getBadgePct(btn); if (p > glowMax) glowMax = p; });
     clearGlows();
-    if (maxPct < 0) return;
+    if (glowMax >= 0) {
+      const winners = glowCandidates.filter(btn => getBadgePct(btn) === glowMax);
+      winners.forEach(btn => applyGlow(btn));
+      lastGlowBtns = winners;
+    }
 
-    const winners = candidates.filter(btn => getBadgePct(btn) === maxPct);
-    winners.forEach(btn => applyGlow(btn));
-    lastGlowBtns = winners;
-
-    // Store best in session Map (only upgrade, never downgrade)
+    // --- Session Map: best from ALL buttons including specials ---
+    if (!btns.length) return;
     const key = getPairKey();
     if (!key) return;
+    let overallMax = -1;
+    btns.forEach(btn => { const p = getBadgePct(btn); if (p > overallMax) overallMax = p; });
+    if (overallMax < 0) return;
     const existing = sessionBest.get(key);
-    if (!existing || maxPct > existing.matchPct) {
-      const best = winners[0];
+    if (!existing || overallMax > existing.matchPct) {
+      const best = btns.find(btn => getBadgePct(btn) === overallMax);
       sessionBest.set(key, {
         ticker:   best._ticker  || '',
         name:     best._name    || '',
         imgSrc:   getBtnImgSrc(best),
-        matchPct: maxPct,
+        matchPct: overallMax,
         isGrad:   !!best._gradData
       });
     }
@@ -338,5 +343,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.3');
+  console.log('⭐ Axiom QBuy Best Match v1.4');
 })();
