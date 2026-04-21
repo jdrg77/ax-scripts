@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -14,12 +14,13 @@
   const IS_GRAD = new URLSearchParams(location.search).get('tab') === 'grad';
   if (!IS_GRAD) return;
 
-  const SAMPLE_SIZE = 16;
-  const channel     = new BroadcastChannel('axiom-tabs');
-  let   scanId      = 0;
-  let   panelObs    = null;
-  let   debTimer    = null;
-  let   safeTimer   = null;
+  const SAMPLE_SIZE  = 16;
+  const channel      = new BroadcastChannel('axiom-tabs');
+  let   scanId       = 0;
+  let   panelObs     = null;
+  let   debTimer     = null;
+  let   safeTimer    = null;
+  let   newPairTimer = null;
 
   // ======= PIXEL UTILS =======
 
@@ -80,12 +81,12 @@
   function ensurePanelOpen(cb) {
     if (getPanel()) { hidePanel(); cb(); return; }
     const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
-    if (!searchBtn) { cb(); return; }
+    if (!searchBtn) { console.log('❌ Grad: no search button found'); cb(); return; }
     searchBtn.click();
     const wait = setInterval(() => {
       if (getPanel()) { clearInterval(wait); hidePanel(); cb(); }
     }, 50);
-    setTimeout(() => clearInterval(wait), 2000);
+    setTimeout(() => { clearInterval(wait); if (!getPanel()) console.log('❌ Grad: panel never opened'); }, 2000);
   }
 
   // ======= GRADUATED TOGGLE =======
@@ -101,14 +102,27 @@
   }
 
   function ensureGraduatedView(panel, cb) {
-    if (isGraduatedChipActive(panel)) { cb(); return; }
+    if (isGraduatedChipActive(panel)) {
+      console.log('✅ Grad: chip already active');
+      cb(); return;
+    }
     const btn = getGraduatedToggleBtn(panel);
-    if (!btn) { cb(); return; }
+    if (!btn) {
+      console.log('❌ Grad: Graduated chip not found in panel');
+      cb(); return;
+    }
+    console.log('🔄 Grad: clicking Graduated chip...');
     btn.click();
     const start = Date.now();
     const poll = () => {
-      if (isGraduatedChipActive(panel)) { cb(); return; }
-      if (Date.now() - start > 500) { cb(); return; }
+      if (isGraduatedChipActive(panel)) {
+        console.log('✅ Grad: chip activated in', Date.now() - start, 'ms');
+        cb(); return;
+      }
+      if (Date.now() - start > 500) {
+        console.log('⚠️ Grad: chip activation timeout');
+        cb(); return;
+      }
       setTimeout(poll, 50);
     };
     setTimeout(poll, 50);
@@ -157,17 +171,26 @@
     if (safeTimer) { clearTimeout(safeTimer); safeTimer = null; }
   }
 
-  function doScan(id, refPixels) {
+  function doScan(id, refPixels, seq) {
     if (id !== scanId) return;
     abortScan();
     scanId = id;
 
     const panel = getPanel();
-    if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [] }); return; }
+    if (!panel) {
+      console.log('❌ Grad: panel gone at doScan');
+      channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq });
+      return;
+    }
 
     const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+    console.log('🔍 Grad: scanning', btns.length, 'buttons, chip active:', isGraduatedChipActive(panel));
     const infos = btns.map(extractBtnInfo).filter(Boolean);
-    if (!infos.length) { channel.postMessage({ type: 'GRAD_DATA', tokens: [] }); return; }
+    if (!infos.length) {
+      console.log('⚠️ Grad: 0 tokens found in panel');
+      channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq });
+      return;
+    }
 
     let pending = infos.length;
     const results = [];
@@ -175,7 +198,7 @@
     infos.forEach(info => {
       if (!info.imgSrc || !refPixels) {
         results.push({ ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, match: 0 });
-        if (--pending === 0) broadcastResults(results);
+        if (--pending === 0) broadcastResults(results, seq);
         return;
       }
       getPixels(info.imgSrc, pixels => {
@@ -183,28 +206,28 @@
           ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc,
           match: pixels ? pixelSimilarity(refPixels, pixels) : 0
         });
-        if (--pending === 0) broadcastResults(results);
+        if (--pending === 0) broadcastResults(results, seq);
       });
     });
   }
 
-  function broadcastResults(tokens) {
+  function broadcastResults(tokens, seq) {
     tokens.sort((a, b) => b.match - a.match);
-    console.log('📡 Grad broadcast:', tokens.length, 'tokens, top:', tokens[0]?.ticker, tokens[0]?.match + '%');
-    channel.postMessage({ type: 'GRAD_DATA', tokens });
+    console.log('📡 Grad broadcast:', tokens.length, 'tokens, top:', tokens[0]?.ticker, tokens[0]?.match + '%', '| seq:', seq);
+    channel.postMessage({ type: 'GRAD_DATA', tokens, seq });
   }
 
-  function startScan(id, refPixels) {
+  function startScan(id, refPixels, seq) {
     if (id !== scanId) return;
     const panel = getPanel();
-    if (!panel) { doScan(id, refPixels); return; }
+    if (!panel) { doScan(id, refPixels, seq); return; }
 
     panelObs = new MutationObserver(() => {
       if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(() => doScan(id, refPixels), 150);
+      debTimer = setTimeout(() => doScan(id, refPixels, seq), 150);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels), 1000);
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 1000);
   }
 
   // ======= MESSAGE HANDLING =======
@@ -213,19 +236,25 @@
     const msg = e.data;
 
     if (msg.type === 'NEW_PAIR') {
-      const id = ++scanId;
-      getPixels(msg.refImgSrc, pixels => {
-        if (id !== scanId) return;
-        ensurePanelOpen(() => {
+      console.log('📨 Grad: NEW_PAIR received:', msg.name, '| seq:', msg.seq);
+      if (newPairTimer) clearTimeout(newPairTimer);
+      newPairTimer = setTimeout(() => {
+        newPairTimer = null;
+        const id = ++scanId;
+        const seq = msg.seq;
+        getPixels(msg.refImgSrc, pixels => {
           if (id !== scanId) return;
-          const panel = getPanel();
-          if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [] }); return; }
-          ensureGraduatedView(panel, () => {
+          ensurePanelOpen(() => {
             if (id !== scanId) return;
-            startScan(id, pixels);
+            const panel = getPanel();
+            if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
+            ensureGraduatedView(panel, () => {
+              if (id !== scanId) return;
+              startScan(id, pixels, seq);
+            });
           });
         });
-      });
+      }, 300);
     }
 
     if (msg.type === 'EXECUTE_BUY_GRAD') {
@@ -256,5 +285,5 @@
   // Keep panel hidden whenever DOM changes
   new MutationObserver(hidePanel).observe(document.body, { childList: true, subtree: true });
 
-  console.log('📡 Axiom Graduated Receiver v1.2 active');
+  console.log('📡 Axiom Graduated Receiver v1.3 active');
 })();

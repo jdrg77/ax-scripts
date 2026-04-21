@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.7
+// @version      5.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -106,7 +106,8 @@
     lastPrefetched = name;
 
     window.dispatchEvent(new CustomEvent('axiomPrefetchStart', { detail: { name } }));
-    gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc() });
+    window.__gradSeq = (window.__gradSeq || 0) + 1;
+    gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc(), seq: window.__gradSeq });
 
     if (!getPanel()) {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
@@ -175,5 +176,5 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  console.log('🚀 Axiom Prefetch v5.7 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
+  console.log('🚀 Axiom Prefetch v5.8 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
 })();
