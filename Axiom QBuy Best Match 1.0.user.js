@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.2
+// @version      7.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -124,11 +124,15 @@
   }
 
   function getBtnSolText(btn) {
-    if (btn._isGrad) return '';
-    const orig = btn._original;
-    if (orig) {
-      const text = orig.textContent.replace(/\s+/g, ' ').trim();
+    if (!btn._isGrad && btn._original) {
+      const text = btn._original.textContent.replace(/\s+/g, ' ').trim();
       if (text) return text;
+    }
+    for (const b of getQBButtons()) {
+      if (b._original) {
+        const text = b._original.textContent.replace(/\s+/g, ' ').trim();
+        if (text) return text;
+      }
     }
     return '';
   }
@@ -396,7 +400,7 @@
       const platGlow   = best.platform === 'pump' ? 'rgba(120,255,160,0.7)'
                        : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
                        : badgeColor(best.matchPct) + '40';
-      const platBg     = best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
+      const platBg     = (best.platform === 'pump' || best.isGrad) ? 'rgba(120,255,160,0.85)'
                        : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
                        : 'rgba(20,20,30,0.92)';
       el.style.background = platBg;
