@@ -1,7 +1,7 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.45
+// @version      9.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,9 +12,8 @@
 (function () {
   'use strict';
 
-  const SAMPLE_SIZE = 16;
+  const SAMPLE_SIZE   = 16;
   const addedBtns     = [];
-  const gradProxyBtns = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -22,67 +21,6 @@
   let updateTimeout   = null;
   let referencePixels = null;
   let referenceSource = null;
-
-  let frozen              = false;
-  let clickQueue          = null;
-  let freezeTimer         = null;
-  let isScanning          = false;
-  let inGraduatedView     = false;
-  let scanDebounceTimer   = null;
-  let scanId              = 0;
-  let referenceLocked     = false;
-  let waitingForNewPair   = false;
-  let panelIsGraduated    = false; // tracks actual panel toggle state
-
-  function freezeButtons() {
-    frozen = true;
-    clickQueue = null;
-    if (freezeTimer) clearTimeout(freezeTimer);
-    // Safety net: unfreeze after 3s if scan never completes
-    freezeTimer = setTimeout(() => { frozen = false; isScanning = false; flushQueue(); }, 3000);
-  }
-
-  function flushQueue() {
-    frozen = false;
-    if (!clickQueue) return;
-    const queued = clickQueue;
-    clickQueue = null;
-    const orig = queued._original;
-    if (orig && orig.isConnected) {
-      fireClick(orig);
-    } else if (lastPanel && (queued._ticker || queued._name)) {
-      // Original DOM element gone after panel re-render — re-find by cached ticker/name
-      for (const btn of lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')) {
-        const row = btn.closest('[class*="max-h-[64px]"]');
-        if (!row) continue;
-        const divs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
-        const t = divs[0]?.textContent.trim() || '';
-        const n = divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '';
-        if ((queued._ticker && t === queued._ticker) || (queued._name && n === queued._name)) {
-          fireClick(btn); break;
-        }
-      }
-    }
-  }
-
-  function abortScan() {
-    scanId++; // always increment — aborts any pending waitAndScan even if isScanning=false
-    if (!isScanning) return false;
-    inGraduatedView = false;
-    isScanning = false;
-    frozen = false;
-    if (freezeTimer) clearTimeout(freezeTimer);
-    // Use panelIsGraduated (real toggle state), not inGraduatedView:
-    // toggleBack() may have already flipped the toggle while inGraduatedView was still true,
-    // so using inGraduatedView here would double-click and send the panel back to graduated.
-    const wasInGrad = panelIsGraduated;
-    if (wasInGrad) {
-      panelIsGraduated = false;
-      const tb = lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
-      if (tb) tb.click();
-    }
-    return wasInGrad;
-  }
 
   function getPixels(src, cb) {
     if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
@@ -117,24 +55,6 @@
     return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
   }
 
-  function updateGradProxyBadges() {
-    if (!referencePixels || !gradProxyBtns.length) return;
-    gradProxyBtns.forEach(proxy => {
-      const data = proxy._gradData;
-      if (!data || !data.imgSrc) return;
-      getPixels(data.imgSrc, pixels => {
-        const pct = pixelSimilarity(referencePixels, pixels) ?? 0;
-        data.match = pct;
-        const badge = proxy.querySelector('.qb-sim-badge');
-        if (badge) {
-          badge.textContent = pct.toFixed(1) + '%';
-          badge.style.borderColor = badgeColor(pct);
-        }
-        scheduleUpdate();
-      });
-    });
-  }
-
   function setReference(src) {
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
@@ -142,7 +62,6 @@
     getPixels(src, (pixels) => {
       referencePixels = pixels;
       updateAllBadges();
-      updateGradProxyBadges();
       scheduleUpdate();
     });
   }
@@ -253,7 +172,6 @@
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
 
-    // Gold/green = special (always above). Blue = top 3 oldest with name/ticker match (no async match% needed)
     const special = tokens.filter(t => t.isGold || t.isGreen);
     const blues   = tokens
       .filter(t => !t.isGold && !t.isGreen && (sameName(t) || sameTicker(t)))
@@ -466,15 +384,9 @@
     });
   }
 
-  function removeGradProxyBtns() {
-    gradProxyBtns.forEach(btn => btn.remove());
-    gradProxyBtns.length = 0;
-  }
-
   function removeButtons() {
     addedBtns.forEach(btn => btn.remove());
     addedBtns.length = 0;
-    removeGradProxyBtns();
   }
 
   function shouldShowButton(originalBtn) {
@@ -490,11 +402,9 @@
 
   let lastTopSrc = null;
   function checkTopPulseReference() {
-    if (referenceLocked) return;
     const topImg = getTopPulseRowImage();
     if (!topImg?.src || topImg.src === lastTopSrc) return;
     lastTopSrc = topImg.src;
-    // Sync capture: image is already decoded in DOM when observer fires
     if (topImg.complete && topImg.naturalWidth > 0) {
       try {
         const c = document.createElement('canvas');
@@ -504,12 +414,10 @@
         referenceSource = topImg.src;
         referencePixels = pixels;
         updateAllBadges();
-        updateGradProxyBadges();
         scheduleUpdate();
         return;
       } catch(e) {}
     }
-    // Fallback: async load (referencePixels becomes null temporarily)
     setReference(topImg.src);
   }
 
@@ -535,324 +443,6 @@
     }, 50);
   }
 
-  // ======= GRADUATED SCAN =======
-
-  function getGraduatedToggleBtn(panel) {
-    return [...panel.querySelectorAll('button')].find(btn => btn.textContent.trim().includes('Graduated')) || null;
-  }
-
-  function isGraduatedChipActive(panel) {
-    const btn = getGraduatedToggleBtn(panel);
-    return btn ? btn.className.includes('primaryGreen') : false;
-  }
-
-  function ensureNormalView() {
-    const panel = lastPanel || [...document.querySelectorAll(
-      '[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')].find(el => isSearchPanel(el));
-    if (!panel) { panelIsGraduated = false; return; }
-    if (!isGraduatedChipActive(panel)) { panelIsGraduated = false; return; }
-    const tb = getGraduatedToggleBtn(panel);
-    if (tb) { panelIsGraduated = false; tb.click(); }
-  }
-
-  function getRowCA(row) {
-    const link = row.querySelector('a[href*="/meme/"], a[href*="pump.fun/coin/"]');
-    if (link) return link.pathname.split('/').pop().split('?')[0] || null;
-    const img = row.querySelector('img[src*="axiomtrading"]');
-    if (img) return img.src.split('/').pop().replace('.webp', '') || null;
-    return null;
-  }
-
-  function extractGradTokenInfo(originalBtn) {
-    const row = originalBtn.closest('[class*="max-h-[64px]"]');
-    if (!row) return null;
-    const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
-    const ticker = truncateDivs[0]?.textContent.trim() || '';
-    const name   = truncateDivs[1]?.textContent.trim() || truncateDivs[0]?.textContent.trim() || '';
-    const ageEl  = row.querySelector('span[class*="pointer-events-none"]');
-    const age    = ageEl?.textContent?.trim() || '';
-    let mc = '';
-    for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
-      const spans = [...container.querySelectorAll('span')];
-      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
-      if (labelSpan) { mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || ''; break; }
-    }
-    const coinImg = getRealImage(row);
-    // Capture pixels directly from the loaded img element (synchronous, no network request)
-    let directPixels = null;
-    if (coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
-      try {
-        const c = document.createElement('canvas');
-        c.width = c.height = SAMPLE_SIZE;
-        c.getContext('2d').drawImage(coinImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        directPixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-      } catch (e) {}
-    }
-    // Clone the real QB button now (before panel toggles back) to preserve Axiom's internal HTML
-    const btnClone = originalBtn.cloneNode(true);
-    const ca = getRowCA(row);
-    return { ticker, name, age, ageHours: ageToSeconds(age) / 3600, mc, imgSrc: coinImg?.src || null, directPixels, match: 0, btnClone, ca };
-  }
-
-  function computeGradSimilarities(candidates, cb) {
-    if (!referencePixels || !candidates.length) { cb(candidates); return; }
-    let done = 0;
-    let resolved = false;
-    const finish = () => { if (!resolved) { resolved = true; cb(candidates); } };
-    const timeout = setTimeout(finish, 600);
-    const oneDone = () => { done++; if (done === candidates.length) { clearTimeout(timeout); finish(); } };
-    candidates.forEach(data => {
-      if (data.directPixels) {
-        data.match = pixelSimilarity(referencePixels, data.directPixels) ?? 0;
-        oneDone(); return;
-      }
-      if (!data.imgSrc) { data.match = 0; oneDone(); return; }
-      getPixels(data.imgSrc, pixels => {
-        data.match = pixelSimilarity(referencePixels, pixels) ?? 0;
-        oneDone();
-      });
-    });
-  }
-
-  function createGradProxy(data) {
-    // Use the cloned real QB button as base — preserves Axiom's internal HTML/structure
-    const proxy = data.btnClone || document.createElement('button');
-    proxy._gradData = data;
-
-    // Copy sizing/shape from a real added button, then override position props
-    const refBtn = addedBtns[0];
-    if (refBtn) proxy.style.cssText = refBtn.style.cssText;
-    proxy.style.position   = 'fixed';
-    proxy.style.zIndex     = '9999';
-    proxy.style.overflow   = 'visible';
-    proxy.style.background = 'rgb(255, 215, 0)';
-    proxy.style.color      = '#000';
-    proxy.style.display    = 'none';
-    proxy.style.left       = '0px';
-    proxy.style.top        = '0px';
-
-    // Remove any stale qb overlays from the clone before adding fresh ones
-    proxy.querySelectorAll('.qb-coin-img, .qb-name-label, .qb-sim-badge, .qb-info-bar').forEach(el => el.remove());
-
-    if (data.imgSrc) {
-      const imgEl = document.createElement('img');
-      imgEl.src = data.imgSrc;
-      imgEl.className = 'qb-coin-img';
-      imgEl.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
-      proxy.appendChild(imgEl);
-    }
-
-    const label = document.createElement('div');
-    label.className = 'qb-name-label';
-    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;text-align:center;font-size:10px;font-weight:600;font-family:monospace;color:#000;background:rgba(255,215,0,0.85);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
-    label.textContent = data.name || data.ticker;
-    proxy.appendChild(label);
-
-    const badge = document.createElement('span');
-    badge.className = 'qb-sim-badge';
-    badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid #ffd700;z-index:10001;';
-    badge.textContent = data.match.toFixed(1) + '%';
-    proxy.appendChild(badge);
-
-    const bar = document.createElement('div');
-    bar.className = 'qb-info-bar';
-    bar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
-    if (data.age) {
-      const ageSpan = document.createElement('span');
-      ageSpan.textContent = data.age;
-      ageSpan.style.cssText = 'color:#ffd700;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
-      bar.appendChild(ageSpan);
-    }
-    if (data.mc) {
-      const mcSpan = document.createElement('span');
-      mcSpan.textContent = 'MC ' + data.mc;
-      mcSpan.style.cssText = 'color:#5bb8ff;background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;';
-      bar.appendChild(mcSpan);
-    }
-    proxy.appendChild(bar);
-
-    proxy.addEventListener('click', e => {
-      e.stopPropagation(); e.preventDefault();
-      if (e.target.closest('img.qb-coin-img')) {
-        if (data.ca) { window.location.href = `/meme/${data.ca}`; return; }
-      }
-      if (isScanning) return;
-      executeGradClick(data);
-    });
-
-    return proxy;
-  }
-
-  function scanGraduated() {
-    if (isScanning) return;
-    if (!lastPanel) { flushQueue(); return; }
-    const toggleBtn = getGraduatedToggleBtn(lastPanel);
-    if (!toggleBtn) { flushQueue(); return; }
-
-    // Capture scanId now — if it changes before doScan starts, abort was called during wait
-    const startScanId = scanId;
-
-    // Wait only for referencePixels (max 1000ms, poll every 30ms)
-    const startWait = Date.now();
-    const waitAndScan = () => {
-      if (scanId !== startScanId) return; // aborted while waiting for pixels
-      const elapsed = Date.now() - startWait;
-      if (!referencePixels && elapsed < 150) {
-        setTimeout(waitAndScan, 30);
-        return;
-      }
-      doScan();
-    };
-
-    function doScan() {
-    const normalCAKeys = new Set();
-    addedBtns.forEach(btn => {
-      const row = btn._original?.closest('[class*="max-h-[64px]"]');
-      const ca  = row ? getRowCA(row) : null;
-      if (ca) normalCAKeys.add(ca);
-    });
-
-    // Always look up toggle button live — panel may have re-rendered since scanGraduated() ran
-    const liveToggle = () => {
-      const panelEl = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
-        .find(el => isSearchPanel(el));
-      if (panelEl && panelEl !== lastPanel) lastPanel = panelEl;
-      return lastPanel ? getGraduatedToggleBtn(lastPanel) : null;
-    };
-
-    const tb1 = liveToggle();
-    if (!tb1) { isScanning = false; flushQueue(); return; }
-
-
-    isScanning = true;
-    inGraduatedView = true;
-    panelIsGraduated = true;
-    const myId = ++scanId;
-    const live = () => scanId === myId;
-
-    tb1.click();
-    console.log('🎓 Scanning graduated...');
-
-    const toggleBack = () => {
-      panelIsGraduated = false;
-      // Prefer live lookup; fall back to tb1 in case button text changes while in graduated view
-      const tb = liveToggle() || tb1;
-      tb.click();
-    };
-
-    setTimeout(() => {
-      if (!live() || !lastPanel) { inGraduatedView = false; isScanning = false; flushQueue(); return; }
-
-      const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
-      if (!btns.length) {
-        toggleBack();
-        setTimeout(() => { if (live()) { inGraduatedView = false; isScanning = false; addButtons(); flushQueue(); } }, 350);
-        return;
-      }
-
-      const candidates = btns.map(btn => extractGradTokenInfo(btn)).filter(Boolean);
-
-      computeGradSimilarities(candidates, (withScores) => {
-        if (!live()) return; // aborted — panel already being toggled back by abortScan
-
-        const unique = withScores.filter(d => {
-          if (!d.ca) return true;
-          return !normalCAKeys.has(d.ca);
-        });
-        const top3 = unique.slice(0, 3);
-        console.log('🎓 Top 3:', top3.map(d => `${d.ticker} ${d.match.toFixed(1)}%`));
-
-        toggleBack();
-
-        setTimeout(() => {
-          if (!live()) return; // aborted between toggle and timeout
-          inGraduatedView = false;
-          isScanning = false;
-
-          // Panel re-rendered during scan — re-associate overlay buttons with new QB elements
-          // so orphan cleanup in addButtons() doesn't destroy them (they'd appear together with proxies)
-          if (lastPanel) {
-            const newOriginals = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
-            const taken = new Set();
-            addedBtns.forEach(overlayBtn => {
-              for (const orig of newOriginals) {
-                if (taken.has(orig)) continue;
-                const row = orig.closest('[class*="max-h-[64px]"]');
-                const divs = row?.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
-                const t = divs?.[0]?.textContent.trim() || '';
-                const n = divs?.[1]?.textContent.trim() || divs?.[0]?.textContent.trim() || '';
-                if (t === overlayBtn._ticker || n === overlayBtn._name) {
-                  overlayBtn._original = orig;
-                  orig.dataset.qbAdded = 'true';
-                  taken.add(orig);
-                  break;
-                }
-              }
-            });
-          }
-
-          addButtons();      // picks up any new tokens, removes true orphans
-          updatePositions(); // position normal buttons — they paint THIS frame
-          flushQueue();
-
-          // Proxies in next frame so normal buttons are visible first
-          setTimeout(() => {
-            removeGradProxyBtns();
-            top3.forEach(data => {
-              const proxy = createGradProxy(data);
-              document.body.appendChild(proxy);
-              gradProxyBtns.push(proxy);
-            });
-            scheduleUpdate();
-          }, 0);
-        }, 350);
-      });
-    }, 350);
-    } // end doScan
-
-    waitAndScan();
-  }
-
-  function executeGradClick(data) {
-    if (!lastPanel) return;
-    const toggleBtn = getGraduatedToggleBtn(lastPanel);
-    if (!toggleBtn) return;
-
-    frozen = true;
-    isScanning = true;
-    panelIsGraduated = true;
-    clickQueue = null;
-    removeGradProxyBtns();
-    if (freezeTimer) clearTimeout(freezeTimer);
-
-    toggleBtn.click();
-
-    setTimeout(() => {
-      if (!lastPanel) { isScanning = false; frozen = false; return; }
-      const btns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
-      let targetBtn = null;
-      for (const btn of btns) {
-        const row = btn.closest('[class*="max-h-[64px]"]');
-        if (!row) continue;
-        const truncateDivs = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
-        const t = truncateDivs[0]?.textContent.trim() || '';
-        const n = truncateDivs[1]?.textContent.trim() || truncateDivs[0]?.textContent.trim() || '';
-        if ((data.ticker && t === data.ticker) || (data.name && n === data.name)) {
-          targetBtn = btn; break;
-        }
-      }
-
-      if (targetBtn) {
-        fireClick(targetBtn);
-        console.log('✅ Grad click:', data.ticker || data.name);
-      }
-
-      panelIsGraduated = false;
-      toggleBtn.click();
-      setTimeout(() => { isScanning = false; frozen = false; flushQueue(); }, 350);
-    }, 350);
-  }
-
   // ======= POSITION & LAYOUT =======
 
   function updatePositions() {
@@ -864,15 +454,13 @@
       if (!originalBtn) return;
       const rect = originalBtn.getBoundingClientRect();
       if (rect.top < 50 || rect.bottom > window.innerHeight + 200 || !shouldShowButton(originalBtn)) {
-        // Keep visible while frozen/scanning to avoid layout flicker
-        if (!frozen && !isScanning) newBtn.style.display = 'none';
+        newBtn.style.display = 'none';
         return;
       }
       const data = getTokenData(newBtn);
       if (data) visible.push({ newBtn, originalBtn, rect, data });
     });
 
-    // All visible buttons (gold included) go into the normal section
     const normalCandidates = visible;
 
     let sortedNormal = normalCandidates;
@@ -880,40 +468,19 @@
       const datas     = normalCandidates.map(v => v.data);
       const sorted    = sortNormal(datas, newPair);
       sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
-      // Hide visible buttons that didn't make the cut (avoids stale/overlapping positions)
       const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
       normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
     }
 
-    if (sortedNormal.length === 0 && gradProxyBtns.length === 0) return;
+    if (sortedNormal.length === 0) return;
 
-    // No normal visible but grad proxies exist — use panel's first QB button for geometry
-    if (sortedNormal.length === 0) {
-      const firstBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      if (!firstBtn) { gradProxyBtns.forEach(p => { p.style.display = 'none'; }); return; }
-      const firstRect = firstBtn.getBoundingClientRect();
-      const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
-      const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
-      const lp2       = firstRect.left - 621.5;
-      gradProxyBtns.forEach((proxy, i) => {
-        if (!proxy.isConnected) return;
-        proxy.style.left    = lp2 + 'px';
-        proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
-        proxy.style.display = '';
-        proxy.style.opacity = '1';
-      });
-      return;
-    }
-
-    // slot1Top = top of panel's first QB row (stack always starts at top regardless of match position)
     const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-    const slot1Top = firstPanelBtn?.getBoundingClientRect().top ?? Math.min(...sortedNormal.map(v => v.rect.top));
+    const slot1Top  = firstPanelBtn?.getBoundingClientRect().top ?? Math.min(...sortedNormal.map(v => v.rect.top));
     const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
                       (sortedNormal.length > 1 ? Math.abs(sortedNormal[1].rect.top - sortedNormal[0].rect.top) : 64);
     const leftPos   = sortedNormal[0].rect.left - 621.5;
 
-    // Position normal buttons (sorted — includes gold)
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
       newBtn.style.left    = leftPos + 'px';
       newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
@@ -925,17 +492,6 @@
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
     });
-
-    // Graduated proxies (from panel toggle scan only) — 1-slot gap after normal
-    const proxyStart = sortedNormal.length + 1;
-    gradProxyBtns.forEach((proxy, i) => {
-      if (!proxy.isConnected) return;
-      proxy.style.left    = leftPos + 'px';
-      proxy.style.top     = (slot1Top + (proxyStart + i) * rowHeight) + 'px';
-      proxy.style.display = '';
-      proxy.style.opacity = '1';
-    });
-
   }
 
   function scheduleUpdate() {
@@ -973,16 +529,14 @@
     const zIndex     = panel.parentElement?.style.zIndex;
     const wasVisible = isPanelVisible;
     const hadSearch  = hasActiveSearch;
-    isPanelVisible  = (!zIndex || zIndex !== '-9999');
+    isPanelVisible   = (!zIndex || zIndex !== '-9999');
     hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
-    if (!hadSearch && hasActiveSearch) referenceLocked = true;
     if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
   }
 
   document.addEventListener('click', (e) => {
     const qbImg = e.target.closest('img.qb-coin-img');
     if (qbImg) {
-      // Normal button: click the row's div[role="button"] to open the token
       const parentBtn = addedBtns.find(b => b.contains(qbImg));
       if (parentBtn?._original) {
         const row    = parentBtn._original.closest('[class*="max-h-[64px]"]');
@@ -991,9 +545,6 @@
         const rowBtn = parentBtn._original.closest('div[role="button"]');
         if (rowBtn) { fireClick(rowBtn); return; }
       }
-      // Grad proxy button: navigate via CA
-      const proxyBtn = gradProxyBtns.find(b => b.contains(qbImg));
-      if (proxyBtn?._gradData?.ca) { window.location.href = `/meme/${proxyBtn._gradData.ca}`; return; }
       return;
     }
 
@@ -1009,23 +560,14 @@
     const panel = [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => isSearchPanel(el));
     if (panel && panel.contains(clickedImg)) return;
-    referenceLocked = false;
     setReference(clickedImg.src);
   }, true);
 
   window.addEventListener('axiomPrefetchStart', () => {
-    referenceLocked = true;
-    const wasInGrad = abortScan();
-    if (!wasInGrad) ensureNormalView();
     removeButtons();
-    removeGradProxyBtns();
-    freezeButtons();
-    waitingForNewPair = true;
   });
 
   function addButtons() {
-    if (inGraduatedView) return;
-
     const candidates = document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
     const panel      = [...candidates].find(el => isSearchPanel(el));
 
@@ -1033,13 +575,6 @@
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
       lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
-      return;
-    }
-
-    // Panel physically in graduated — don't process graduated tokens as normal.
-    // If we're waiting for a new pair, retry in 100ms: chip class change won't trigger the observer.
-    if (isGraduatedChipActive(panel)) {
-      if (waitingForNewPair) setTimeout(addButtons, 100);
       return;
     }
 
@@ -1083,7 +618,7 @@
       newBtn.style.overflow = 'visible';
       newBtn.style.left     = (rect.left - 621.5) + 'px';
       newBtn.style.top      = rect.top + 'px';
-      newBtn.style.display  = 'none'; // always start hidden; updatePositions reveals in correct sorted order
+      newBtn.style.display  = 'none';
 
       if (coinImg) {
         const imgEl = document.createElement('img');
@@ -1131,13 +666,7 @@
           if (rowBtn) { fireClick(rowBtn); return; }
           return;
         }
-        if (frozen || isScanning) {
-          clickQueue = newBtn;
-          const wasInGrad = abortScan();
-          if (wasInGrad) { setTimeout(() => flushQueue(), 370); }
-          else { flushQueue(); }
-        }
-        else { fireClick(originalBtn); }
+        fireClick(originalBtn);
       });
 
       updateBadge(newBtn, onBadgeDone);
@@ -1145,33 +674,17 @@
       updateNameLabel(newBtn);
     });
 
-    // Always position synchronously when new buttons were added.
-    // Buttons start as display:none so without this they would never appear.
-    // Must be sync (not scheduleUpdate) so correct order is the very first paint.
-    if (prepared.length > 0) {
-      updatePositions();
-      if (waitingForNewPair) {
-        waitingForNewPair = false;
-        const hasSpecial = addedBtns.some(btn => {
-          const bg = btn.style.background || '';
-          return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
-        });
-        if (!hasSpecial) setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
-        else flushQueue();
-      }
-    }
+    if (prepared.length > 0) updatePositions();
   }
 
   const observer = new MutationObserver(() => {
     checkClickSearchReference();
-    checkTopPulseReference(); // must run before addButtons so referencePixels is fresh for sync capture
+    checkTopPulseReference();
     addButtons();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
+  console.log('🚀 Axiom QBuy v9.0 — normal only');
 })();
-
-
-
