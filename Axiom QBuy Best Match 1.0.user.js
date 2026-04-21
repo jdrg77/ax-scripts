@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      5.8211
+// @version      5.85211
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -200,7 +200,7 @@
     const el = document.createElement('button');
     el.setAttribute('data-qbm-mini', rowCA);
     el.style.position       = 'fixed';
-    el.style.zIndex         = '10000';
+    el.style.zIndex         = '99999';
     el.style.display        = 'none';
     el.style.overflow       = 'visible';
     el.style.background     = 'rgba(20,20,30,0.92)';
@@ -245,11 +245,12 @@
     amountEl.style.cssText = 'font-size:11px;font-weight:700;font-family:monospace;color:#fff;pointer-events:none;text-align:center;line-height:1.2;';
     el.appendChild(amountEl);
 
-    // Ticker/name label above button
+    // Ticker/name label — separate fixed element so transform:scale doesn't clip it
     const label = document.createElement('div');
     label.className = 'qbm-label';
-    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;overflow:visible;z-index:10001;';
-    el.appendChild(label);
+    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
+    document.body.appendChild(label);
+    el._label = label;
 
     // Age + MC bar below button (mirrors QBuy's qb-info-bar)
     const infoBar = document.createElement('div');
@@ -284,6 +285,7 @@
   function getOrCreateMiniBtn(rowCA) {
     const existing = miniPool.get(rowCA);
     if (existing?.isConnected) return existing;
+    if (existing?._label?.isConnected) existing._label.remove();
     return createMiniBtn(rowCA);
   }
 
@@ -295,7 +297,7 @@
 
   function updateMiniButtons() {
     if (isPanelVisible()) {
-      miniPool.forEach(el => { if (el.isConnected) el.style.display = 'none'; });
+      miniPool.forEach(el => { if (el.isConnected) el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; });
       return;
     }
 
@@ -353,10 +355,13 @@
       const amountEl = el.querySelector('.qbm-amount');
       if (amountEl && amountEl.textContent !== (best.solText || '')) amountEl.textContent = best.solText || '';
 
-      const label = el.querySelector('.qbm-label');
+      const label = el._label;
       if (label) {
-        const nameText = (best.ticker || best.name || '').slice(0, 25);
+        const nameText = best.name || best.ticker || '';
         if (label.textContent !== nameText) label.textContent = nameText;
+        label.style.left    = (posLeft + (btnW * 0.7842) / 2) + 'px';
+        label.style.top     = (posTop - 18) + 'px';
+        label.style.display = '';
       }
 
       const ageEl = el.querySelector('.qbm-age');
@@ -377,7 +382,7 @@
     });
 
     miniPool.forEach((el, key) => {
-      if (!activeKeys.has(key) && el.isConnected) el.style.display = 'none';
+      if (!activeKeys.has(key) && el.isConnected) { el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; }
     });
   }
 
@@ -475,5 +480,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v5.8211');
+  console.log('⭐ Axiom QBuy Best Match v5.8521');
 })();
