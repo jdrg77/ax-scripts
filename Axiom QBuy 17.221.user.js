@@ -1,7 +1,7 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      7.991
+// @version      8.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -253,12 +253,13 @@
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
 
-    // Gold/green = special (always above). Blue = only if exact name/ticker + match > 50%, oldest first
+    // Gold/green = special (always above). Blue = top 3 oldest with name/ticker match + match > 50%
     const special = tokens.filter(t => t.isGold || t.isGreen);
     const blues   = tokens
       .filter(t => !t.isGold && !t.isGreen)
       .filter(t => (sameName(t) || sameTicker(t)) && t.match > 50)
-      .sort(sortByOldest);
+      .sort(sortByOldest)
+      .slice(0, 3);
 
     function sortRest(list) {
       const ageDays = t => t.ageHours / 24;
@@ -327,14 +328,15 @@
     return badge;
   }
 
-  function updateBadge(newBtn) {
+  function updateBadge(newBtn, onDone) {
+    const done        = onDone || scheduleUpdate;
     const badge       = getOrCreateBadge(newBtn);
     const originalBtn = newBtn._original;
-    if (!originalBtn) return;
+    if (!originalBtn) { if (onDone) onDone(); return; }
     const row     = originalBtn.closest('[class*="max-h-[64px]"]');
     const coinImg = getRealImage(row);
-    if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; return; }
-    if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; return; }
+    if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; if (onDone) onDone(); return; }
+    if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; if (onDone) onDone(); return; }
     getPixels(coinImg.src, (rowPixels) => {
       const pct = pixelSimilarity(referencePixels, rowPixels);
       newBtn._matchPct = pct ?? 0;
@@ -345,11 +347,17 @@
         badge.style.color       = badgeColor(pct);
         badge.style.borderColor = badgeColor(pct);
       }
-      scheduleUpdate();
+      done();
     });
   }
 
-  function updateAllBadges() { addedBtns.forEach(btn => updateBadge(btn)); }
+  function updateAllBadges() {
+    const btns = [...addedBtns];
+    if (!btns.length) return;
+    let pending = btns.length;
+    const done = () => { if (--pending <= 0) scheduleUpdate(); };
+    btns.forEach(btn => updateBadge(btn, done));
+  }
 
   function getTokenName(originalBtn) {
     const row = originalBtn.closest('[class*="max-h-[64px]"]');
@@ -834,6 +842,9 @@
       const datas     = normalCandidates.map(v => v.data);
       const sorted    = sortNormal(datas, newPair);
       sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
+      // Hide visible buttons that didn't make the cut (avoids stale/overlapping positions)
+      const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
+      normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
     }
 
     if (sortedNormal.length === 0 && gradProxyBtns.length === 0) return;
@@ -1058,6 +1069,9 @@
     });
 
     // Phase 2: batch append + wire up (no more layout reads after this)
+    let pendingBadges = prepared.length;
+    const onBadgeDone = () => { if (--pendingBadges <= 0) scheduleUpdate(); };
+
     prepared.forEach(({ originalBtn, newBtn, coinImg }) => {
       const colorSync = new MutationObserver(() => {
         newBtn.style.background = originalBtn.style.background;
@@ -1088,7 +1102,7 @@
         else { fireClick(originalBtn); }
       });
 
-      updateBadge(newBtn);
+      updateBadge(newBtn, onBadgeDone);
       updateInfoBar(newBtn);
       updateNameLabel(newBtn);
     });
