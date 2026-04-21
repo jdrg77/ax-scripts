@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -14,20 +14,24 @@
 
   // Session Map: pairKey → { ticker, name, imgSrc, matchPct }
   const sessionBest = new Map();
+  // Mini button pool: pairKey → DOM element
+  const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
 
   // === Helpers ===
 
-  function getPairKey() {
-    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
-    if (!rows.length) return null;
-    const row      = rows[0];
+  function getRowPairKey(row) {
     const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
     const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
     const ticker   = tickerEl?.textContent.trim() || '';
     const name     = nameEl?.textContent.trim()   || '';
     return (ticker || name) ? (ticker + '|' + name).toLowerCase() : null;
+  }
+
+  function getPairKey() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    return rows.length ? getRowPairKey(rows[0]) : null;
   }
 
   function getQBButtons() {
@@ -50,6 +54,12 @@
     return btn.querySelector('img.qb-coin-img')?.src || null;
   }
 
+  function badgeColor(pct) {
+    if (pct >= 75) return '#78ffa0';
+    if (pct >= 50) return '#ffd700';
+    return '#ff6b6b';
+  }
+
   function fireClick(el) {
     const r  = el.getBoundingClientRect();
     const cx = r.left + r.width  / 2;
@@ -57,6 +67,20 @@
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev =>
       el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
     );
+  }
+
+  function findLiveBtn(best) {
+    const allBtns = getQBButtons();
+    let target = best.imgSrc
+      ? allBtns.find(btn => getBtnImgSrc(btn) === best.imgSrc) || null
+      : null;
+    if (!target) {
+      target = allBtns.find(btn =>
+        (best.ticker && btn._ticker === best.ticker) ||
+        (best.name   && btn._name   === best.name)
+      ) || null;
+    }
+    return target;
   }
 
   // === Glow ===
@@ -78,12 +102,11 @@
   }
 
   function updateGlow() {
-    const btns  = getQBButtons();
-    let maxPct  = -1;
-
+    const btns = getQBButtons();
+    let maxPct = -1;
     btns.forEach(btn => { const p = getBadgePct(btn); if (p > maxPct) maxPct = p; });
 
-    // Track ref size while buttons are visible
+    // Track reference size while buttons are visible
     if (btns.length) {
       const r = btns[0].getBoundingClientRect();
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
@@ -103,122 +126,174 @@
     if (!existing || maxPct > existing.matchPct) {
       const best = winners[0];
       sessionBest.set(key, {
-        ticker:   best._ticker  || '',
-        name:     best._name    || '',
+        ticker:   best._ticker || '',
+        name:     best._name   || '',
         imgSrc:   getBtnImgSrc(best),
         matchPct: maxPct
       });
     }
   }
 
-  // === Mini button ===
+  // === Mini buttons ===
 
-  const mini = { el: null, img: null, badge: null, label: null };
+  function createMiniBtn(pairKey) {
+    // Clone QB overlay button for visual consistency (same Axiom classes + style)
+    // zoom: 0.75 scales everything (button + children) to 75% without breaking layout
+    const refBtn = getQBButtons()[0];
+    let el;
+    if (refBtn) {
+      el = refBtn.cloneNode(false); // shallow: gets Axiom classes, no QBuy children
+      el.removeAttribute('data-qb-added');
+      el.style.zoom = '0.75';
+    } else {
+      el = document.createElement('button');
+      el.style.background   = 'rgba(20,20,30,0.92)';
+      el.style.border       = '1.5px solid rgba(255,215,0,0.7)';
+      el.style.borderRadius = '6px';
+      el.style.cursor       = 'pointer';
+    }
 
-  function ensureMini() {
-    if (mini.el?.isConnected) return;
+    el.setAttribute('data-qbm-mini', pairKey);
+    el.style.position = 'fixed';
+    el.style.zIndex   = '10000';
+    el.style.display  = 'none';
+    el.style.overflow = 'visible';
 
-    const el = document.createElement('button');
-    el.setAttribute('data-qbm', '1');
-    el.style.cssText = 'position:fixed;z-index:10000;display:none;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:3px 5px;background:rgba(0,0,0,0.88);border:1.5px solid #ffd700;border-radius:6px;cursor:pointer;overflow:visible;box-sizing:border-box;pointer-events:auto;';
-    el.addEventListener('click', onMiniBtnClick);
+    // Coin image — same layout as QBuy (left:-66px), zoom scales it automatically
+    const coinImg = document.createElement('img');
+    coinImg.className = 'qbm-coin-img';
+    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    el.appendChild(coinImg);
 
-    const img = document.createElement('img');
-    img.style.cssText = 'border-radius:50%;object-fit:cover;flex-shrink:0;display:block;';
-    el.appendChild(img);
-
+    // Match% badge
     const badge = document.createElement('span');
-    badge.style.cssText = 'font-size:9px;font-weight:700;font-family:monospace;color:#ffd700;line-height:1;';
+    badge.className = 'qbm-badge';
+    badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;';
     el.appendChild(badge);
 
-    const label = document.createElement('span');
-    label.style.cssText = 'font-size:8px;font-weight:600;font-family:monospace;color:#ccc;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    // Name label
+    const label = document.createElement('div');
+    label.className = 'qbm-label';
+    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
     el.appendChild(label);
 
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const best = sessionBest.get(pairKey);
+      if (best) executeBest(best);
+    });
+
     document.body.appendChild(el);
-    mini.el    = el;
-    mini.img   = img;
-    mini.badge = badge;
-    mini.label = label;
+    miniPool.set(pairKey, el);
+    return el;
   }
 
-  function updateMiniBtn() {
-    const key = getPairKey();
-    if (!key) { if (mini.el) mini.el.style.display = 'none'; return; }
+  function getOrCreateMiniBtn(pairKey) {
+    const existing = miniPool.get(pairKey);
+    if (existing?.isConnected) return existing;
+    return createMiniBtn(pairKey);
+  }
 
-    const best = sessionBest.get(key);
-    if (!best || best.matchPct < 0) { if (mini.el) mini.el.style.display = 'none'; return; }
-
+  function updateMiniButtons() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
-    if (!rows.length) { if (mini.el) mini.el.style.display = 'none'; return; }
+    const activeKeys = new Set();
 
-    const topRow = rows[0];
-    const rect   = topRow.getBoundingClientRect();
-    if (rect.width < 10) { if (mini.el) mini.el.style.display = 'none'; return; }
+    rows.forEach(row => {
+      const key  = getRowPairKey(row);
+      if (!key) return;
+      const best = sessionBest.get(key);
+      if (!best) return;
 
-    ensureMini();
+      const rect = row.getBoundingClientRect();
+      if (rect.width < 10 || rect.bottom < 0 || rect.top > window.innerHeight) return;
 
-    // Size: 75% of normal QB button, min 36px
-    const miniH = Math.max(Math.round(lastNormalSize.h * 0.75), 36);
-    const miniW = Math.max(Math.round(lastNormalSize.w * 0.75), 40);
-    const imgSz = Math.round(miniH * 0.5);
+      activeKeys.add(key);
 
-    // Anchor to right edge of pulse row, vertically centered
-    mini.el.style.width  = miniW + 'px';
-    mini.el.style.height = miniH + 'px';
-    mini.el.style.left   = (rect.right - miniW - 6) + 'px';
-    mini.el.style.top    = (rect.top + rect.height / 2 - miniH / 2) + 'px';
+      const el = getOrCreateMiniBtn(key);
 
-    // Update children only if changed
-    if (mini.img.src !== (best.imgSrc || '')) {
-      mini.img.src              = best.imgSrc || '';
-      mini.img.style.width      = imgSz + 'px';
-      mini.img.style.height     = imgSz + 'px';
-      mini.img.style.display    = best.imgSrc ? 'block' : 'none';
-    }
-    const pctText = best.matchPct.toFixed(1) + '%';
-    if (mini.badge.textContent !== pctText) mini.badge.textContent = pctText;
-    const nameText = (best.name || best.ticker).slice(0, 10);
-    if (mini.label.textContent !== nameText) mini.label.textContent = nameText;
-    mini.label.style.maxWidth = miniW + 'px';
+      // Position: right edge of row, slightly below vertical center
+      const miniH = lastNormalSize.h * 0.75;
+      const miniW = lastNormalSize.w * 0.75;
+      el.style.left = (rect.right - miniW - 6) + 'px';
+      el.style.top  = (rect.top + rect.height * 0.62 - miniH / 2) + 'px';
 
-    mini.el.style.display = 'flex';
+      // Update children
+      const coinImg = el.querySelector('.qbm-coin-img');
+      const badge   = el.querySelector('.qbm-badge');
+      const label   = el.querySelector('.qbm-label');
+
+      if (coinImg && coinImg.src !== (best.imgSrc || '')) coinImg.src = best.imgSrc || '';
+      if (badge) {
+        const pctText = best.matchPct.toFixed(1) + '%';
+        if (badge.textContent !== pctText) badge.textContent = pctText;
+        const col = badgeColor(best.matchPct);
+        badge.style.color       = col;
+        badge.style.borderColor = col;
+      }
+      if (label) {
+        const nameText = (best.name || best.ticker).slice(0, 14);
+        if (label.textContent !== nameText) label.textContent = nameText;
+      }
+
+      el.style.display = '';
+    });
+
+    // Hide mini buttons whose rows are not currently in view
+    miniPool.forEach((el, key) => {
+      if (!activeKeys.has(key) && el.isConnected) el.style.display = 'none';
+    });
   }
 
-  function onMiniBtnClick(e) {
-    e.stopPropagation();
-    e.preventDefault();
+  // === Buy execution ===
 
-    const key = getPairKey();
-    if (!key) return;
-    const best = sessionBest.get(key);
-    if (!best) return;
+  function getSearchPanel() {
+    return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+      .find(el => el.querySelector('input') || el.querySelector('[class*="group/quickBuyButton"]')) || null;
+  }
 
-    const allBtns = getQBButtons();
+  function typeInPanel(panel, text) {
+    const input = panel.querySelector('input');
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
 
-    // Primary: match by coin image src (avoids same-name confusion)
-    let target = best.imgSrc
-      ? allBtns.find(btn => getBtnImgSrc(btn) === best.imgSrc) || null
-      : null;
+  function executeBest(best) {
+    // Immediate: overlay button already visible
+    const live = findLiveBtn(best);
+    if (live) { fireClick(live); return; }
 
-    // Fallback: match by ticker then name
-    if (!target) {
-      target = allBtns.find(btn =>
-        (best.ticker && btn._ticker === best.ticker) ||
-        (best.name   && btn._name   === best.name)
-      ) || null;
-    }
+    // Open panel and search for the token
+    window.axiomUserOpen = true;
 
-    if (target) {
-      fireClick(target);
+    const doSearch = () => {
+      const panel = getSearchPanel();
+      if (!panel) { window.axiomUserOpen = false; return; }
+      typeInPanel(panel, best.name || best.ticker);
+      setTimeout(() => {
+        const target = findLiveBtn(best);
+        if (target) fireClick(target);
+        else console.log('⭐ QBM: token not found in panel results');
+        setTimeout(() => { window.axiomUserOpen = false; }, 400);
+      }, 400);
+    };
+
+    if (!getSearchPanel()) {
+      const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
+      if (!searchBtn) { window.axiomUserOpen = false; return; }
+      searchBtn.click();
+      setTimeout(doSearch, 150);
     } else {
-      console.log('⭐ QBM: best match button not visible — open the panel first');
+      doSearch();
     }
   }
 
   // === Main loop ===
 
-  setInterval(() => { updateGlow(); updateMiniBtn(); }, 50);
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.0');
+  console.log('⭐ Axiom QBuy Best Match v1.1');
 })();
