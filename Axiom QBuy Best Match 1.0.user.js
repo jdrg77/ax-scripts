@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -266,8 +266,8 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2;
-        posTop  = sr.bottom - btnH;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 65;
+        posTop  = sr.bottom - btnH - 25;
       } else {
         posLeft = rect.right - btnW - 4;
         posTop  = rect.top + rect.height / 2 - btnH / 2;
@@ -400,5 +400,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.1');
+  console.log('⭐ Axiom QBuy Best Match v2.2');
 })();
