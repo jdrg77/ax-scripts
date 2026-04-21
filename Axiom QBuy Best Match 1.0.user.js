@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -166,16 +166,15 @@
   function createMiniBtn(rowCA) {
     const el = document.createElement('button');
     el.setAttribute('data-qbm-mini', rowCA);
-    el.style.position     = 'fixed';
-    el.style.zIndex       = '10000';
-    el.style.display      = 'none';
-    el.style.overflow     = 'visible';
-    el.style.background   = 'rgba(20,20,30,0.92)';
-    el.style.border       = '1.5px solid rgba(255,215,0,0.7)';
-    el.style.borderRadius = '6px';
-    el.style.cursor       = 'pointer';
-    el.style.display      = 'flex';
-    el.style.alignItems   = 'center';
+    el.style.position       = 'fixed';
+    el.style.zIndex         = '99999';
+    el.style.display        = 'none';
+    el.style.overflow       = 'visible';
+    el.style.background     = 'rgba(20,20,30,0.92)';
+    el.style.border         = '1.5px solid rgba(255,215,0,0.7)';
+    el.style.borderRadius   = '6px';
+    el.style.cursor         = 'pointer';
+    el.style.alignItems     = 'center';
     el.style.justifyContent = 'center';
 
     // Coin image (left side, same as QBuy overlay buttons)
@@ -238,14 +237,6 @@
     return createMiniBtn(rowCA);
   }
 
-  // Find the element showing "X sol" in the pulse row (user's balance column)
-  function findSolEl(row) {
-    for (const el of row.querySelectorAll('span, div, p')) {
-      if (el.children.length === 0 && /[\d.,]+\s*sol/i.test(el.textContent)) return el;
-    }
-    return null;
-  }
-
   function updateMiniButtons() {
     const rows      = document.querySelectorAll('[class*="group/pulseRow"]');
     const activeKeys = new Set();
@@ -268,12 +259,12 @@
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
-      // Position centered on the "0 sol" element if found, else right-align in row
-      const solEl = findSolEl(row);
+      // Position centered within the "0 SOL" div (absolute z-20 right-0 bottom-0 w-1/3 h-full)
+      const solDiv = row.querySelector('[class*="z-20"][class*="absolute"][class*="right-0"][class*="bottom-0"]');
       let posLeft, posTop;
-      if (solEl) {
-        const sr = solEl.getBoundingClientRect();
-        posLeft = sr.left + sr.width / 2 - btnW / 2;
+      if (solDiv) {
+        const sr = solDiv.getBoundingClientRect();
+        posLeft = sr.left + sr.width  / 2 - btnW / 2;
         posTop  = sr.top  + sr.height / 2 - btnH / 2;
       } else {
         posLeft = rect.right - btnW - 4;
@@ -314,7 +305,7 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      el.style.display = 'flex';
+      el.style.display        = 'flex';
     });
 
     miniPool.forEach((el, key) => {
@@ -407,5 +398,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.8');
+  console.log('⭐ Axiom QBuy Best Match v1.9');
 })();
