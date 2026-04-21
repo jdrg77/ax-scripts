@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.0
+// @version      7.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -220,6 +220,7 @@
         imgSrc:   getBtnImgSrc(winner),
         matchPct: overallMax,
         isGrad:   !!winner._isGrad,
+        platform: getBtnPlatform(winner),
         age,
         mc,
         solText:  getBtnSolText(winner),
@@ -389,9 +390,14 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      const btnCol = badgeColor(best.matchPct);
-      el.style.border    = `1.5px solid ${btnCol}`;
-      el.style.boxShadow = `0 0 8px 2px ${btnCol}40`;
+      const platBorder = best.platform === 'pump' ? '#ffd700'
+                       : best.platform === 'bonk' ? '#ff8c00'
+                       : badgeColor(best.matchPct);
+      const platGlow   = best.platform === 'pump' ? 'rgba(120,255,160,0.7)'
+                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
+                       : badgeColor(best.matchPct) + '40';
+      el.style.border    = `1.5px solid ${platBorder}`;
+      el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
     });
