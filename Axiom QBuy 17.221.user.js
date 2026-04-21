@@ -989,7 +989,7 @@
 
     // Panel physically in graduated — don't process graduated tokens as normal.
     // If we're waiting for a new pair, retry in 100ms: chip class change won't trigger the observer.
-    if (isGraduatedChipActive(panel)) {
+    if (isGraduatedChipActive(panel) && inGraduatedView) {
       if (waitingForNewPair) setTimeout(addButtons, 100);
       return;
     }
