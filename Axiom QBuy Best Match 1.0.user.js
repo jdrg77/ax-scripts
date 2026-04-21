@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      5.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -189,7 +189,7 @@
     // Coin image (left side, same as QBuy overlay buttons)
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
-    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 0 0 1px rgba(255,255,255,0.35),0 2px 8px rgba(0,0,0,0.4);';
     coinImg.addEventListener('click', e => {
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -342,6 +342,11 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
+      // Button color by match %
+      const btnCol = badgeColor(best.matchPct);
+      el.style.border     = `1.5px solid ${btnCol}`;
+      el.style.boxShadow  = `0 0 8px 2px ${btnCol}40`;
+
       el.style.display        = 'flex';
     });
 
@@ -422,7 +427,7 @@
       // 100ms for panel to update + 500ms extra for graduated toggle
       const preDelay = 100 + (best.isGrad ? 500 : 0);
       setTimeout(() => {
-        waitForNewBtn(prevBtns, 700, target => {
+        waitForNewBtn(prevBtns, 1158, target => {
           if (target) target.click();
           else console.log('⭐ QBM: no new QB button found after search for', query);
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
@@ -444,5 +449,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v4.0');
+  console.log('⭐ Axiom QBuy Best Match v5.0');
 })();
