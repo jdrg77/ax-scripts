@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1167,6 +1167,7 @@
   setInterval(() => { checkTopPulseReference(); }, 500);
 
 })();
+
 
 
 
