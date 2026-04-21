@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      5.821
+// @version      5.8211
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -148,27 +148,36 @@
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
     }
 
-    // Glow: non-specials only (specials already highlighted by gold/green color)
-    const glowCandidates = btns.filter(btn => !isSpecial(btn));
-    let glowMax = -1;
-    glowCandidates.forEach(btn => { const p = getBadgePct(btn); if (p > glowMax) glowMax = p; });
+    // Pick winner: top of normal group vs top of grad group, compared by tier then %
+    const normalBtns = btns.filter(btn => !btn._gradData);
+    const gradBtns   = btns.filter(btn =>  btn._gradData);
+    const topNormal  = normalBtns[0] || null;
+    const topGrad    = gradBtns[0]   || null;
+    let winner;
+    if (!topNormal && !topGrad) { clearGlows(); return; }
+    else if (!topGrad)   winner = topNormal;
+    else if (!topNormal) winner = topGrad;
+    else {
+      const pN = getBadgePct(topNormal), pG = getBadgePct(topGrad);
+      const tier = p => p >= 75 ? 2 : p >= 50 ? 1 : 0;
+      const tN = tier(pN), tG = tier(pG);
+      winner = tN !== tG ? (tN > tG ? topNormal : topGrad) : (pN >= pG ? topNormal : topGrad);
+    }
+    const overallMax = getBadgePct(winner);
+
+    // Glow: highlight the winner in the QB buttons
     clearGlows();
-    if (glowMax >= 0) {
-      const winners = glowCandidates.filter(btn => getBadgePct(btn) === glowMax);
-      winners.forEach(btn => applyGlow(btn));
-      lastGlowBtns = winners;
+    if (overallMax >= 0) {
+      applyGlow(winner);
+      lastGlowBtns = [winner];
     }
 
-    // Session Map: ALL buttons (including specials), keyed by top pulse row CA
-    if (!btns.length) return;
+    if (overallMax < 0) return;
+    // Session Map: keyed by top pulse row CA
     const rowCA = getTopCA();
     if (!rowCA) return;
-    let overallMax = -1;
-    btns.forEach(btn => { const p = getBadgePct(btn); if (p > overallMax) overallMax = p; });
-    if (overallMax < 0) return;
     const existing = sessionBest.get(rowCA);
     if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
-      const winner = btns.find(btn => getBadgePct(btn) === overallMax);
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
@@ -466,5 +475,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v5.821');
+  console.log('⭐ Axiom QBuy Best Match v5.8211');
 })();
