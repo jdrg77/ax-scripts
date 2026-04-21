@@ -478,9 +478,10 @@
   }
 
   function shouldShowButton(originalBtn) {
-    if (lastPanel && lastPanel.isConnected) return true;
-    const bgColor = originalBtn.style.background || '';
-    return bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
+    const bgColor   = originalBtn.style.background || '';
+    const isSpecial = bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
+    if (isSpecial) return true;
+    return !!(lastPanel && lastPanel.isConnected && isPanelVisible);
   }
 
   function getCoinImage(originalBtn) {
