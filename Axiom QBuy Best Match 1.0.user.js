@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.3
+// @version      7.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -86,6 +86,11 @@
   function getBtnPlatform(btn) {
     if (btn._isGrad) return btn.platform || 'other';
     return btn._platform || 'other';
+  }
+
+  function getBtnHasDex(btn) {
+    if (btn._isGrad) return false;
+    return !!btn._hasDex;
   }
 
   function getCAFromBtn(btn) {
@@ -225,6 +230,7 @@
         matchPct: overallMax,
         isGrad:   !!winner._isGrad,
         platform: getBtnPlatform(winner),
+        hasDex:   getBtnHasDex(winner),
         age,
         mc,
         solText:  getBtnSolText(winner),
@@ -394,13 +400,17 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      const platBorder = best.platform === 'pump' ? '#ffd700'
+      const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
+      const platBorder = pumpDex                  ? '#78ffa0'
+                       : best.platform === 'pump' ? '#ffd700'
                        : best.platform === 'bonk' ? '#ff8c00'
                        : badgeColor(best.matchPct);
-      const platGlow   = best.platform === 'pump' ? 'rgba(120,255,160,0.7)'
+      const platGlow   = pumpDex                  ? 'rgba(120,255,160,0.7)'
+                       : best.platform === 'pump' ? 'rgba(255,215,0,0.6)'
                        : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
                        : badgeColor(best.matchPct) + '40';
-      const platBg     = (best.platform === 'pump' || best.isGrad) ? 'rgba(120,255,160,0.85)'
+      const platBg     = pumpDex                  ? 'rgba(120,255,160,0.85)'
+                       : best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
                        : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
                        : 'rgba(20,20,30,0.92)';
       el.style.background = platBg;
@@ -540,5 +550,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v6.2 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.4 — two-tab graduated support');
 })();
