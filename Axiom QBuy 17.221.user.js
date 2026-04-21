@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.3
+// @version      8.31
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1150,12 +1150,11 @@
     // Must be sync (not scheduleUpdate) so correct order is the very first paint.
     if (prepared.length > 0) updatePositions();
 
-    if (waitingForNewPair && addedBtns.length > 0) {
+    if (waitingForNewPair) {
+      // Normal buttons already placed synchronously by updatePositions() above.
+      // Scan graduated whether or not normals exist — if none, graduated is the only option.
       waitingForNewPair = false;
-      const visibleNormals = addedBtns.filter(btn => btn.style.display !== 'none').length;
-      if (visibleNormals > 0) {
-        setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
-      }
+      setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
     }
   }
 
@@ -1169,3 +1168,4 @@
   setInterval(() => { checkTopPulseReference(); }, 500);
 
 })();
+
