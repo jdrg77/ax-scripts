@@ -492,10 +492,25 @@
   function checkTopPulseReference() {
     if (referenceLocked) return;
     const topImg = getTopPulseRowImage();
-    if (topImg?.src && topImg.src !== lastTopSrc) {
-      lastTopSrc = topImg.src;
-      setReference(topImg.src);
+    if (!topImg?.src || topImg.src === lastTopSrc) return;
+    lastTopSrc = topImg.src;
+    // Sync capture: image is already decoded in DOM when observer fires
+    if (topImg.complete && topImg.naturalWidth > 0) {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = SAMPLE_SIZE;
+        c.getContext('2d').drawImage(topImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+        const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+        referenceSource = topImg.src;
+        referencePixels = pixels;
+        updateAllBadges();
+        updateGradProxyBadges();
+        scheduleUpdate();
+        return;
+      } catch(e) {}
     }
+    // Fallback: async load (referencePixels becomes null temporarily)
+    setReference(topImg.src);
   }
 
   let clickSearchCheckTimeout = null;
@@ -1120,8 +1135,8 @@
 
   const observer = new MutationObserver(() => {
     checkClickSearchReference();
+    checkTopPulseReference(); // must run before addButtons so referencePixels is fresh for sync capture
     addButtons();
-    checkTopPulseReference();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
