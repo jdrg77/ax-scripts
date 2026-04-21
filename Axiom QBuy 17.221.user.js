@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.5
+// @version      8.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1148,12 +1148,12 @@
     // Always position synchronously when new buttons were added.
     // Buttons start as display:none so without this they would never appear.
     // Must be sync (not scheduleUpdate) so correct order is the very first paint.
-    if (prepared.length > 0) updatePositions();
-
-    if (waitingForNewPair && isPanelVisible && addedBtns.length > 0) {
-      if (prepared.length === 0) updatePositions(); // reveal existing buttons if panel just became visible
-      waitingForNewPair = false;
-      setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+    if (prepared.length > 0) {
+      updatePositions();
+      if (waitingForNewPair) {
+        waitingForNewPair = false;
+        setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+      }
     }
   }
 
@@ -1167,7 +1167,6 @@
   setInterval(() => { checkTopPulseReference(); }, 500);
 
 })();
-
 
 
 
