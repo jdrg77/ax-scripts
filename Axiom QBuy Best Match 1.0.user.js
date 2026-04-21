@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -160,20 +160,11 @@
     el.style.display  = 'none';
     el.style.overflow = 'visible';
 
-    const coinImg = document.createElement('img');
-    coinImg.className = 'qbm-coin-img';
-    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
-    el.appendChild(coinImg);
-
+    // Badge at top-right corner — no external elements sticking into row content
     const badge = document.createElement('span');
     badge.className = 'qbm-badge';
-    badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;';
+    badge.style.cssText = 'position:absolute;top:-9px;right:-9px;font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(badge);
-
-    const label = document.createElement('div');
-    label.className = 'qbm-label';
-    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
-    el.appendChild(label);
 
     el.addEventListener('click', e => {
       e.stopPropagation();
@@ -218,21 +209,13 @@
       el.style.left = (rect.right - miniW - 6) + 'px';
       el.style.top  = (rect.top + rect.height * 0.62 - miniH / 2) + 'px';
 
-      const coinImg = el.querySelector('.qbm-coin-img');
-      const badge   = el.querySelector('.qbm-badge');
-      const label   = el.querySelector('.qbm-label');
-
-      if (coinImg && coinImg.src !== (best.imgSrc || '')) coinImg.src = best.imgSrc || '';
+      const badge = el.querySelector('.qbm-badge');
       if (badge) {
         const pctText = best.matchPct.toFixed(1) + '%';
         if (badge.textContent !== pctText) badge.textContent = pctText;
         const col = badgeColor(best.matchPct);
         badge.style.color       = col;
         badge.style.borderColor = col;
-      }
-      if (label) {
-        const nameText = (best.name || best.ticker).slice(0, 14);
-        if (label.textContent !== nameText) label.textContent = nameText;
       }
 
       el.style.display = '';
@@ -328,5 +311,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.5');
+  console.log('⭐ Axiom QBuy Best Match v1.6');
 })();
