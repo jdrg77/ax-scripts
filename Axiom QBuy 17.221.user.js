@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.91
+// @version      9.92
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -455,6 +455,7 @@
       btn.style.top       = (top0 + (startSlot + i) * rowHeight) + 'px';
       btn.style.cursor    = 'pointer';
       btn.style.outline   = `2px solid ${platColor}`;
+      if (token.platform === 'bonk') btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
       btn.style.boxShadow = platGlow;
       btn._isGradProxy = true;
       btn._gradToken   = token;
