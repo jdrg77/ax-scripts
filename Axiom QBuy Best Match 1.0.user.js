@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,27 +12,41 @@
 (function () {
   'use strict';
 
-  // Session Map: pairKey → { ticker, name, imgSrc, matchPct }
+  // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad }
+  // rowCA = Contract Address of the pulse row (unique key, no collisions)
+  // ca    = Contract Address of the best-match QB button (what to search by)
   const sessionBest = new Map();
-  // Mini button pool: pairKey → DOM element
+  // Mini button pool: rowCA → DOM element
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
 
-  // === Helpers ===
+  // === CA extraction ===
 
-  function getRowPairKey(row) {
-    const tickerEl = row.querySelector('div[class*="min-w-0"][class*="truncate"][class*="text-[16px]"]');
-    const nameEl   = row.querySelector('div[class*="min-w-0"][class*="flex-1"][class*="overflow-hidden"]');
-    const ticker   = tickerEl?.textContent.trim() || '';
-    const name     = nameEl?.textContent.trim()   || '';
-    return (ticker || name) ? (ticker + '|' + name).toLowerCase() : null;
+  function getCAFromRow(row) {
+    const link = row.querySelector('a[href*="pump.fun/coin/"]');
+    if (link) {
+      const m = link.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    return null;
   }
 
-  function getPairKey() {
+  function getCAFromBtn(btn) {
+    // Grad proxies expose ca directly
+    if (btn._gradData?.ca) return btn._gradData.ca;
+    // Normal overlay buttons: read from _original's panel row
+    const row = btn._original?.closest?.('[class*="max-h-[64px]"]');
+    if (row) return getCAFromRow(row);
+    return null;
+  }
+
+  function getTopCA() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
-    return rows.length ? getRowPairKey(rows[0]) : null;
+    return rows.length ? getCAFromRow(rows[0]) : null;
   }
+
+  // === QB button helpers ===
 
   function getQBButtons() {
     return [...document.querySelectorAll('button')].filter(btn =>
@@ -54,33 +68,15 @@
     return btn.querySelector('img.qb-coin-img')?.src || null;
   }
 
+  function isSpecial(btn) {
+    const bg = btn.style.background || '';
+    return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
+  }
+
   function badgeColor(pct) {
     if (pct >= 75) return '#78ffa0';
     if (pct >= 50) return '#ffd700';
     return '#ff6b6b';
-  }
-
-  function fireClick(el) {
-    const r  = el.getBoundingClientRect();
-    const cx = r.left + r.width  / 2;
-    const cy = r.top  + r.height / 2;
-    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev =>
-      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    );
-  }
-
-  function findLiveBtn(best) {
-    const allBtns = getQBButtons();
-    let target = best.imgSrc
-      ? allBtns.find(btn => getBtnImgSrc(btn) === best.imgSrc) || null
-      : null;
-    if (!target) {
-      target = allBtns.find(btn =>
-        (best.ticker && btn._ticker === best.ticker) ||
-        (best.name   && btn._name   === best.name)
-      ) || null;
-    }
-    return target;
   }
 
   // === Glow ===
@@ -101,21 +97,15 @@
     lastGlowBtns = [];
   }
 
-  function isSpecial(btn) {
-    const bg = btn.style.background || '';
-    return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
-  }
-
   function updateGlow() {
     const btns = getQBButtons();
 
-    // Track reference size while buttons are visible
     if (btns.length) {
       const r = btns[0].getBoundingClientRect();
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
     }
 
-    // --- Glow: non-specials only (specials are already gold/green) ---
+    // Glow: non-specials only (specials already highlighted by gold/green color)
     const glowCandidates = btns.filter(btn => !isSpecial(btn));
     let glowMax = -1;
     glowCandidates.forEach(btn => { const p = getBadgePct(btn); if (p > glowMax) glowMax = p; });
@@ -126,35 +116,35 @@
       lastGlowBtns = winners;
     }
 
-    // --- Session Map: best from ALL buttons including specials ---
+    // Session Map: ALL buttons (including specials), keyed by top pulse row CA
     if (!btns.length) return;
-    const key = getPairKey();
-    if (!key) return;
+    const rowCA = getTopCA();
+    if (!rowCA) return;
     let overallMax = -1;
     btns.forEach(btn => { const p = getBadgePct(btn); if (p > overallMax) overallMax = p; });
     if (overallMax < 0) return;
-    const existing = sessionBest.get(key);
+    const existing = sessionBest.get(rowCA);
     if (!existing || overallMax > existing.matchPct) {
-      const best = btns.find(btn => getBadgePct(btn) === overallMax);
-      sessionBest.set(key, {
-        ticker:   best._ticker  || '',
-        name:     best._name    || '',
-        imgSrc:   getBtnImgSrc(best),
+      const winner = btns.find(btn => getBadgePct(btn) === overallMax);
+      sessionBest.set(rowCA, {
+        rowCA,
+        ca:       getCAFromBtn(winner),  // match button's own CA (for panel search)
+        ticker:   winner._ticker  || '',
+        name:     winner._name    || '',
+        imgSrc:   getBtnImgSrc(winner),
         matchPct: overallMax,
-        isGrad:   !!best._gradData
+        isGrad:   !!winner._gradData
       });
     }
   }
 
   // === Mini buttons ===
 
-  function createMiniBtn(pairKey) {
-    // Clone QB overlay button for visual consistency (same Axiom classes + style)
-    // zoom: 0.75 scales everything (button + children) to 75% without breaking layout
+  function createMiniBtn(rowCA) {
     const refBtn = getQBButtons()[0];
     let el;
     if (refBtn) {
-      el = refBtn.cloneNode(false); // shallow: gets Axiom classes, no QBuy children
+      el = refBtn.cloneNode(false);
       el.removeAttribute('data-qb-added');
     } else {
       el = document.createElement('button');
@@ -164,25 +154,22 @@
       el.style.cursor       = 'pointer';
     }
 
-    el.setAttribute('data-qbm-mini', pairKey);
+    el.setAttribute('data-qbm-mini', rowCA);
     el.style.position = 'fixed';
     el.style.zIndex   = '10000';
     el.style.display  = 'none';
     el.style.overflow = 'visible';
 
-    // Coin image — same layout as QBuy (left:-66px), zoom scales it automatically
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
     coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
     el.appendChild(coinImg);
 
-    // Match% badge
     const badge = document.createElement('span');
     badge.className = 'qbm-badge';
     badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;';
     el.appendChild(badge);
 
-    // Name label
     const label = document.createElement('div');
     label.className = 'qbm-label';
     label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
@@ -192,45 +179,45 @@
       e.stopPropagation();
       e.stopImmediatePropagation();
       e.preventDefault();
-      const best = sessionBest.get(pairKey);
+      const best = sessionBest.get(rowCA);
       if (best) executeBest(best);
     });
 
     document.body.appendChild(el);
-    miniPool.set(pairKey, el);
+    miniPool.set(rowCA, el);
     return el;
   }
 
-  function getOrCreateMiniBtn(pairKey) {
-    const existing = miniPool.get(pairKey);
+  function getOrCreateMiniBtn(rowCA) {
+    const existing = miniPool.get(rowCA);
     if (existing?.isConnected) return existing;
-    return createMiniBtn(pairKey);
+    return createMiniBtn(rowCA);
   }
 
   function updateMiniButtons() {
-    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    const rows      = document.querySelectorAll('[class*="group/pulseRow"]');
     const activeKeys = new Set();
+    const seenCAs    = new Set(); // skip duplicate CAs (same token in multiple rows)
 
     rows.forEach(row => {
-      const key  = getRowPairKey(row);
-      if (!key) return;
-      const best = sessionBest.get(key);
+      const rowCA = getCAFromRow(row);
+      if (!rowCA || seenCAs.has(rowCA)) return;
+      seenCAs.add(rowCA);
+
+      const best = sessionBest.get(rowCA);
       if (!best) return;
 
       const rect = row.getBoundingClientRect();
       if (rect.width < 10 || rect.bottom < 0 || rect.top > window.innerHeight) return;
 
-      activeKeys.add(key);
+      activeKeys.add(rowCA);
 
-      const el = getOrCreateMiniBtn(key);
-
-      // Position: right edge of row, slightly below vertical center
-      const miniH = lastNormalSize.h * 0.75;
-      const miniW = lastNormalSize.w * 0.75;
+      const el     = getOrCreateMiniBtn(rowCA);
+      const miniH  = lastNormalSize.h * 0.75;
+      const miniW  = lastNormalSize.w * 0.75;
       el.style.left = (rect.right - miniW - 6) + 'px';
       el.style.top  = (rect.top + rect.height * 0.62 - miniH / 2) + 'px';
 
-      // Update children
       const coinImg = el.querySelector('.qbm-coin-img');
       const badge   = el.querySelector('.qbm-badge');
       const label   = el.querySelector('.qbm-label');
@@ -251,7 +238,6 @@
       el.style.display = '';
     });
 
-    // Hide mini buttons whose rows are not currently in view
     miniPool.forEach((el, key) => {
       if (!activeKeys.has(key) && el.isConnected) el.style.display = 'none';
     });
@@ -273,7 +259,6 @@
     return true;
   }
 
-  // Manually undo the prefetch z-index hiding so QBuy sees the panel as visible
   function bringPanelToFront() {
     const panel = getSearchPanel();
     if (!panel) return;
@@ -295,11 +280,12 @@
     }
   }
 
-  // Poll until a live QB button appears for `best` (or timeout)
-  function waitForBtn(best, timeoutMs, cb) {
+  // After CA search, Axiom returns exactly 1 result → any visible QB button is correct
+  function waitForAnyBtn(timeoutMs, cb) {
     const start = Date.now();
     const poll = () => {
-      const target = findLiveBtn(best);
+      const btns   = getQBButtons();
+      const target = btns.find(btn => getBadgePct(btn) >= 0) || btns[0] || null;
       if (target) { cb(target); return; }
       if (Date.now() - start > timeoutMs) { cb(null); return; }
       setTimeout(poll, 50);
@@ -311,25 +297,24 @@
     window.axiomUserOpen = true;
 
     const doExecute = () => {
-      // Bring panel to front (reverses prefetch hide) so QBuy makes overlay buttons visible
       bringPanelToFront();
-      const panel = getSearchPanel();
-      if (panel) typeInPanel(panel, best.name || best.ticker);
+      const panel   = getSearchPanel();
+      // CA search returns exactly 1 result → no ambiguity; fall back to name/ticker
+      const query   = best.ca || best.name || best.ticker;
+      if (panel) typeInPanel(panel, query);
 
-      // Graduated tokens need extra time for panel toggle (500ms exception vs QBuy's 350ms)
-      const preDelay = best.isGrad ? 500 : 0;
+      // 100ms for panel to update + 500ms extra for graduated toggle
+      const preDelay = 100 + (best.isGrad ? 500 : 0);
       setTimeout(() => {
-        // Poll up to 700ms for the matching overlay button, then click it
-        waitForBtn(best, 700, target => {
+        waitForAnyBtn(700, target => {
           if (target) target.click();
-          else console.log('⭐ QBM: token not found after search');
+          else console.log('⭐ QBM: no QB button found after search for', query);
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
         });
       }, preDelay);
     };
 
     if (!getSearchPanel()) {
-      // Panel doesn't exist — open it first
       const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
       if (!searchBtn) { window.axiomUserOpen = false; return; }
       searchBtn.click();
@@ -343,5 +328,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v1.4');
+  console.log('⭐ Axiom QBuy Best Match v1.5');
 })();
