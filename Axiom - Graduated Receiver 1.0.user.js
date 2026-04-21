@@ -229,7 +229,9 @@
 
     const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
     console.log('🔍 Grad: scanning', btns.length, 'buttons, chip active:', isGraduatedChipActive(panel));
-    const infos = btns.map(extractBtnInfo).filter(Boolean);
+    const rawInfos = btns.map(extractBtnInfo);
+    console.log('📋 Grad: rawInfos:', rawInfos.map((x,i) => `[${i}]:${x ? (x.ticker||'empty') : 'NULL'}`).join(' '));
+    const infos = rawInfos.filter(Boolean);
     if (!infos.length) {
       console.log('⚠️ Grad: 0 tokens found in panel');
       channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq });
