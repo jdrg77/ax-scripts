@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.0
+// @version      8.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -23,6 +23,7 @@
   let referencePixels = null;
   let referenceSource = null;
 
+  let wrapperObserver     = null;
   let frozen              = false;
   let clickQueue          = null;
   let freezeTimer         = null;
@@ -292,7 +293,9 @@
       sortedSpecial = sortRest(special);
     }
 
-    return [...sortedSpecial, ...blues];
+    const restBlues = tokens.filter(t => !t.isGold && !t.isGreen && !blues.includes(t)).sort(sortByOldest);
+
+    return [...sortedSpecial, ...blues, ...restBlues];
   }
 
   function getNewestBtn() {
@@ -1002,10 +1005,16 @@
     if (panel !== lastPanel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
+      if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
       lastPanel = panel;
       expandPanel(panel);
       scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
       scrollEl.addEventListener('scroll', updatePositions);
+      const wrapper = panel.parentElement;
+      if (wrapper) {
+        wrapperObserver = new MutationObserver(() => checkPanelState(panel));
+        wrapperObserver.observe(wrapper, { attributes: true, attributeFilter: ['style'] });
+      }
     }
 
     for (let i = addedBtns.length - 1; i >= 0; i--) {
