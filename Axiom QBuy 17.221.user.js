@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.2
+// @version      7.991
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -23,9 +23,6 @@
   let referencePixels = null;
   let referenceSource = null;
 
-  let wrapperObserver     = null;
-  let proxiesReleasedAt   = 0;
-  const GRAD_PROXY_DELAY  = 700;
   let frozen              = false;
   let clickQueue          = null;
   let freezeTimer         = null;
@@ -295,9 +292,7 @@
       sortedSpecial = sortRest(special);
     }
 
-    const restBlues = tokens.filter(t => !t.isGold && !t.isGreen && !blues.includes(t)).sort(sortByOldest);
-
-    return [...sortedSpecial, ...blues, ...restBlues];
+    return [...sortedSpecial, ...blues];
   }
 
   function getNewestBtn() {
@@ -467,7 +462,6 @@
   function removeGradProxyBtns() {
     gradProxyBtns.forEach(btn => btn.remove());
     gradProxyBtns.length = 0;
-    proxiesReleasedAt = 0;
   }
 
   function removeButtons() {
@@ -763,8 +757,6 @@
               document.body.appendChild(proxy);
               gradProxyBtns.push(proxy);
             });
-            proxiesReleasedAt = Date.now() + GRAD_PROXY_DELAY;
-            setTimeout(scheduleUpdate, GRAD_PROXY_DELAY + 16);
             scheduleUpdate();
           }, 0);
         }, 350);
@@ -854,10 +846,8 @@
       const rowEl2    = firstBtn.closest('[class*="max-h-[64px]"]');
       const rowH2     = rowEl2?.getBoundingClientRect().height || 64;
       const lp2       = firstRect.left - 621.5;
-      const proxyReady2 = isPanelVisible && proxiesReleasedAt > 0 && Date.now() >= proxiesReleasedAt;
       gradProxyBtns.forEach((proxy, i) => {
         if (!proxy.isConnected) return;
-        if (!proxyReady2) { proxy.style.display = 'none'; return; }
         proxy.style.left    = lp2 + 'px';
         proxy.style.top     = (firstRect.top + i * rowH2) + 'px';
         proxy.style.display = '';
@@ -887,12 +877,10 @@
       updateNameLabel(newBtn);
     });
 
-    // Graduated proxies — appear only after GRAD_PROXY_DELAY ms since panel opened
-    const proxyReady = isPanelVisible && proxiesReleasedAt > 0 && Date.now() >= proxiesReleasedAt;
+    // Graduated proxies (from panel toggle scan only) — 1-slot gap after normal
     const proxyStart = sortedNormal.length + 1;
     gradProxyBtns.forEach((proxy, i) => {
       if (!proxy.isConnected) return;
-      if (!proxyReady) { proxy.style.display = 'none'; return; }
       proxy.style.left    = leftPos + 'px';
       proxy.style.top     = (slot1Top + (proxyStart + i) * rowHeight) + 'px';
       proxy.style.display = '';
@@ -939,15 +927,7 @@
     isPanelVisible  = (!zIndex || zIndex !== '-9999');
     hasActiveSearch  = (panel.querySelector('input')?.value?.trim() || '').length > 0;
     if (!hadSearch && hasActiveSearch) referenceLocked = true;
-    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) {
-      if (!wasVisible && isPanelVisible && proxiesReleasedAt > 0) {
-        const remaining = proxiesReleasedAt - Date.now();
-        scheduleUpdate();
-        if (remaining > 0) setTimeout(scheduleUpdate, remaining + 16);
-      } else {
-        scheduleUpdate();
-      }
-    }
+    if (wasVisible !== isPanelVisible || hadSearch !== hasActiveSearch) scheduleUpdate();
   }
 
   document.addEventListener('click', (e) => {
@@ -1009,7 +989,7 @@
 
     // Panel physically in graduated — don't process graduated tokens as normal.
     // If we're waiting for a new pair, retry in 100ms: chip class change won't trigger the observer.
-    if (isGraduatedChipActive(panel) && inGraduatedView) {
+    if (isGraduatedChipActive(panel)) {
       if (waitingForNewPair) setTimeout(addButtons, 100);
       return;
     }
@@ -1022,16 +1002,10 @@
     if (panel !== lastPanel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
-      if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
       lastPanel = panel;
       expandPanel(panel);
       scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
       scrollEl.addEventListener('scroll', updatePositions);
-      const wrapper = panel.parentElement;
-      if (wrapper) {
-        wrapperObserver = new MutationObserver(() => checkPanelState(panel));
-        wrapperObserver.observe(wrapper, { attributes: true, attributeFilter: ['style'] });
-      }
     }
 
     for (let i = addedBtns.length - 1; i >= 0; i--) {
