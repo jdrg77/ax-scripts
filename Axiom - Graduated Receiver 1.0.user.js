@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.5-debug
+// @version      1.6-debug
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -78,6 +78,23 @@
     }
   }
 
+  function expandPanel(panel) {
+    if (panel.dataset.expanded) return;
+    panel.dataset.expanded = 'true';
+    panel.style.setProperty('max-height', '90vh', 'important');
+    panel.style.setProperty('height',     '90vh', 'important');
+    const wrapper = panel.parentElement;
+    if (wrapper) {
+      const current = wrapper.style.transform;
+      const match   = current.match(/translate\((.+)px,\s*(.+)px\)/);
+      if (match) {
+        wrapper.style.transform = `translate(${parseFloat(match[1])}px, ${parseFloat(match[2]) + 50}px)`;
+      } else {
+        wrapper.style.marginTop = '50px';
+      }
+    }
+  }
+
   function typeInPanel(name) {
     const input = getPanel()?.querySelector('input');
     if (!input) return;
@@ -87,12 +104,14 @@
   }
 
   function ensurePanelOpen(cb) {
-    if (getPanel()) { cb(); return; }
+    const existing = getPanel();
+    if (existing) { expandPanel(existing); cb(); return; }
     const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
     if (!searchBtn) { console.log('❌ Grad: no search button found'); cb(); return; }
     searchBtn.click();
     const wait = setInterval(() => {
-      if (getPanel()) { clearInterval(wait); cb(); }
+      const panel = getPanel();
+      if (panel) { clearInterval(wait); expandPanel(panel); cb(); }
     }, 50);
     setTimeout(() => { clearInterval(wait); if (!getPanel()) console.log('❌ Grad: panel never opened'); }, 2000);
   }
@@ -291,5 +310,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.5-debug active (panel visible)');
+  console.log('📡 Axiom Graduated Receiver v1.6-debug active (panel visible, expanded)');
 })();
