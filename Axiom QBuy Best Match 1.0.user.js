@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.5
+// @version      7.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -27,7 +27,8 @@
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
-  let gradCandidates = [];
+  let gradCandidates  = [];
+  let gradSeqApplied  = -1; // seq of the last accepted GRAD_DATA
 
   // ======= BROADCHANNEL =======
 
@@ -36,6 +37,7 @@
     if (msg.type === 'GRAD_DATA') {
       if (msg.seq !== undefined && msg.seq !== window.__gradSeq) return; // stale scan, discard
       gradCandidates = (msg.tokens || []).map(t => ({ ...t, _isGrad: true }));
+      gradSeqApplied = msg.seq ?? -1;
       updateGlow();
     }
   };
@@ -46,6 +48,7 @@
     prefetchCount++;
     prefetchCooldown = true;
     gradCandidates   = []; // clear stale grad data for previous pair
+    gradSeqApplied   = -1;
     let lastSnapshot = getQBButtons();
     const checkChanged = setInterval(() => {
       const curr = getQBButtons();
@@ -189,7 +192,8 @@
     }
 
     const topNormal = normalBtns[0] || null;
-    const topGrad   = gradCandidates[0] || null; // already sorted by match desc from Tab 2
+    const seqOk     = gradSeqApplied !== -1 && gradSeqApplied === (window.__gradSeq ?? -1);
+    const topGrad   = seqOk ? (gradCandidates[0] || null) : null;
 
     let winner;
     if (!topNormal && !topGrad) { clearGlows(); return; }
@@ -552,5 +556,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.5 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.6 — two-tab graduated support');
 })();
