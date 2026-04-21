@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.785
+// @version      1.786
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -264,13 +264,13 @@
 
     infos.forEach(info => {
       if (!info.imgSrc || !refPixels) {
-        results.push({ ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, match: 0 });
+        results.push({ ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, ca: info.ca, platform: info.platform, match: 0 });
         if (--pending === 0) broadcastResults(results, seq);
         return;
       }
       getPixels(info.imgSrc, pixels => {
         results.push({
-          ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc,
+          ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, ca: info.ca, platform: info.platform,
           match: pixels ? pixelSimilarity(refPixels, pixels) : 0
         });
         if (--pending === 0) broadcastResults(results, seq);
