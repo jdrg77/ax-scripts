@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      5.8
+// @version      5.821
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -22,21 +22,22 @@
   let lastNormalSize = { w: 48, h: 48 };
   let prefetchCount    = 0;
   let prefetchCooldown = false;
+  let cooldownTimer    = null;
 
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
     prefetchCooldown = true;
-    const prevBtns = getQBButtons();
+    let lastSnapshot = getQBButtons();
     let safetyTimer;
     const checkChanged = setInterval(() => {
       const curr = getQBButtons();
-      if (curr.length !== prevBtns.length || curr.some(b => !prevBtns.includes(b))) {
-        clearInterval(checkChanged);
-        clearTimeout(safetyTimer);
-        setTimeout(() => { prefetchCooldown = false; }, 100);
+      if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
+        lastSnapshot = curr;
+        clearTimeout(cooldownTimer);
+        cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
       }
     }, 50);
-    safetyTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 2000);
+    safetyTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
   });
 
   // === CA extraction ===
@@ -238,7 +239,7 @@
     // Ticker/name label above button
     const label = document.createElement('div');
     label.className = 'qbm-label';
-    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
+    label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;overflow:visible;z-index:10001;';
     el.appendChild(label);
 
     // Age + MC bar below button (mirrors QBuy's qb-info-bar)
@@ -345,7 +346,7 @@
 
       const label = el.querySelector('.qbm-label');
       if (label) {
-        const nameText = (best.ticker || best.name || '').slice(0, 14);
+        const nameText = (best.ticker || best.name || '').slice(0, 25);
         if (label.textContent !== nameText) label.textContent = nameText;
       }
 
@@ -465,5 +466,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v5.8');
+  console.log('⭐ Axiom QBuy Best Match v5.821');
 })();
