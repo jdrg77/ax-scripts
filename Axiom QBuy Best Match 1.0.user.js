@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      6.3
+// @version      6.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -468,21 +468,34 @@
       return;
     }
 
-    // Historical token: search by CA for precision
+    // Historical token: open panel, type CA, click first QB button found in panel directly
     const doExecute = () => {
       bringPanelToFront();
-      const panel    = getSearchPanel();
-      const query    = best.ca || best.name || best.ticker;
-      const prevBtns = getQBButtons();
-      if (panel) typeInPanel(panel, query);
+      const panel = getSearchPanel();
+      if (!panel) { window.axiomUserOpen = false; return; }
+      const query = best.ca || best.name || best.ticker;
+      typeInPanel(panel, query);
 
-      setTimeout(() => {
-        waitForNewBtn(prevBtns, 1158, target => {
-          if (target) target.click();
-          else console.log('⭐ QBM: no QB button found for', query);
+      const start = Date.now();
+      const poll = () => {
+        const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+        if (btns.length) {
+          const r = btns[0].getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+            btns[0].dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+          );
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
-        });
-      }, 100);
+          return;
+        }
+        if (Date.now() - start > 1500) {
+          console.log('⭐ QBM: timeout for historical buy', query);
+          window.axiomUserOpen = false;
+          return;
+        }
+        setTimeout(poll, 50);
+      };
+      setTimeout(poll, 100);
     };
 
     if (!getSearchPanel()) {
