@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.6
+// @version      9.85
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -438,7 +438,14 @@
     gradCandidates.slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
-      btn.style.cssText = `position:fixed;z-index:9999;overflow:visible;width:${btnW}px;height:${btnH}px;left:${leftPos}px;top:${top0 + (startSlot + i) * rowHeight}px;background:rgba(80,80,200,0.18);border:1px solid rgba(120,120,255,0.5);border-radius:8px;cursor:pointer;`;
+      btn.style.position = 'fixed';
+      btn.style.zIndex   = '9999';
+      btn.style.overflow = 'visible';
+      btn.style.width    = btnW + 'px';
+      btn.style.height   = btnH + 'px';
+      btn.style.left     = leftPos + 'px';
+      btn.style.top      = (top0 + (startSlot + i) * rowHeight) + 'px';
+      btn.style.cursor   = 'pointer';
       btn._isGradProxy = true;
       btn._gradToken   = token;
 
