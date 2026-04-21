@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.6-debug
+// @version      1.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -163,8 +163,17 @@
       .find(img => img.src && !img.src.startsWith('data:')) || null;
   }
 
+  function getRow(btn) {
+    let el = btn.parentElement;
+    for (let i = 0; i < 6; i++) {
+      if (el?.className?.includes('max-h-[64px]')) return el;
+      el = el?.parentElement;
+    }
+    return null;
+  }
+
   function extractBtnInfo(btn) {
-    const row = btn.closest('[class*="max-h-[64px]"]');
+    const row = getRow(btn);
     if (!row) return null;
     const divs   = row.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]');
     const ticker = divs[0]?.textContent.trim() || '';
@@ -249,12 +258,15 @@
     const panel = getPanel();
     if (!panel) { doScan(id, refPixels, seq); return; }
 
+    let fired = false;
     panelObs = new MutationObserver(() => {
+      if (fired) return;
+      fired = true;
       if (debTimer) clearTimeout(debTimer);
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 150);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 1000);
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 400);
   }
 
   // ======= MESSAGE HANDLING =======
@@ -310,5 +322,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.6-debug active (panel visible, expanded)');
+  console.log('📡 Axiom Graduated Receiver v1.7 active');
 })();
