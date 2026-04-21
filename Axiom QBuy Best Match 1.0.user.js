@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -24,9 +24,14 @@
   // === CA extraction ===
 
   function getCAFromRow(row) {
-    const link = row.querySelector('a[href*="pump.fun/coin/"]');
-    if (link) {
-      const m = link.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
+    const meme = row.querySelector('a[href*="/meme/"]');
+    if (meme) {
+      const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    const pump = row.querySelector('a[href*="pump.fun/coin/"]');
+    if (pump) {
+      const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
       if (m) return m[1];
     }
     return null;
@@ -188,7 +193,13 @@
       e.stopImmediatePropagation();
       e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best?.ca) window.location.href = '/meme/' + best.ca;
+      if (best?.ca) {
+        const a = document.createElement('a');
+        a.href = `/meme/${best.ca}?chain=sol`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     });
     el.appendChild(coinImg);
 
@@ -372,14 +383,23 @@
     }
   }
 
-  // After CA search, Axiom returns exactly 1 result → any visible QB button is correct
-  function waitForAnyBtn(timeoutMs, cb) {
+  // Only click buttons that appeared AFTER the search (not stale prefetch buttons)
+  function waitForNewBtn(prevBtns, timeoutMs, cb) {
     const start = Date.now();
     const poll = () => {
-      const btns   = getQBButtons();
-      const target = btns.find(btn => getBadgePct(btn) >= 0) || btns[0] || null;
-      if (target) { cb(target); return; }
-      if (Date.now() - start > timeoutMs) { cb(null); return; }
+      const current = getQBButtons();
+      const newBtn  = current.find(b => !prevBtns.includes(b) && getBadgePct(b) >= 0)
+                   || current.find(b => !prevBtns.includes(b))
+                   || null;
+      if (newBtn) { cb(newBtn); return; }
+      if (!prevBtns.length && current.length) {
+        cb(current.find(b => getBadgePct(b) >= 0) || current[0]);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        cb(current.find(b => getBadgePct(b) >= 0) || current[0] || null);
+        return;
+      }
       setTimeout(poll, 50);
     };
     poll();
@@ -390,17 +410,17 @@
 
     const doExecute = () => {
       bringPanelToFront();
-      const panel   = getSearchPanel();
-      // CA search returns exactly 1 result → no ambiguity; fall back to name/ticker
-      const query   = best.ca || best.name || best.ticker;
+      const panel    = getSearchPanel();
+      const query    = best.ca || best.name || best.ticker;
+      const prevBtns = getQBButtons(); // snapshot before search
       if (panel) typeInPanel(panel, query);
 
       // 100ms for panel to update + 500ms extra for graduated toggle
       const preDelay = 100 + (best.isGrad ? 500 : 0);
       setTimeout(() => {
-        waitForAnyBtn(700, target => {
+        waitForNewBtn(prevBtns, 700, target => {
           if (target) target.click();
-          else console.log('⭐ QBM: no QB button found after search for', query);
+          else console.log('⭐ QBM: no new QB button found after search for', query);
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
         });
       }, preDelay);
@@ -420,5 +440,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.7');
+  console.log('⭐ Axiom QBuy Best Match v2.8');
 })();
