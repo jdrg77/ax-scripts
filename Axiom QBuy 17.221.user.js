@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -253,10 +253,11 @@
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
 
-    // Gold/green = special (always above). Blue = top 3 oldest with name/ticker match (no async match% needed)
+    // Gold/green = special (always above). Blue = top 3 oldest with name/ticker match.
+    // When user is actively searching, all non-specials qualify (search results are already filtered by axiom).
     const special = tokens.filter(t => t.isGold || t.isGreen);
     const blues   = tokens
-      .filter(t => !t.isGold && !t.isGreen && (sameName(t) || sameTicker(t)))
+      .filter(t => !t.isGold && !t.isGreen && (hasActiveSearch || sameName(t) || sameTicker(t)))
       .sort(sortByOldest)
       .slice(0, 3);
 
