@@ -1,11 +1,11 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.41
+// @version      8.45
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    ue siem
+// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
 // @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
 // ==/UserScript==
 
@@ -1019,6 +1019,7 @@
     if (!wasInGrad) ensureNormalView();
     removeButtons();
     removeGradProxyBtns();
+    freezeButtons();
     waitingForNewPair = true;
   });
 
@@ -1155,7 +1156,8 @@
           const bg = btn.style.background || '';
           return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
         });
-        if (!hasSpecial) { freezeButtons(); setTimeout(() => { if (!isScanning) scanGraduated(); }, 0); }
+        if (!hasSpecial) setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+        else flushQueue();
       }
     }
   }
