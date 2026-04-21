@@ -471,7 +471,7 @@
   }
 
   function shouldShowButton(originalBtn) {
-    if (lastPanel && lastPanel.isConnected) return true;
+    if (isPanelVisible) return true;
     const bgColor = originalBtn.style.background || '';
     return bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
   }
