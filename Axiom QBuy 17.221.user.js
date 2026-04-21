@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.5
+// @version      9.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -431,8 +431,13 @@
       startSlot = 0;
     }
 
-    gradCandidates.slice(0, 5).forEach((token, i) => {
-      const btn = document.createElement('button');
+    const refSource = visible.length
+      ? visible[0]._original
+      : lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+
+    gradCandidates.slice(0, 3).forEach((token, i) => {
+      const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
+      delete btn.dataset.qbAdded;
       btn.style.cssText = `position:fixed;z-index:9999;overflow:visible;width:${btnW}px;height:${btnH}px;left:${leftPos}px;top:${top0 + (startSlot + i) * rowHeight}px;background:rgba(80,80,200,0.18);border:1px solid rgba(120,120,255,0.5);border-radius:8px;cursor:pointer;`;
       btn._isGradProxy = true;
       btn._gradToken   = token;
@@ -565,8 +570,11 @@
       const datas     = normalCandidates.map(v => v.data);
       const sorted    = sortNormal(datas, newPair);
       sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
+      sortedNormal = sortedNormal.slice(0, 5);
       const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
       normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
+    } else {
+      sortedNormal = sortedNormal.slice(0, 5);
     }
 
     if (sortedNormal.length === 0) return;
