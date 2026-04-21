@@ -169,6 +169,13 @@
       if (el?.className?.includes('max-h-[64px]')) return el;
       el = el?.parentElement;
     }
+    let dbg = btn.parentElement;
+    const parents = [];
+    for (let i = 0; i < 6; i++) {
+      parents.push(`[${i}]:${dbg?.className?.substring(0,50)}`);
+      dbg = dbg?.parentElement;
+    }
+    console.log('❌ getRow failed:', parents.join(' | '));
     return null;
   }
 
