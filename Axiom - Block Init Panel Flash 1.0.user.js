@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Block Init Panel Flash
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-start
@@ -14,17 +14,37 @@
 
   let blocked = true;
 
-  window.addEventListener('axiomPrefetchStart', () => { blocked = false; }, { once: true });
+  window.addEventListener('axiomPrefetchStart', () => {
+    blocked = false;
+    obs.disconnect();
+  }, { once: true });
 
-  document.addEventListener('click', e => {
-    if (!blocked)    return;
-    if (e.isTrusted) return;
-    const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
-    if (searchBtn && (e.target === searchBtn || searchBtn.contains(e.target))) {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      e.preventDefault();
+  function hidePanel() {
+    const panel = document.querySelector('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
+    if (!panel) return;
+    const wrapper = panel.parentElement;
+    const overlay = wrapper?.parentElement;
+    if (wrapper) {
+      wrapper.style.setProperty('z-index',        '-9999', 'important');
+      wrapper.style.setProperty('pointer-events', 'none',  'important');
+      wrapper.style.setProperty('transition',     'none',  'important');
+      wrapper.style.setProperty('animation',      'none',  'important');
     }
-  }, true);
+    if (overlay) {
+      overlay.style.setProperty('z-index',         '-9999',       'important');
+      overlay.style.setProperty('pointer-events',  'none',        'important');
+      overlay.style.setProperty('background',      'transparent', 'important');
+      overlay.style.setProperty('backdrop-filter', 'none',        'important');
+      overlay.style.setProperty('transition',      'none',        'important');
+      overlay.style.setProperty('animation',       'none',        'important');
+    }
+  }
+
+  const obs = new MutationObserver(() => { if (blocked) hidePanel(); });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    obs.observe(document.body, { childList: true, subtree: true });
+    hidePanel();
+  });
 
 })();
