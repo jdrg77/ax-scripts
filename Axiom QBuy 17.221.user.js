@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.93
+// @version      9.94
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -855,7 +855,17 @@
     if (prepared.length > 0) updatePositions();
   }
 
+  let lastTopRowKey = '';
   const observer = new MutationObserver(() => {
+    const topRow = document.querySelector('[class*="group/pulseRow"]');
+    if (topRow) {
+      const key = topRow.querySelector('div[role="button"]')?.textContent?.trim() || '';
+      if (key && key !== lastTopRowKey) {
+        lastTopRowKey = key;
+        gradCandidates = [];
+        removeGradProxyBtns();
+      }
+    }
     checkClickSearchReference();
     checkTopPulseReference();
     addButtons();
