@@ -292,7 +292,9 @@
       sortedSpecial = sortRest(special);
     }
 
-    return [...sortedSpecial, ...blues];
+    const restBlues = tokens.filter(t => !t.isGold && !t.isGreen && !blues.includes(t)).sort(sortByOldest);
+
+    return [...sortedSpecial, ...blues, ...restBlues];
   }
 
   function getNewestBtn() {
