@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -239,7 +239,18 @@
     return createMiniBtn(rowCA);
   }
 
+  function isPanelVisible() {
+    const panel = getSearchPanel();
+    if (!panel) return false;
+    return panel.parentElement?.style.zIndex !== '-9999';
+  }
+
   function updateMiniButtons() {
+    if (isPanelVisible()) {
+      miniPool.forEach(el => { if (el.isConnected) el.style.display = 'none'; });
+      return;
+    }
+
     const rows      = document.querySelectorAll('[class*="group/pulseRow"]');
     const activeKeys = new Set();
     const seenCAs    = new Set(); // skip duplicate CAs (same token in multiple rows)
@@ -268,8 +279,8 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 90;
-        posTop  = sr.bottom - btnH - 5;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 83;
+        posTop  = sr.bottom - btnH - 8;
       } else {
         posLeft = rect.right - btnW - 4;
         posTop  = rect.top + rect.height / 2 - btnH / 2;
@@ -402,5 +413,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.4');
+  console.log('⭐ Axiom QBuy Best Match v2.5');
 })();
