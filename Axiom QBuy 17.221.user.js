@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.41
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1016,10 +1016,9 @@
   window.addEventListener('axiomPrefetchStart', () => {
     referenceLocked = true;
     const wasInGrad = abortScan();
-    if (!wasInGrad) ensureNormalView(); // skip if abortScan already clicked toggle (avoid double-click)
+    if (!wasInGrad) ensureNormalView();
     removeButtons();
     removeGradProxyBtns();
-    freezeButtons();
     waitingForNewPair = true;
   });
 
@@ -1150,10 +1149,7 @@
     // Must be sync (not scheduleUpdate) so correct order is the very first paint.
     if (prepared.length > 0) {
       updatePositions();
-      if (waitingForNewPair) {
-        waitingForNewPair = false;
-        setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
-      }
+      if (waitingForNewPair) waitingForNewPair = false;
     }
   }
 
