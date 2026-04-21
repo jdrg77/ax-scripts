@@ -1152,7 +1152,10 @@
 
     if (waitingForNewPair && addedBtns.length > 0) {
       waitingForNewPair = false;
-      setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+      const visibleNormals = addedBtns.filter(btn => btn.style.display !== 'none').length;
+      if (visibleNormals > 0) {
+        setTimeout(() => { if (!isScanning) scanGraduated(); }, 0);
+      }
     }
   }
 
