@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,6 +20,9 @@
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
+  let prefetchFired  = false; // don't save sessionBest until first real new pair
+
+  window.addEventListener('axiomPrefetchStart', () => { prefetchFired = true; });
 
   // === CA extraction ===
 
@@ -148,7 +151,7 @@
     btns.forEach(btn => { const p = getBadgePct(btn); if (p > overallMax) overallMax = p; });
     if (overallMax < 0) return;
     const existing = sessionBest.get(rowCA);
-    if (!existing || overallMax > existing.matchPct) {
+    if (prefetchFired && (!existing || overallMax > existing.matchPct)) {
       const winner = btns.find(btn => getBadgePct(btn) === overallMax);
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
@@ -440,5 +443,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.8');
+  console.log('⭐ Axiom QBuy Best Match v2.9');
 })();
