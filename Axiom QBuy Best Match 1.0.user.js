@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -182,13 +182,20 @@
     // Coin image (left side, same as QBuy overlay buttons)
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
-    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    coinImg.addEventListener('click', e => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const best = sessionBest.get(rowCA);
+      if (best?.ca) window.location.href = '/meme/' + best.ca;
+    });
     el.appendChild(coinImg);
 
     // % badge at top-left corner of coin image
     const pctBadge = document.createElement('span');
     pctBadge.className = 'qbm-pct';
-    pctBadge.style.cssText = 'position:absolute;left:-38px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
+    pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
 
     // SOL amount text centered in button body
@@ -279,8 +286,8 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 83;
-        posTop  = sr.bottom - btnH - 8;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 79;
+        posTop  = sr.bottom - btnH - 10;
       } else {
         posLeft = rect.right - btnW - 4;
         posTop  = rect.top + rect.height / 2 - btnH / 2;
@@ -413,5 +420,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v2.5');
+  console.log('⭐ Axiom QBuy Best Match v2.7');
 })();
