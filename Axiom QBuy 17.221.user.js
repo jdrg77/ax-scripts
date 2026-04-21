@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.9
+// @version      9.91
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -742,10 +742,25 @@
       const newBtn = originalBtn.cloneNode(true);
       newBtn._original = originalBtn;
       newBtn._matchPct = null;
-      const _cacheRow  = originalBtn.closest('[class*="max-h-[64px]"]');
+      let _cacheRow = null;
+      let el = originalBtn.parentElement;
+      for (let i = 0; i < 6; i++) {
+        if (el?.className?.includes('max-h-[64px]')) { _cacheRow = el; break; }
+        el = el?.parentElement;
+      }
       const _cacheDivs = _cacheRow ? _cacheRow.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]') : [];
       newBtn._ticker = _cacheDivs[0]?.textContent.trim() || '';
       newBtn._name   = _cacheDivs[1]?.textContent.trim() || _cacheDivs[0]?.textContent.trim() || '';
+      let _ca = '';
+      if (_cacheRow) {
+        for (const a of _cacheRow.querySelectorAll('a[href]')) {
+          const h = a.href;
+          if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) { _ca = m[1]; break; } }
+          else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { _ca = m[1]; break; } }
+          else if (h.includes('/meme/')) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) _ca = m[1]; }
+        }
+      }
+      newBtn._ca = _ca;
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';

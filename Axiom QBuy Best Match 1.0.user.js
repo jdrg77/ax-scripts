@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      6.4
+// @version      6.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -76,14 +76,7 @@
 
   function getCAFromBtn(btn) {
     if (btn._isGrad) return btn.ca || null;
-    const orig = btn._original;
-    if (!orig) return null;
-    let el = orig.parentElement, row = null;
-    for (let i = 0; i < 6; i++) {
-      if (el?.className?.includes('max-h-[64px]')) { row = el; break; }
-      el = el?.parentElement;
-    }
-    return row ? getCAFromRow(row) : null;
+    return btn._ca || null;
   }
 
   function getTopCA() {
