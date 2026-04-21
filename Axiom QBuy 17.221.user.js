@@ -5,7 +5,7 @@
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
+// @updateURL    ue siem
 // @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20QBuy%2017.221.user.js
 // ==/UserScript==
 
@@ -1149,7 +1149,14 @@
     // Must be sync (not scheduleUpdate) so correct order is the very first paint.
     if (prepared.length > 0) {
       updatePositions();
-      if (waitingForNewPair) waitingForNewPair = false;
+      if (waitingForNewPair) {
+        waitingForNewPair = false;
+        const hasSpecial = addedBtns.some(btn => {
+          const bg = btn.style.background || '';
+          return bg.includes('255, 215, 0') || bg.includes('120, 255, 160');
+        });
+        if (!hasSpecial) { freezeButtons(); setTimeout(() => { if (!isScanning) scanGraduated(); }, 0); }
+      }
     }
   }
 
