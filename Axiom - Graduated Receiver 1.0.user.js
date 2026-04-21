@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.4-debug
+// @version      1.5-debug
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -76,6 +76,14 @@
       overlay.style.setProperty('transition',      'none',        'important');
       overlay.style.setProperty('animation',       'none',        'important');
     }
+  }
+
+  function typeInPanel(name) {
+    const input = getPanel()?.querySelector('input');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, name);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function ensurePanelOpen(cb) {
@@ -250,6 +258,7 @@
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
               if (id !== scanId) return;
+              typeInPanel(msg.name);
               startScan(id, pixels, seq);
             });
           });
@@ -282,5 +291,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.4-debug active (panel visible)');
+  console.log('📡 Axiom Graduated Receiver v1.5-debug active (panel visible)');
 })();
