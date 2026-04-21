@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.7
+// @version      7.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -21,10 +21,8 @@
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
-  let prefetchCount    = 0;
-  let prefetchCooldown = false;
-  let cooldownTimer    = null;
-  let lastSavedCA      = null;
+  let prefetchCount = 0;
+  let lastSavedCA   = null;
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
@@ -43,24 +41,13 @@
     }
   };
 
-  // ======= PREFETCH COOLDOWN =======
+  // ======= PREFETCH START =======
 
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
-    prefetchCooldown = true;
-    gradCandidates   = []; // clear stale grad data for previous pair
-    gradSeqApplied   = -1;
-    lastSavedCA      = null;
-    let lastSnapshot = getQBButtons();
-    const checkChanged = setInterval(() => {
-      const curr = getQBButtons();
-      if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
-        lastSnapshot = curr;
-        clearTimeout(cooldownTimer);
-        cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
-      }
-    }, 50);
-    setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
+    gradCandidates = [];
+    gradSeqApplied = -1;
+    lastSavedCA    = null;
   });
 
   // === CA extraction ===
@@ -226,9 +213,9 @@
     if (overallMax < 0) return;
     const rowCA = getTopCA();
     if (!rowCA) return;
-    if (lastSavedCA && rowCA !== lastSavedCA) { prefetchCooldown = true; gradSeqApplied = -1; gradCandidates = []; return; }
+    if (lastSavedCA && rowCA !== lastSavedCA) { gradSeqApplied = -1; gradCandidates = []; return; }
     const existing = sessionBest.get(rowCA);
-    if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
+    if (prefetchCount > 2 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
@@ -560,5 +547,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.7 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.8 — two-tab graduated support');
 })();
