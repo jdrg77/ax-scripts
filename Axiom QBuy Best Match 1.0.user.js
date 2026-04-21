@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      6.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,7 @@
 
 (function () {
   'use strict';
-  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
+  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
   const gradChannel = new BroadcastChannel('axiom-tabs');
 
@@ -479,5 +479,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v6.0 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v6.1 — two-tab graduated support');
 })();

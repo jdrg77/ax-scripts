@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.0
+// @version      9.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,7 @@
 
 (function () {
   'use strict';
-  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
+  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
   const SAMPLE_SIZE   = 16;
   const addedBtns     = [];
@@ -687,5 +687,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.0 — normal only');
+  console.log('🚀 Axiom QBuy v9.1 — normal only');
 })();

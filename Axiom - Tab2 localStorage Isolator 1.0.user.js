@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Tab2 localStorage Isolator
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-start
@@ -10,10 +10,8 @@
 // ==/UserScript==
 
 (function () {
-  if (new URLSearchParams(location.search).get('tab') === 'grad') {
-    sessionStorage.setItem('axiom-tab', 'grad');
-  }
-  if (sessionStorage.getItem('axiom-tab') !== 'grad') return;
+  const IS_GRAD = new URLSearchParams(location.search).get('tab') === 'grad';
+  if (!IS_GRAD) return;
 
   const KEY     = 'search-only-bonded';
   const origSet = Storage.prototype.setItem;
@@ -29,5 +27,5 @@
     return origGet.call(this, k);
   };
 
-  console.log('🔒 Axiom Tab2 Isolator v1.0 — search-only-bonded locked to graduated');
+  console.log('🔒 Axiom Tab2 Isolator v1.2 — search-only-bonded locked to graduated');
 })();

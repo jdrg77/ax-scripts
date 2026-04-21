@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.6
+// @version      5.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -10,7 +10,7 @@
 
 (function () {
   'use strict';
-  if (sessionStorage.getItem('axiom-tab') === 'grad') return;
+  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
   const gradChannel = new BroadcastChannel('axiom-tabs');
 
@@ -175,5 +175,5 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  console.log('🚀 Axiom Prefetch v5.6 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
+  console.log('🚀 Axiom Prefetch v5.7 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
 })();

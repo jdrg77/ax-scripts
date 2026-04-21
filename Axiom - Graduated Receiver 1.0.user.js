@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,10 +11,8 @@
 
 (function () {
   'use strict';
-  if (new URLSearchParams(location.search).get('tab') === 'grad') {
-    sessionStorage.setItem('axiom-tab', 'grad');
-  }
-  if (sessionStorage.getItem('axiom-tab') !== 'grad') return;
+  const IS_GRAD = new URLSearchParams(location.search).get('tab') === 'grad';
+  if (!IS_GRAD) return;
 
   const SAMPLE_SIZE = 16;
   const channel     = new BroadcastChannel('axiom-tabs');
@@ -79,14 +77,6 @@
     }
   }
 
-  function typeInPanel(name) {
-    const input = getPanel()?.querySelector('input');
-    if (!input) return;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, name);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-
   function ensurePanelOpen(cb) {
     if (getPanel()) { hidePanel(); cb(); return; }
     const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
@@ -96,6 +86,32 @@
       if (getPanel()) { clearInterval(wait); hidePanel(); cb(); }
     }, 50);
     setTimeout(() => clearInterval(wait), 2000);
+  }
+
+  // ======= GRADUATED TOGGLE =======
+
+  function getGraduatedToggleBtn(panel) {
+    return [...panel.querySelectorAll('button')]
+      .find(btn => btn.textContent.trim().includes('Graduated')) || null;
+  }
+
+  function isGraduatedChipActive(panel) {
+    const btn = getGraduatedToggleBtn(panel);
+    return btn ? btn.className.includes('primaryGreen') : false;
+  }
+
+  function ensureGraduatedView(panel, cb) {
+    if (isGraduatedChipActive(panel)) { cb(); return; }
+    const btn = getGraduatedToggleBtn(panel);
+    if (!btn) { cb(); return; }
+    btn.click();
+    const start = Date.now();
+    const poll = () => {
+      if (isGraduatedChipActive(panel)) { cb(); return; }
+      if (Date.now() - start > 500) { cb(); return; }
+      setTimeout(poll, 50);
+    };
+    setTimeout(poll, 50);
   }
 
   // ======= DATA UTILS =======
@@ -144,7 +160,7 @@
   function doScan(id, refPixels) {
     if (id !== scanId) return;
     abortScan();
-    scanId = id; // restore after abort incremented it
+    scanId = id;
 
     const panel = getPanel();
     if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [] }); return; }
@@ -202,8 +218,12 @@
         if (id !== scanId) return;
         ensurePanelOpen(() => {
           if (id !== scanId) return;
-          typeInPanel(msg.name);
-          startScan(id, pixels);
+          const panel = getPanel();
+          if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [] }); return; }
+          ensureGraduatedView(panel, () => {
+            if (id !== scanId) return;
+            startScan(id, pixels);
+          });
         });
       });
     }
@@ -236,5 +256,5 @@
   // Keep panel hidden whenever DOM changes
   new MutationObserver(hidePanel).observe(document.body, { childList: true, subtree: true });
 
-  console.log('📡 Axiom Graduated Receiver v1.0 active');
+  console.log('📡 Axiom Graduated Receiver v1.2 active');
 })();
