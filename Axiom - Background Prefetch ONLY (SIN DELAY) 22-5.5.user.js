@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.9
+// @version      5.91
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -126,6 +126,7 @@
   }
 
   document.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
     const searchBtn = e.target.closest('[class*="ri-search"]')?.closest('button');
     if (searchBtn) { userOpen = true; setTimeout(() => bringToFront(), 10); return; }
     const menuItem = e.target.closest('[role="menuitem"]');
@@ -186,5 +187,5 @@
     setTimeout(tryInitialScan, 50);
   })();
 
-  console.log('🚀 Axiom Prefetch v5.9 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
+  console.log('🚀 Axiom Prefetch v5.91 (SIN DELAY) — broadcasts NEW_PAIR to Tab2');
 })();
