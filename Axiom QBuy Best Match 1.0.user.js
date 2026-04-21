@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      5.0
+// @version      5.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,8 +20,24 @@
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
-  let prefetchCount = 0; // ignore first 2 prefetch fires (initial load noise)
-  window.addEventListener('axiomPrefetchStart', () => { prefetchCount++; });
+  let prefetchCount    = 0;
+  let prefetchCooldown = false;
+
+  window.addEventListener('axiomPrefetchStart', () => {
+    prefetchCount++;
+    prefetchCooldown = true;
+    const prevBtns = getQBButtons();
+    let safetyTimer;
+    const checkChanged = setInterval(() => {
+      const curr = getQBButtons();
+      if (curr.length !== prevBtns.length || curr.some(b => !prevBtns.includes(b))) {
+        clearInterval(checkChanged);
+        clearTimeout(safetyTimer);
+        setTimeout(() => { prefetchCooldown = false; }, 100);
+      }
+    }, 50);
+    safetyTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 2000);
+  });
 
   // === CA extraction ===
 
@@ -150,7 +166,7 @@
     btns.forEach(btn => { const p = getBadgePct(btn); if (p > overallMax) overallMax = p; });
     if (overallMax < 0) return;
     const existing = sessionBest.get(rowCA);
-    if (prefetchCount > 2 && (!existing || overallMax > existing.matchPct)) {
+    if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
       const winner = btns.find(btn => getBadgePct(btn) === overallMax);
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
@@ -449,5 +465,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v5.0');
+  console.log('⭐ Axiom QBuy Best Match v5.8');
 })();
