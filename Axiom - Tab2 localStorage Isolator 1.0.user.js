@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Tab2 localStorage Isolator
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-start
@@ -10,6 +10,9 @@
 // ==/UserScript==
 
 (function () {
+  if (new URLSearchParams(location.search).get('tab') === 'grad') {
+    sessionStorage.setItem('axiom-tab', 'grad');
+  }
   if (sessionStorage.getItem('axiom-tab') !== 'grad') return;
 
   const KEY     = 'search-only-bonded';

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,6 +11,9 @@
 
 (function () {
   'use strict';
+  if (new URLSearchParams(location.search).get('tab') === 'grad') {
+    sessionStorage.setItem('axiom-tab', 'grad');
+  }
   if (sessionStorage.getItem('axiom-tab') !== 'grad') return;
 
   const SAMPLE_SIZE = 16;
