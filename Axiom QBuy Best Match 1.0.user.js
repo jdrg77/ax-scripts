@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      6.5
+// @version      7.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -72,6 +72,20 @@
       if (m) return m[1];
     }
     return null;
+  }
+
+  function getTopRowPlatform() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    if (!rows.length) return 'other';
+    const row = rows[0];
+    if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump"]')) return 'pump';
+    return 'other';
+  }
+
+  function getBtnPlatform(btn) {
+    if (btn._isGrad) return btn.platform || 'other';
+    return btn._platform || 'other';
   }
 
   function getCAFromBtn(btn) {
@@ -171,10 +185,17 @@
     else if (!topGrad)   winner = topNormal;
     else if (!topNormal) winner = topGrad;
     else {
-      const pN = getBadgePct(topNormal), pG = getBadgePct(topGrad);
-      const tier = p => p >= 75 ? 2 : p >= 50 ? 1 : 0;
-      const tN = tier(pN), tG = tier(pG);
-      winner = tN !== tG ? (tN > tG ? topNormal : topGrad) : (pN >= pG ? topNormal : topGrad);
+      const topRowPlat = getTopRowPlatform();
+      const matchN = topRowPlat !== 'other' && getBtnPlatform(topNormal) === topRowPlat;
+      const matchG = topRowPlat !== 'other' && (topGrad.platform || 'other') === topRowPlat;
+      if      (matchN && !matchG) winner = topNormal;
+      else if (matchG && !matchN) winner = topGrad;
+      else {
+        const pN = getBadgePct(topNormal), pG = getBadgePct(topGrad);
+        const tier = p => p >= 75 ? 2 : p >= 50 ? 1 : 0;
+        const tN = tier(pN), tG = tier(pG);
+        winner = tN !== tG ? (tN > tG ? topNormal : topGrad) : (pN >= pG ? topNormal : topGrad);
+      }
     }
 
     const overallMax = getBadgePct(winner);

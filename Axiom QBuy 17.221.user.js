@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.92
+// @version      9.93
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -80,6 +80,15 @@
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
     return getRealImage(rows[0]);
+  }
+
+  function getTopRowPlatform() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    if (!rows.length) return 'other';
+    const row = rows[0];
+    if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump"]')) return 'pump';
+    return 'other';
   }
 
   window.qbSetReference = function (src) { setReference(src); };
@@ -161,10 +170,10 @@
       }
     }
 
-    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0 };
+    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0, platform: newBtn._platform || 'other' };
   }
 
-  function sortNormal(tokens, newPair) {
+  function sortNormal(tokens, newPair, topRowPlat) {
     const normalize       = s => (s || '').toLowerCase().trim();
     const sameName        = t => normalize(t.name)   === normalize(newPair.name);
     const sameTicker      = t => normalize(t.ticker) === normalize(newPair.ticker);
@@ -176,6 +185,14 @@
     const sortByMatchDesc = (a, b) => b.match - a.match;
     const sortByAgeMC     = (a, b) => (a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap);
 
+    const platFirst = (arr, sortFn) => {
+      if (!topRowPlat || topRowPlat === 'other') return [...arr].sort(sortFn);
+      return [
+        ...[...arr].filter(t => t.platform === topRowPlat).sort(sortFn),
+        ...[...arr].filter(t => t.platform !== topRowPlat).sort(sortFn)
+      ];
+    };
+
     const special = tokens.filter(t => t.isGold || t.isGreen);
     const blues   = tokens
       .filter(t => !t.isGold && !t.isGreen && (sameName(t) || sameTicker(t)))
@@ -185,12 +202,12 @@
     function sortRest(list) {
       const ageDays = t => t.ageHours / 24;
       const tier1   = list.filter(t => ageDays(t) < 7 && t.match > 72);
-      const t1High  = tier1.filter(t => t.match > 92).sort(sortByRecent);
-      const t1Low   = tier1.filter(t => t.match <= 92).sort(sortByMatchDesc);
-      const tier2   = list.filter(t => ageDays(t) >= 7 && t.match > 80).sort(sortByRecent);
-      const tier3   = list.filter(t => ageDays(t) >= 7 && t.match >= 75 && t.match <= 80).sort(sortByRecent);
-      const tier4   = list.filter(t => t.match >= 58.21 && t.match < 75).sort(sortByAgeMC);
-      const tier5   = list.filter(t => t.match < 58.21).sort(sortByAgeMC);
+      const t1High  = platFirst(tier1.filter(t => t.match > 92), sortByRecent);
+      const t1Low   = platFirst(tier1.filter(t => t.match <= 92), sortByMatchDesc);
+      const tier2   = platFirst(list.filter(t => ageDays(t) >= 7 && t.match > 80), sortByRecent);
+      const tier3   = platFirst(list.filter(t => ageDays(t) >= 7 && t.match >= 75 && t.match <= 80), sortByRecent);
+      const tier4   = platFirst(list.filter(t => t.match >= 58.21 && t.match < 75), sortByAgeMC);
+      const tier5   = platFirst(list.filter(t => t.match < 58.21), sortByAgeMC);
       return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
 
@@ -200,14 +217,14 @@
 
     if (hasNameTicker) {
       const nt     = special.filter(nameTickerMatch);
-      const ultra  = nt.filter(t => t.match > 85).sort(sortByMatchDesc);
-      const rest   = nt.filter(t => t.match <= 85).sort(sortByRecent);
+      const ultra  = platFirst(nt.filter(t => t.match > 85), sortByMatchDesc);
+      const rest   = platFirst(nt.filter(t => t.match <= 85), sortByRecent);
       const others = special.filter(t => !nameTickerMatch(t));
       sortedSpecial = [...ultra, ...rest, ...sortRest(others)];
     } else if (hasNameOnly) {
       const no     = special.filter(nameOnlyMatch);
-      const recent = no.filter(t => t.ageHours < 24).sort(sortByRecent);
-      const old    = no.filter(t => t.ageHours >= 24).sort(sortByMatchDesc);
+      const recent = platFirst(no.filter(t => t.ageHours < 24), sortByRecent);
+      const old    = platFirst(no.filter(t => t.ageHours >= 24), sortByMatchDesc);
       const others = special.filter(t => !nameOnlyMatch(t));
       sortedSpecial = [...recent, ...old, ...sortRest(others)];
     } else {
@@ -465,6 +482,14 @@
         img.src = token.imgSrc;
         img.className = 'qb-coin-img';
         img.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;flex-shrink:0;position:absolute;left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+        img.addEventListener('click', e => {
+          e.stopPropagation(); e.preventDefault();
+          if (token.ca) {
+            const existing = document.querySelector(`a[href*="${token.ca}"]`);
+            if (existing) existing.click();
+            else { history.pushState({}, '', `/meme/${token.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+          }
+        });
         btn.appendChild(img);
       }
 
@@ -586,7 +611,7 @@
     let sortedNormal = normalCandidates;
     if (newPair && normalCandidates.length > 0) {
       const datas     = normalCandidates.map(v => v.data);
-      const sorted    = sortNormal(datas, newPair);
+      const sorted    = sortNormal(datas, newPair, getTopRowPlatform());
       sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
       sortedNormal = sortedNormal.slice(0, 5);
       const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
@@ -762,6 +787,9 @@
         }
       }
       newBtn._ca = _ca;
+      newBtn._platform = _cacheRow
+        ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk' : _cacheRow.querySelector('img[src*="pump"]') ? 'pump' : 'other')
+        : 'other';
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
