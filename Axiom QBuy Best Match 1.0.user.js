@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.93
+// @version      7.94
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -511,21 +511,24 @@
       return;
     }
 
-    // Historical token: open panel, type CA, poll for QB button
+    // Historical token: open panel, type CA, wait for NEW buttons after search
     const doExecute = () => {
       bringPanelToFront();
       const panel = getSearchPanel();
       if (!panel) { window.axiomUserOpen = false; return; }
-      const query = best.ca || best.name || best.ticker;
+      const query    = best.ca || best.name || best.ticker;
+      const prevBtns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
       typeInPanel(panel, query);
       const start = Date.now();
       const poll = () => {
         const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-        if (btns.length) {
-          const r = btns[0].getBoundingClientRect();
+        const fresh = btns.filter(b => !prevBtns.includes(b));
+        const target = fresh[0] || null;
+        if (target) {
+          const r = target.getBoundingClientRect();
           const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
           ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-            btns[0].dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+            target.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
           );
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
@@ -550,5 +553,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.93 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.94 — two-tab graduated support');
 })();
