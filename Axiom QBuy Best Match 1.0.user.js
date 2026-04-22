@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.991
+// @version      7.992
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -363,11 +363,10 @@
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
         posLeft = sr.left + sr.width  / 2 - btnW / 2 + 79;
-        posTop  = sr.bottom - btnH - 10;
       } else {
         posLeft = rect.right - btnW - 4;
-        posTop  = rect.top + rect.height / 2 - btnH / 2;
       }
+      posTop = rect.top + rect.height / 2 - btnH / 2;
       el.style.left   = posLeft + 'px';
       el.style.top    = posTop  + 'px';
       el.style.width  = btnW + 'px';
@@ -519,5 +518,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.991 — all tokens use CA flow, no Tab2 routing');
+  console.log('⭐ Axiom QBuy Best Match v7.992 — fix mini button posTop always uses row center');
 })();
