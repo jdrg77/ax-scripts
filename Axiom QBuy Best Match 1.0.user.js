@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.98
+// @version      7.99
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -493,21 +493,23 @@
       const query = best.ca || best.name || best.ticker;
       if (!query) { window.axiomUserOpen = false; return; }
 
+      // Snapshot stale buttons before typing, only click genuinely new ones
+      const prevBtns = new Set(panel.querySelectorAll('[class*="group/quickBuyButton"]'));
       typeInPanel(panel, query);
 
-      // Wait 200ms for Axiom to replace stale results, then poll for buttons
       const start = Date.now();
       const poll = () => {
         const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-        if (btns.length > 0) {
-          fireClickOnEl(btns[0]);
+        const fresh = btns.filter(b => !prevBtns.has(b));
+        if (fresh.length > 0) {
+          fireClickOnEl(fresh[0]);
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
         }
         if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
         setTimeout(poll, 50);
       };
-      setTimeout(poll, 200);
+      setTimeout(poll, 50);
     };
 
     if (!getSearchPanel()) {
@@ -524,5 +526,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.98 — buy: type CA, wait 200ms, click first result');
+  console.log('⭐ Axiom QBuy Best Match v7.99 — buy: snapshot→CA→wait fresh buttons up to 1.5s');
 })();
