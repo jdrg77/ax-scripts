@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.792
+// @version      1.793
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -374,5 +374,40 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.792 active');
+  // second channel — mirrors console snippet that fixed intermittent clicks
+  const channel2 = new BroadcastChannel('axiom-tabs');
+  channel2.onmessage = (e) => {
+    if (e.data.type !== 'EXECUTE_BUY_GRAD') return;
+    const { ticker, name, ca } = e.data;
+    const panel = getPanel();
+    if (!panel) return;
+    const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+    for (const btn of btns) {
+      let el = btn.parentElement, row = null;
+      for (let i = 0; i < 6; i++) {
+        if (el?.className?.includes('max-h-[64px]')) { row = el; break; }
+        el = el?.parentElement;
+      }
+      if (!row) continue;
+      let rowCA = '';
+      for (const a of row.querySelectorAll('a[href]')) {
+        const h = a.href;
+        if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) { rowCA = m[1]; break; } }
+        else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { rowCA = m[1]; break; } }
+        else if (h.includes('/meme/') && !rowCA) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
+      }
+      const matched = ca ? (rowCA && ca === rowCA) : ((ticker && row.textContent.includes(ticker)) || (name && row.textContent.includes(name)));
+      if (!matched) continue;
+      const propsKey = Object.keys(btn).find(k => k.startsWith('__reactProps$'));
+      if (propsKey && btn[propsKey]?.onClick) {
+        console.log('⚡ Grad ch2 react click:', ticker || name);
+        btn[propsKey].onClick(new MouseEvent('click', { bubbles: true }));
+      } else {
+        fireClick(btn);
+      }
+      break;
+    }
+  };
+
+  console.log('📡 Axiom Graduated Receiver v1.793 active');
 })();
