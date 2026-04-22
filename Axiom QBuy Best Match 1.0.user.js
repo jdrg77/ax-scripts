@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.8
+// @version      7.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -22,7 +22,6 @@
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
   let prefetchCount = 0;
-  let lastSavedCA   = null;
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
@@ -47,7 +46,6 @@
     prefetchCount++;
     gradCandidates = [];
     gradSeqApplied = -1;
-    lastSavedCA    = null;
   });
 
   // === CA extraction ===
@@ -213,7 +211,6 @@
     if (overallMax < 0) return;
     const rowCA = getTopCA();
     if (!rowCA) return;
-    if (lastSavedCA && rowCA !== lastSavedCA) { gradSeqApplied = -1; gradCandidates = []; return; }
     const existing = sessionBest.get(rowCA);
     if (prefetchCount > 2 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
@@ -231,7 +228,6 @@
         mc,
         solText:  getBtnSolText(winner),
       });
-      lastSavedCA = rowCA;
     }
   }
 
@@ -547,5 +543,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.8 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.9 — two-tab graduated support');
 })();
