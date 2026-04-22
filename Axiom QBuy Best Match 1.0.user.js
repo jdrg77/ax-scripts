@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.9
+// @version      7.91
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -216,7 +216,7 @@
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
-        ca:       getCAFromBtn(winner),
+        ca:       getCAFromBtn(winner) || rowCA,
         ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
         name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
         imgSrc:   getBtnImgSrc(winner),
@@ -543,5 +543,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.9 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.91 — two-tab graduated support');
 })();
