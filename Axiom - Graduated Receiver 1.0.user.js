@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.797
+// @version      1.794
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,55 +17,11 @@
   const SAMPLE_SIZE  = 16;
   const channel      = new BroadcastChannel('axiom-tabs');
   let   scanId       = 0;
-
-  // Keep T2 alive: hold a shared web lock so Chrome won't throttle this tab
-  if (navigator.locks) {
-    navigator.locks.request('axiom-grad-alive', { mode: 'shared' }, () => new Promise(() => {}));
-  }
-
   let   panelObs     = null;
   let   debTimer     = null;
   let   safeTimer    = null;
   let   newPairTimer = null;
   let   pendingBuy   = null;
-
-  // SharedWorker relay: receives EXECUTE_BUY_GRAD even when T2 event loop is throttled,
-  // then retries posting to T2 every 100ms until T2 processes and acks it.
-  (function setupSharedWorkerRelay() {
-    const code = `
-      var ch = new BroadcastChannel('axiom-tabs');
-      var ports = [];
-      var pending = null;
-      var retryTimer = null;
-      function broadcast() {
-        if (pending) ports.forEach(function(p){ try{ p.postMessage(pending); }catch(e){} });
-      }
-      self.onconnect = function(e) {
-        var port = e.ports[0];
-        ports.push(port);
-        port.onmessage = function(ev) {
-          if (ev.data === 'ACK') { pending = null; clearInterval(retryTimer); retryTimer = null; }
-        };
-        port.start();
-      };
-      ch.onmessage = function(e) {
-        if (e.data.type !== 'EXECUTE_BUY_GRAD') return;
-        pending = e.data;
-        broadcast();
-        if (!retryTimer) retryTimer = setInterval(broadcast, 100);
-      };
-    `;
-    const blob = new Blob([code], { type: 'text/javascript' });
-    const url  = URL.createObjectURL(blob);
-    const sw   = new SharedWorker(url);
-    sw.port.onmessage = (e) => {
-      const { ticker, name, ca } = e.data;
-      pendingBuy = { ticker, name, ca };
-      sw.port.postMessage('ACK');
-      executePendingBuy();
-    };
-    sw.port.start();
-  })();
 
   // ======= PIXEL UTILS =======
 
@@ -424,5 +380,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.797 active — SharedWorker relay + WebLock');
+  console.log('📡 Axiom Graduated Receiver v1.794 active');
 })();
