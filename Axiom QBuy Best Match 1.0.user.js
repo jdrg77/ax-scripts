@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.99
+// @version      7.991
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -477,13 +477,6 @@
   }
 
   function executeBest(best) {
-    // Graduated token: route to Tab 2 via BroadcastChannel
-    if (best.isGrad) {
-      console.log('📡 QBM → Tab2: EXECUTE_BUY_GRAD', best.ticker || best.name);
-      gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: best.ticker, name: best.name, ca: best.ca });
-      return;
-    }
-
     window.axiomUserOpen = true;
 
     const doExecute = () => {
@@ -526,5 +519,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.99 — buy: snapshot→CA→wait fresh buttons up to 1.5s');
+  console.log('⭐ Axiom QBuy Best Match v7.991 — all tokens use CA flow, no Tab2 routing');
 })();
