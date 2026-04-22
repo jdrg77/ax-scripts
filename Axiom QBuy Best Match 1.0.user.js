@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.97
+// @version      7.98
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -486,22 +486,6 @@
 
     window.axiomUserOpen = true;
 
-    const isCurrentPrefetch = best.rowCA === getTopCA();
-
-    if (isCurrentPrefetch) {
-      bringPanelToFront();
-      const panel = getSearchPanel();
-      const btns  = panel ? [...panel.querySelectorAll('[class*="group/quickBuyButton"]')] : [];
-      if (btns.length) {
-        fireClickOnEl(btns[0]);
-        setTimeout(() => { window.axiomUserOpen = false; }, 400);
-        return;
-      }
-      // Panel not ready — fall through to historical flow
-    }
-
-    // Historical: panel already open (hidden), bring to front, clear input,
-    // wait for QB buttons to clear, type saved CA, wait for buttons, click first.
     const doExecute = () => {
       bringPanelToFront();
       const panel = getSearchPanel();
@@ -509,32 +493,21 @@
       const query = best.ca || best.name || best.ticker;
       if (!query) { window.axiomUserOpen = false; return; }
 
-      // Step 1: clear input so any stale results disappear
-      typeInPanel(panel, '');
+      typeInPanel(panel, query);
 
-      const t0 = Date.now();
-      const waitForClear = () => {
-        const btns = panel.querySelectorAll('[class*="group/quickBuyButton"]');
-        if (btns.length === 0 || Date.now() - t0 > 400) {
-          // Step 2: type the saved CA
-          typeInPanel(panel, query);
-          const t1 = Date.now();
-          const poll = () => {
-            const newBtns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-            if (newBtns.length > 0) {
-              fireClickOnEl(newBtns[0]);
-              setTimeout(() => { window.axiomUserOpen = false; }, 400);
-              return;
-            }
-            if (Date.now() - t1 > 1500) { window.axiomUserOpen = false; return; }
-            setTimeout(poll, 50);
-          };
-          setTimeout(poll, 100);
+      // Wait 200ms for Axiom to replace stale results, then poll for buttons
+      const start = Date.now();
+      const poll = () => {
+        const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+        if (btns.length > 0) {
+          fireClickOnEl(btns[0]);
+          setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
         }
-        setTimeout(waitForClear, 30);
+        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
+        setTimeout(poll, 50);
       };
-      setTimeout(waitForClear, 30);
+      setTimeout(poll, 200);
     };
 
     if (!getSearchPanel()) {
@@ -551,5 +524,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.97 — historical buy: clear→CA→click');
+  console.log('⭐ Axiom QBuy Best Match v7.98 — buy: type CA, wait 200ms, click first result');
 })();
