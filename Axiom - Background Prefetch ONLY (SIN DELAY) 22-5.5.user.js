@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.10
+// @version      5.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -89,13 +89,6 @@
       .find(img => img.src && !img.src.startsWith('data:'))?.src || null;
   }
 
-  function getTopRowCA() {
-    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
-    if (!rows.length) return '';
-    const href = [...rows[0].querySelectorAll('a[href]')].find(a => a.href.includes('pump.fun'))?.href;
-    return href?.match(/\/coin\/([A-Za-z0-9]{32,})/)?.[1] || '';
-  }
-
   function forceLoadImages() {
     const panel = getPanel();
     if (!panel) return;
@@ -114,8 +107,7 @@
 
     window.dispatchEvent(new CustomEvent('axiomPrefetchStart', { detail: { name } }));
     window.__gradSeq = (window.__gradSeq || 0) + 1;
-    window.__lastNewPairCA = getTopRowCA();
-    gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc(), seq: window.__gradSeq, ca: window.__lastNewPairCA });
+    gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc(), seq: window.__gradSeq });
 
     if (!getPanel()) {
       document.querySelector('[class*="ri-search"]')?.closest('button')?.click();
