@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.91
+// @version      7.92
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -489,14 +489,19 @@
     const isCurrentPrefetch = best.rowCA === getTopCA();
 
     if (isCurrentPrefetch) {
-      // Panel already preloaded for this token — click best existing overlay button directly
-      const currentBtns = getQBButtons();
-      const sorted = [...currentBtns].sort((a, b) => getBadgePct(b) - getBadgePct(a));
-      const target = sorted[0] || null;
-      if (target) { bringPanelToFront(); target.click(); }
-      else console.log('⭐ QBM: no QB button for current prefetch', best.name);
-      setTimeout(() => { window.axiomUserOpen = false; }, 400);
-      return;
+      bringPanelToFront();
+      const panel = getSearchPanel();
+      const btns  = panel ? [...panel.querySelectorAll('[class*="group/quickBuyButton"]')] : [];
+      if (btns.length) {
+        const r = btns[0].getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+          btns[0].dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+        );
+        setTimeout(() => { window.axiomUserOpen = false; }, 400);
+        return;
+      }
+      // Panel not ready yet — fall through to historical flow
     }
 
     // Historical token: open panel, type CA, click first QB button found in panel directly
@@ -543,5 +548,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.91 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.92 — two-tab graduated support');
 })();
