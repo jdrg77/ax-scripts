@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.97
+// @version      9.98
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -531,7 +531,7 @@
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name });
+        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca });
       });
 
       document.body.appendChild(btn);
