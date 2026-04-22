@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.790
+// @version      1.791
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -370,11 +370,9 @@
       const { ticker, name, ca } = msg;
       pendingBuy = { ticker, name, ca };
       window.focus();
-      if (document.visibilityState === 'visible') {
-        executePendingBuy();
-      }
+      executePendingBuy();
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.790 active');
+  console.log('📡 Axiom Graduated Receiver v1.791 active');
 })();
