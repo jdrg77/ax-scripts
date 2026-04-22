@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.92
+// @version      7.93
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -21,7 +21,9 @@
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
-  let prefetchCount = 0;
+  let prefetchCount    = 0;
+  let prefetchCooldown = false;
+  let cooldownTimer    = null;
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
@@ -44,8 +46,19 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
-    gradCandidates = [];
-    gradSeqApplied = -1;
+    prefetchCooldown = true;
+    gradCandidates   = [];
+    gradSeqApplied   = -1;
+    let lastSnapshot = getQBButtons();
+    const checkChanged = setInterval(() => {
+      const curr = getQBButtons();
+      if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
+        lastSnapshot = curr;
+        clearTimeout(cooldownTimer);
+        cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
+      }
+    }, 50);
+    setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
   });
 
   // === CA extraction ===
@@ -212,7 +225,7 @@
     const rowCA = getTopCA();
     if (!rowCA) return;
     const existing = sessionBest.get(rowCA);
-    if (prefetchCount > 2 && (!existing || overallMax > existing.matchPct)) {
+    if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
@@ -489,29 +502,22 @@
     const isCurrentPrefetch = best.rowCA === getTopCA();
 
     if (isCurrentPrefetch) {
-      bringPanelToFront();
-      const panel = getSearchPanel();
-      const btns  = panel ? [...panel.querySelectorAll('[class*="group/quickBuyButton"]')] : [];
-      if (btns.length) {
-        const r = btns[0].getBoundingClientRect();
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-          btns[0].dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-        );
-        setTimeout(() => { window.axiomUserOpen = false; }, 400);
-        return;
-      }
-      // Panel not ready yet — fall through to historical flow
+      const currentBtns = getQBButtons();
+      const sorted = [...currentBtns].sort((a, b) => getBadgePct(b) - getBadgePct(a));
+      const target = sorted[0] || null;
+      if (target) { bringPanelToFront(); target.click(); }
+      else console.log('⭐ QBM: no QB button for current prefetch', best.name);
+      setTimeout(() => { window.axiomUserOpen = false; }, 400);
+      return;
     }
 
-    // Historical token: open panel, type CA, click first QB button found in panel directly
+    // Historical token: open panel, type CA, poll for QB button
     const doExecute = () => {
       bringPanelToFront();
       const panel = getSearchPanel();
       if (!panel) { window.axiomUserOpen = false; return; }
       const query = best.ca || best.name || best.ticker;
       typeInPanel(panel, query);
-
       const start = Date.now();
       const poll = () => {
         const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
@@ -524,11 +530,7 @@
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
         }
-        if (Date.now() - start > 1500) {
-          console.log('⭐ QBM: timeout for historical buy', query);
-          window.axiomUserOpen = false;
-          return;
-        }
+        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
         setTimeout(poll, 50);
       };
       setTimeout(poll, 100);
@@ -548,5 +550,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.92 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.93 — two-tab graduated support');
 })();
