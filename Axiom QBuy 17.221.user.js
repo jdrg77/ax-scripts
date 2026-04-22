@@ -543,13 +543,7 @@
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        const msg = { type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca };
-        gradChannel.postMessage(msg);
-        let retries = 0;
-        const iv = setInterval(() => {
-          gradChannel.postMessage(msg);
-          if (++retries >= 14) clearInterval(iv);
-        }, 200);
+        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca });
       });
 
       document.body.appendChild(btn);

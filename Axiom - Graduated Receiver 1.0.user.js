@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.793
+// @version      1.792
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -13,14 +13,6 @@
   'use strict';
   const IS_GRAD = new URLSearchParams(location.search).get('tab') === 'grad';
   if (!IS_GRAD) return;
-
-  // Silent audio loop: prevents Chrome from throttling this tab in background.
-  const silentAudio = new Audio("data:audio/wav;base64,UklGRiQEAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAEAAA=");
-  silentAudio.loop = true;
-  silentAudio.volume = 0;
-  const playSilent = () => silentAudio.play().catch(() => {});
-  playSilent();
-  document.addEventListener('click', playSilent, { once: true });
 
   const SAMPLE_SIZE  = 16;
   const channel      = new BroadcastChannel('axiom-tabs');
