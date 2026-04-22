@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.794
+// @version      1.792
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -326,15 +326,9 @@
     }
 
     if (target) {
+      console.log('✅ Grad buy:', ticker || name);
       pendingBuy = null;
-      const pk = Object.keys(target).find(k => k.startsWith('__reactProps$'));
-      if (pk && target[pk]?.onClick) {
-        console.log('✅ Grad react click:', ticker || name);
-        target[pk].onClick(new MouseEvent('click', { bubbles: true }));
-      } else {
-        console.log('✅ Grad fireClick:', ticker || name);
-        fireClick(target);
-      }
+      fireClick(target);
     } else {
       console.log('❌ Grad: button not found for', ticker, name);
     }
@@ -380,5 +374,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.794 active');
+  console.log('📡 Axiom Graduated Receiver v1.792 active');
 })();
