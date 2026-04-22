@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.795
+// @version      1.794
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -22,9 +22,6 @@
   let   safeTimer    = null;
   let   newPairTimer = null;
   let   pendingBuy   = null;
-
-  // keep T2 event loop alive so BroadcastChannel messages aren't queued/delayed
-  navigator.locks.request('grad-receiver-alive', { mode: 'shared' }, () => new Promise(() => {}));
 
   // ======= PIXEL UTILS =======
 
@@ -383,5 +380,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.795 active');
+  console.log('📡 Axiom Graduated Receiver v1.794 active');
 })();
