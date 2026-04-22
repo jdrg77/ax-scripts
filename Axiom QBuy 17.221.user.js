@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.96
+// @version      9.97
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -408,7 +408,10 @@
   }
 
   function removeButtons() {
-    addedBtns.forEach(btn => btn.remove());
+    addedBtns.forEach(btn => {
+      if (btn._original) delete btn._original.dataset.qbAdded;
+      btn.remove();
+    });
     addedBtns.length = 0;
     removeGradProxyBtns();
   }
@@ -877,5 +880,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.96 — normal + graduated proxies from Tab2');
+  console.log('🚀 Axiom QBuy v9.97 — fix dataset.qbAdded not cleared on removeButtons');
 })();

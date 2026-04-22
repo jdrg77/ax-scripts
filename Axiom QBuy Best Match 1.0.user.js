@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.95
+// @version      7.97
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -468,25 +468,12 @@
     }
   }
 
-  function waitForNewBtn(prevBtns, timeoutMs, cb) {
-    const start = Date.now();
-    const poll = () => {
-      const current = getQBButtons();
-      const newBtn  = current.find(b => !prevBtns.includes(b) && getBadgePct(b) >= 0)
-                   || current.find(b => !prevBtns.includes(b))
-                   || null;
-      if (newBtn) { cb(newBtn); return; }
-      if (!prevBtns.length && current.length) {
-        cb(current.find(b => getBadgePct(b) >= 0) || current[0]);
-        return;
-      }
-      if (Date.now() - start > timeoutMs) {
-        cb(current.find(b => getBadgePct(b) >= 0) || current[0] || null);
-        return;
-      }
-      setTimeout(poll, 50);
-    };
-    poll();
+  function fireClickOnEl(el) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    );
   }
 
   function executeBest(best) {
@@ -506,43 +493,48 @@
       const panel = getSearchPanel();
       const btns  = panel ? [...panel.querySelectorAll('[class*="group/quickBuyButton"]')] : [];
       if (btns.length) {
-        const r = btns[0].getBoundingClientRect();
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-          btns[0].dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-        );
+        fireClickOnEl(btns[0]);
         setTimeout(() => { window.axiomUserOpen = false; }, 400);
         return;
       }
       // Panel not ready — fall through to historical flow
     }
 
-    // Historical token: open panel, type CA, wait for NEW buttons after search
+    // Historical: panel already open (hidden), bring to front, clear input,
+    // wait for QB buttons to clear, type saved CA, wait for buttons, click first.
     const doExecute = () => {
       bringPanelToFront();
       const panel = getSearchPanel();
       if (!panel) { window.axiomUserOpen = false; return; }
-      const query    = best.ca || best.name || best.ticker;
-      const prevBtns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-      typeInPanel(panel, query);
-      const start = Date.now();
-      const poll = () => {
-        const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-        const fresh = btns.filter(b => !prevBtns.includes(b));
-        const target = fresh[0] || null;
-        if (target) {
-          const r = target.getBoundingClientRect();
-          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-            target.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-          );
-          setTimeout(() => { window.axiomUserOpen = false; }, 400);
+      const query = best.ca || best.name || best.ticker;
+      if (!query) { window.axiomUserOpen = false; return; }
+
+      // Step 1: clear input so any stale results disappear
+      typeInPanel(panel, '');
+
+      const t0 = Date.now();
+      const waitForClear = () => {
+        const btns = panel.querySelectorAll('[class*="group/quickBuyButton"]');
+        if (btns.length === 0 || Date.now() - t0 > 400) {
+          // Step 2: type the saved CA
+          typeInPanel(panel, query);
+          const t1 = Date.now();
+          const poll = () => {
+            const newBtns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+            if (newBtns.length > 0) {
+              fireClickOnEl(newBtns[0]);
+              setTimeout(() => { window.axiomUserOpen = false; }, 400);
+              return;
+            }
+            if (Date.now() - t1 > 1500) { window.axiomUserOpen = false; return; }
+            setTimeout(poll, 50);
+          };
+          setTimeout(poll, 100);
           return;
         }
-        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
-        setTimeout(poll, 50);
+        setTimeout(waitForClear, 30);
       };
-      setTimeout(poll, 100);
+      setTimeout(waitForClear, 30);
     };
 
     if (!getSearchPanel()) {
@@ -559,5 +551,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.95 — two-tab graduated support');
+  console.log('⭐ Axiom QBuy Best Match v7.97 — historical buy: clear→CA→click');
 })();
