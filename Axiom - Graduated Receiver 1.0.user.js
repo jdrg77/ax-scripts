@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.789
+// @version      1.790
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -316,13 +316,14 @@
       const t    = divs[0]?.textContent.trim() || '';
       const n    = divs[1]?.textContent.trim() || divs[0]?.textContent.trim() || '';
       let rowCA = '';
-      const memeLink = row.querySelector('a[href*="/meme/"]');
-      if (memeLink) { const m = memeLink.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
-      if (!rowCA) {
-        const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
-        if (pumpLink) { const m = pumpLink.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
+      for (const a of row.querySelectorAll('a[href]')) {
+        const h = a.href;
+        if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) { rowCA = m[1]; break; } }
+        else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { rowCA = m[1]; break; } }
+        else if (h.includes('/meme/') && !rowCA) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) rowCA = m[1]; }
       }
-      if ((ca && rowCA && ca === rowCA) || (ticker && t === ticker) || (name && n === name)) { target = btn; break; }
+      const matched = ca ? (rowCA && ca === rowCA) : ((ticker && t === ticker) || (name && n === name));
+      if (matched) { target = btn; break; }
     }
 
     if (target) {
@@ -375,5 +376,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.789 active');
+  console.log('📡 Axiom Graduated Receiver v1.790 active');
 })();
