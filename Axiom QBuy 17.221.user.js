@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.98
+// @version      9.99
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -457,7 +457,19 @@
       ? visible[0]._original
       : lastPanel?.querySelector('[class*="group/quickBuyButton"]');
 
-    gradCandidates.slice(0, 3).forEach((token, i) => {
+    const normalCAs = new Set(
+      addedBtns.map(b => {
+        const row = b._original?.closest('[class*="max-h-[64px]"]');
+        if (!row) return null;
+        for (const a of row.querySelectorAll('a[href]')) {
+          const m = a.href.match(/\/coin\/([A-Za-z0-9]{32,})/) || a.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
+          if (m) return m[1];
+        }
+        return null;
+      }).filter(Boolean)
+    );
+
+    gradCandidates.filter(t => !t.ca || !normalCAs.has(t.ca)).slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
       const platColor = token.platform === 'pump' ? '#ffd700'
@@ -531,7 +543,13 @@
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca });
+        const msg = { type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca };
+        gradChannel.postMessage(msg);
+        let retries = 0;
+        const iv = setInterval(() => {
+          gradChannel.postMessage(msg);
+          if (++retries >= 14) clearInterval(iv);
+        }, 200);
       });
 
       document.body.appendChild(btn);
