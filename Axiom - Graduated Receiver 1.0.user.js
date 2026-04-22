@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.787
+// @version      1.788
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -323,6 +323,7 @@
 
     if (msg.type === 'EXECUTE_BUY_GRAD') {
       const { ticker, name, ca } = msg;
+      window.focus();
       const panel = getPanel();
       if (!panel) { console.log('❌ Grad: no panel for', ticker || name); return; }
 
@@ -357,5 +358,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.7822 active');
+  console.log('📡 Axiom Graduated Receiver v1.788 active');
 })();
