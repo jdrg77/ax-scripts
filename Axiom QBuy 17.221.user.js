@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.2
+// @version      10.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -13,13 +13,6 @@
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
-  const panelShiftStyle = document.createElement('style');
-  panelShiftStyle.textContent = `
-    div:has(> [class*="bg-backgroundTertiary"][class*="pointer-events-auto"]) {
-      margin-left: 173px !important;
-    }
-  `;
-  document.head.appendChild(panelShiftStyle);
 
   const SAMPLE_SIZE   = 16;
   const addedBtns     = [];
@@ -755,6 +748,11 @@
     }
 
     checkPanelState(panel);
+
+    const wrapper = panel.parentElement;
+    if (wrapper && wrapper.style.marginLeft !== '173px') {
+      wrapper.style.setProperty('margin-left', '173px', 'important');
+    }
 
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
