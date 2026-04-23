@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.2
+// @version      11.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -543,9 +543,8 @@
         img.addEventListener('click', e => {
           e.stopPropagation(); e.preventDefault();
           if (token.ca) {
-            const existing = document.querySelector(`a[href*="${token.ca}"]`);
-            if (existing) existing.click();
-            else { history.pushState({}, '', `/meme/${token.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+            history.pushState({}, '', `/meme/${token.ca}?chain=sol`);
+            window.dispatchEvent(new PopStateEvent('popstate'));
           }
         });
         btn.appendChild(img);
@@ -756,12 +755,9 @@
     const qbImg = e.target.closest('img.qb-coin-img');
     if (qbImg) {
       const parentBtn = addedBtns.find(b => b.contains(qbImg));
-      if (parentBtn?._original) {
-        const row    = parentBtn._original.closest('[class*="max-h-[64px]"]');
-        const link   = row?.querySelector('a[href*="/meme/"]');
-        if (link) { window.location.href = link.href; return; }
-        const rowBtn = parentBtn._original.closest('div[role="button"]');
-        if (rowBtn) { fireClick(rowBtn); return; }
+      if (parentBtn?._ca) {
+        history.pushState({}, '', `/meme/${parentBtn._ca}?chain=sol`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
       return;
     }
@@ -911,11 +907,10 @@
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
         if (e.target.closest('img.qb-coin-img')) {
-          const row  = originalBtn.closest('[class*="max-h-[64px]"]');
-          const link = row?.querySelector('a[href*="/meme/"]');
-          if (link) { window.location.href = link.href; return; }
-          const rowBtn = originalBtn.closest('div[role="button"]');
-          if (rowBtn) { fireClick(rowBtn); return; }
+          if (newBtn._ca) {
+            history.pushState({}, '', `/meme/${newBtn._ca}?chain=sol`);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
           return;
         }
         fireClick(originalBtn);

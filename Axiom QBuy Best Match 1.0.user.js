@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.11
+// @version      8.12
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -295,9 +295,8 @@
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
       if (best?.ca) {
-        const existing = document.querySelector(`a[href*="${best.ca}"]`);
-        if (existing) { existing.click(); }
-        else { history.pushState({}, '', `/meme/${best.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+        history.pushState({}, '', `/meme/${best.ca}?chain=sol`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
     });
     el.appendChild(coinImg);
