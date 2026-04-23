@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.2
+// @version      8.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -29,6 +29,8 @@
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
   let gradCandidates  = [];
   let gradSeqApplied  = -1; // seq of the last accepted GRAD_DATA
+  let awaitingT2Confirm = false;
+  let awaitT2Timer      = null;
 
   // ======= BROADCHANNEL =======
 
@@ -38,6 +40,8 @@
       if (msg.seq !== undefined && msg.seq !== window.__gradSeq) return; // stale scan, discard
       gradCandidates = (msg.tokens || []).map(t => ({ ...t, _isGrad: true }));
       gradSeqApplied = msg.seq ?? -1;
+      clearTimeout(awaitT2Timer);
+      awaitingT2Confirm = false;
       updateGlow();
     }
   };
@@ -47,9 +51,15 @@
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
     prefetchCooldown = true;
+    const hadGrad    = gradCandidates.length > 0;
     gradCandidates   = [];
     gradSeqApplied   = -1;
     clearTimeout(cooldownTimer);
+    clearTimeout(awaitT2Timer);
+    if (hadGrad) {
+      awaitingT2Confirm = true;
+      awaitT2Timer = setTimeout(() => { awaitingT2Confirm = false; updateMiniButtons(); }, 1000);
+    }
     cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
 
@@ -323,7 +333,7 @@
   }
 
   function updateMiniButtons() {
-    if (isPanelVisible()) {
+    if (isPanelVisible() || awaitingT2Confirm) {
       miniPool.forEach(el => { if (el.isConnected) el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; });
       return;
     }

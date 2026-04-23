@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.0
+// @version      10.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -747,6 +747,13 @@
     }
 
     checkPanelState(panel);
+
+    if (!panel.dataset.qbShifted) {
+      const computedLeft = getComputedStyle(panel).left;
+      const curLeft = computedLeft === 'auto' ? 0 : parseFloat(computedLeft) || 0;
+      panel.style.setProperty('left', (curLeft + 173) + 'px', 'important');
+      panel.dataset.qbShifted = '1';
+    }
 
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
