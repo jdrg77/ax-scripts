@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.2
+// @version      8.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -218,7 +218,7 @@
     const rowCA = getTopCA();
     if (!rowCA) return;
     const existing = sessionBest.get(rowCA);
-    if (!prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && !window.axiomUserOpen && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
@@ -511,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.2 — best match only replaced by better, never cleared');
+  console.log('⭐ Axiom QBuy Best Match v8.3 — skip sessionBest save when panel opened manually');
 })();
