@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.993
+// @version      8.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
