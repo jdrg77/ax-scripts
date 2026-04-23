@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.4
+// @version      11.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -143,6 +143,19 @@
       ticker: tickerEl?.textContent.trim() || '',
       name:   nameEl?.textContent.trim()   || ''
     };
+  }
+
+  // CA del token nuevo en el top del feed (el que dispara la búsqueda).
+  function getNewPairCA() {
+    const row = document.querySelector('[class*="group/pulseRow"]');
+    if (!row) return '';
+    for (const a of row.querySelectorAll('a[href]')) {
+      const h = a.href;
+      if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+      if (h.includes('bonk'))     { const m = h.match(/\/([A-Za-z0-9]{32,})/);       if (m) return m[1]; }
+      if (h.includes('/meme/'))   { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+    }
+    return '';
   }
 
   function ageToSeconds(ageStr) {
@@ -450,14 +463,20 @@
     }
   }
 
-  function fireClick(el) {
-    const r = el.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev => {
-      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
-    });
+  // Abre URL en nueva pestaña, bypasseando overrides de window.open (via iframe aislado).
+  let _gmgnIframe = null;
+  function openInGmgn(ca) {
+    if (!ca) return;
+    const url = 'https://gmgn.ai/sol/token/' + ca;
+    if (!_gmgnIframe || !_gmgnIframe.isConnected) {
+      _gmgnIframe = document.createElement('iframe');
+      _gmgnIframe.style.display = 'none';
+      _gmgnIframe.src = 'about:blank';
+      document.body.appendChild(_gmgnIframe);
+    }
+    _gmgnIframe.contentWindow.open(url, '_blank', 'noopener,noreferrer');
   }
+
 
   function removeButtons() {
     addedBtns.forEach(btn => {
@@ -548,6 +567,7 @@
       btn.style.boxShadow = platGlow;
       btn._isGradProxy = true;
       btn._gradToken   = token;
+      btn._newPairCA   = getNewPairCA();
 
       if (token.imgSrc) {
         const img = document.createElement('img');
@@ -601,7 +621,7 @@
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
-        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca });
+        openInGmgn(btn._newPairCA || token.ca);
       });
 
       document.body.appendChild(btn);
@@ -871,7 +891,8 @@
           else if (h.includes('/meme/')) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) _ca = m[1]; }
         }
       }
-      newBtn._ca = _ca;
+      newBtn._ca        = _ca;
+      newBtn._newPairCA = getNewPairCA();
       newBtn._platform = _cacheRow
         ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk'
           : _cacheRow.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]') ? 'raydium'
@@ -929,7 +950,7 @@
           navigateToMeme(row, newBtn._ca);
           return;
         }
-        fireClick(originalBtn);
+        openInGmgn(newBtn._newPairCA || newBtn._ca);
       });
 
       updateBadge(newBtn, onBadgeDone);
