@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.14
+// @version      8.15
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -257,9 +257,10 @@
       const memeHref  = _memeLink ? (new URL(_memeLink.href).pathname + new URL(_memeLink.href).search) : null;
       sessionBest.set(rowCA, {
         rowCA,
-        ca:         getCAFromBtn(winner) || rowCA,
+        ca:          getCAFromBtn(winner) || rowCA,
         memeHref,
-        ticker:     winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
+        ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
         name:       winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
         imgSrc:     getBtnImgSrc(winner),
         matchPct:   overallMax,
@@ -276,20 +277,17 @@
 
   // === Mini buttons ===
 
-  function createMiniBtn(rowCA) {
-    const el = document.createElement('button');
+  function createMiniBtn(rowCA, template) {
+    const el = template ? template.cloneNode(true) : document.createElement('button');
+    delete el.dataset.qbAdded;
     el.setAttribute('data-qbm-mini', rowCA);
-    el.style.position       = 'fixed';
-    el.style.zIndex         = '99999';
-    el.style.display        = 'none';
-    el.style.overflow       = 'visible';
-    el.style.background     = 'rgba(20,20,30,0.92)';
-    el.style.border         = '1.5px solid rgba(255,215,0,0.7)';
-    el.style.borderRadius   = '6px';
-    el.style.cursor         = 'pointer';
-    el.style.alignItems     = 'center';
-    el.style.justifyContent = 'center';
-    el.style.transform      = 'scale(0.7842)';
+    el.style.cssText         = '';
+    el.style.position        = 'fixed';
+    el.style.zIndex          = '99999';
+    el.style.display         = 'none';
+    el.style.overflow        = 'visible';
+    el.style.cursor          = 'pointer';
+    el.style.transform       = 'scale(0.7842)';
     el.style.transformOrigin = 'top-left';
 
     const coinImg = document.createElement('img');
@@ -309,11 +307,6 @@
     pctBadge.className = 'qbm-pct';
     pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
-
-    const amountEl = document.createElement('div');
-    amountEl.className = 'qbm-amount';
-    amountEl.style.cssText = 'font-size:11px;font-weight:700;font-family:monospace;color:#fff;pointer-events:none;text-align:center;line-height:1.2;';
-    el.appendChild(amountEl);
 
     const label = document.createElement('div');
     label.className = 'qbm-label';
@@ -345,11 +338,14 @@
     return el;
   }
 
-  function getOrCreateMiniBtn(rowCA) {
+  function getOrCreateMiniBtn(rowCA, best) {
     const existing = miniPool.get(rowCA);
-    if (existing?.isConnected) return existing;
+    if (existing?.isConnected && existing._matchPct === best.matchPct) return existing;
+    if (existing?.isConnected) existing.remove();
     if (existing?._label?.isConnected) existing._label.remove();
-    return createMiniBtn(rowCA);
+    const el = createMiniBtn(rowCA, best.btnTemplate);
+    el._matchPct = best.matchPct;
+    return el;
   }
 
   function isPanelVisible() {
@@ -383,7 +379,7 @@
 
       activeKeys.add(rowCA);
 
-      const el   = getOrCreateMiniBtn(rowCA);
+      const el   = getOrCreateMiniBtn(rowCA, best);
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
