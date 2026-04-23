@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.7
+// @version      10.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -504,17 +504,20 @@
     [..._raydium, ..._others].slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
-      const platColor = token.platform === 'pump'    ? '#ffd700'
-                      : token.platform === 'bonk'    ? '#ff8c00'
+      const isPumpMigrated = token.platform === 'pump' && token.isMigrated;
+      const isPumpDex      = token.platform === 'pump' && token.hasDex;
+      const platColor = token.platform === 'bonk'   ? '#ff8c00'
                       : token.platform === 'raydium' ? '#0033FF'
-                      : '#5b8fff';
-      const platGlow  = token.platform === 'pump'
-                      ? '0 0 10px 3px rgba(120,255,160,0.7), 0 0 20px 6px rgba(120,255,160,0.3)'
-                      : token.platform === 'bonk'
+                      : isPumpMigrated               ? '#ffd700'
+                      : isPumpDex                    ? '#78ffa0'
+                      : '';
+      const platGlow  = token.platform === 'bonk'
                       ? '0 0 10px 3px rgba(255,140,0,0.6), 0 0 20px 6px rgba(255,140,0,0.3)'
                       : token.platform === 'raydium'
                       ? '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)'
-                      : '0 0 10px 3px rgba(91,143,255,0.5), 0 0 20px 6px rgba(91,143,255,0.25)';
+                      : isPumpMigrated || isPumpDex
+                      ? '0 0 10px 3px rgba(120,255,160,0.7), 0 0 20px 6px rgba(120,255,160,0.3)'
+                      : '';
       btn.style.position  = 'fixed';
       btn.style.zIndex    = '9999';
       btn.style.overflow  = 'visible';
@@ -523,8 +526,9 @@
       btn.style.left      = leftPos + 'px';
       btn.style.top       = (top0 + (startSlot + i) * rowHeight) + 'px';
       btn.style.cursor    = 'pointer';
-      btn.style.outline   = `2px solid ${platColor}`;
-      if (token.platform === 'pump')    btn.style.setProperty('background', 'rgba(255,215,0,0.85)',  'important');
+      btn.style.outline   = platColor ? `2px solid ${platColor}` : '';
+      if (isPumpMigrated)               btn.style.setProperty('background', 'rgba(255,215,0,0.85)',  'important');
+      else if (isPumpDex)               btn.style.setProperty('background', 'rgba(120,255,160,0.85)','important');
       if (token.platform === 'bonk')    btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
       if (token.platform === 'raydium') btn.style.setProperty('background', 'rgba(0,51,255,0.85)',   'important');
       btn.style.boxShadow = platGlow;
