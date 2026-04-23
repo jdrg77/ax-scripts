@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.1
+// @version      10.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -616,7 +616,8 @@
     const normalCandidates = visible;
 
     let sortedNormal = normalCandidates;
-    const limit = isPanelVisible ? 7 : 5;
+    const panelActuallyVisible = !!(lastPanel?.isConnected && lastPanel.parentElement?.style.zIndex !== '-9999');
+    const limit = 7;
 
     if (newPair && normalCandidates.length > 0) {
       const datas  = normalCandidates.map(v => v.data);
@@ -624,7 +625,7 @@
       sortedNormal = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
     }
 
-    if (isPanelVisible && sortedNormal.length > 0) {
+    if (panelActuallyVisible && sortedNormal.length > 0) {
       const special = sortedNormal.filter(v => v.data.isGold || v.data.isGreen);
       const blues   = sortedNormal.filter(v => !v.data.isGold && !v.data.isGreen);
       blues.sort((a, b) => {
