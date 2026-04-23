@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.8
+// @version      8.10
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -31,6 +31,8 @@
   let gradSeqApplied    = -1; // seq of the last accepted GRAD_DATA
   let awaitingT2Confirm = false;
   let awaitT2Timer      = null;
+  let stableCA          = null;
+  let stableCAStart     = 0;
 
   // ======= BROADCHANNEL =======
 
@@ -227,8 +229,9 @@
     if (overallMax < 0) return;
     const rowCA = getTopCA();
     if (!rowCA) return;
+    if (rowCA !== stableCA) { stableCA = rowCA; stableCAStart = Date.now(); }
     const existing = sessionBest.get(rowCA);
-    if (!prefetchCooldown && !window.axiomUserOpen && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && !window.axiomUserOpen && Date.now() - stableCAStart >= 300 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
@@ -411,17 +414,20 @@
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
       const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
-      const platBorder = pumpDex                  ? '#78ffa0'
-                       : best.platform === 'pump' ? '#ffd700'
-                       : best.platform === 'bonk' ? '#ff8c00'
+      const platBorder = pumpDex                       ? '#78ffa0'
+                       : best.platform === 'pump'      ? '#ffd700'
+                       : best.platform === 'bonk'      ? '#ff8c00'
+                       : best.platform === 'raydium'   ? '#0033FF'
                        : badgeColor(best.matchPct);
-      const platGlow   = pumpDex                  ? 'rgba(120,255,160,0.7)'
-                       : best.platform === 'pump' ? 'rgba(255,215,0,0.6)'
-                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
+      const platGlow   = pumpDex                       ? 'rgba(120,255,160,0.7)'
+                       : best.platform === 'pump'      ? 'rgba(255,215,0,0.6)'
+                       : best.platform === 'bonk'      ? 'rgba(255,140,0,0.6)'
+                       : best.platform === 'raydium'   ? 'rgba(0,51,255,0.7)'
                        : badgeColor(best.matchPct) + '40';
-      const platBg     = pumpDex                  ? 'rgba(120,255,160,0.85)'
-                       : best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
-                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
+      const platBg     = pumpDex                       ? 'rgba(120,255,160,0.85)'
+                       : best.platform === 'pump'      ? 'rgba(255,215,0,0.85)'
+                       : best.platform === 'bonk'      ? 'rgba(255,140,0,0.85)'
+                       : best.platform === 'raydium'   ? 'rgba(0,51,255,0.85)'
                        : 'rgba(20,20,30,0.92)';
       el.style.background = platBg;
       el.style.border    = `1.5px solid ${platBorder}`;
@@ -523,5 +529,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 10);
 
-  console.log('⭐ Axiom QBuy Best Match v8.2 — best match only replaced by better, never cleared');
+  console.log('⭐ Axiom QBuy Best Match v8.10 — Raydium V4 blue styling');
 })();

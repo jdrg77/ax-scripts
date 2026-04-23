@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.2
+// @version      10.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -521,7 +521,8 @@
       btn.style.top       = (top0 + (startSlot + i) * rowHeight) + 'px';
       btn.style.cursor    = 'pointer';
       btn.style.outline   = `2px solid ${platColor}`;
-      if (token.platform === 'bonk') btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
+      if (token.platform === 'bonk')    btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
+      if (token.platform === 'raydium') btn.style.setProperty('background', 'rgba(0,51,255,0.85)',   'important');
       btn.style.boxShadow = platGlow;
       btn._isGradProxy = true;
       btn._gradToken   = token;
@@ -682,9 +683,11 @@
       newBtn.style.display = '';
       newBtn.style.opacity = '1';
       if (newBtn._platform === 'raydium') {
+        newBtn.style.setProperty('background', 'rgba(0,51,255,0.85)', 'important');
         newBtn.style.outline   = '2px solid #0033FF';
         newBtn.style.boxShadow = '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)';
       } else {
+        newBtn.style.removeProperty('background');
         newBtn.style.outline   = '';
         newBtn.style.boxShadow = '';
       }
@@ -933,5 +936,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v10.2 — Raydium V4 detection + blue glow');
+  console.log('🚀 Axiom QBuy v10.3 — Raydium V4 blue background + glow');
 })();
