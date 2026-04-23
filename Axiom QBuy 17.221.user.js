@@ -751,7 +751,8 @@
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
 
-    if (!panel.querySelector('input')) return;
+    const panelInput = panel.querySelector('input');
+    if (!panelInput || !panelInput.value.trim()) return;
 
     if (panel !== lastPanel) {
       removeButtons();
