@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.15
+// @version      8.16
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -258,6 +258,7 @@
       sessionBest.set(rowCA, {
         rowCA,
         ca:          getCAFromBtn(winner) || rowCA,
+        newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
         memeHref,
         btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
         ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
@@ -345,6 +346,7 @@
     if (existing?._label?.isConnected) existing._label.remove();
     const el = createMiniBtn(rowCA, best.btnTemplate);
     el._matchPct = best.matchPct;
+    el.dataset.qbmNewPairCa = best.newPairCA || '';
     return el;
   }
 
