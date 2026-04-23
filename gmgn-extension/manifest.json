@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Axiom → GMGN",
+  "version": "1.0",
+  "description": "Abre el new pair en GMGN al clickear botones de Axiom",
+  "permissions": ["tabs"],
+  "host_permissions": [
+    "*://axiom.trade/*",
+    "*://gmgn.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://axiom.trade/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
