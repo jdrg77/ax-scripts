@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.4
+// @version      10.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -498,7 +498,10 @@
 
     const normalMemeIds = new Set(visible.map(b => b._ca).filter(Boolean));
 
-    gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca)).filter(t => t.platform !== 'raydium' || t.match > 70).slice(0, 3).forEach((token, i) => {
+    const _eligible  = gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca));
+    const _raydium   = _eligible.filter(t => t.platform === 'raydium' && t.match > 70).slice(0, 2);
+    const _others    = _eligible.filter(t => t.platform !== 'raydium');
+    [..._raydium, ..._others].slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
       const platColor = token.platform === 'pump'    ? '#ffd700'
