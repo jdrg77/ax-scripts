@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.792
+// @version      1.80
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
