@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.3
+// @version      11.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -436,6 +436,20 @@
     }
   }
 
+  function navigateToMeme(row, fallbackCA) {
+    const link = row?.querySelector('a[href*="/meme/"]');
+    if (link) {
+      const url = new URL(link.href);
+      history.pushState({}, '', url.pathname + url.search);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
+    if (fallbackCA) {
+      history.pushState({}, '', `/meme/${fallbackCA}?chain=sol`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }
+
   function fireClick(el) {
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2;
@@ -543,8 +557,12 @@
         img.addEventListener('click', e => {
           e.stopPropagation(); e.preventDefault();
           if (token.ca) {
-            history.pushState({}, '', `/meme/${token.ca}?chain=sol`);
-            window.dispatchEvent(new PopStateEvent('popstate'));
+            const feedRows = document.querySelectorAll('[class*="group/pulseRow"]');
+            let memeRow = null;
+            for (const r of feedRows) {
+              if (r.querySelector(`a[href*="${token.ca}"]`)) { memeRow = r; break; }
+            }
+            navigateToMeme(memeRow, token.ca);
           }
         });
         btn.appendChild(img);
@@ -755,9 +773,9 @@
     const qbImg = e.target.closest('img.qb-coin-img');
     if (qbImg) {
       const parentBtn = addedBtns.find(b => b.contains(qbImg));
-      if (parentBtn?._ca) {
-        history.pushState({}, '', `/meme/${parentBtn._ca}?chain=sol`);
-        window.dispatchEvent(new PopStateEvent('popstate'));
+      if (parentBtn?._original) {
+        const row = parentBtn._original.closest('[class*="max-h-[64px]"]');
+        navigateToMeme(row, parentBtn._ca);
       }
       return;
     }
@@ -907,10 +925,8 @@
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
         if (e.target.closest('img.qb-coin-img')) {
-          if (newBtn._ca) {
-            history.pushState({}, '', `/meme/${newBtn._ca}?chain=sol`);
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }
+          const row = originalBtn.closest('[class*="max-h-[64px]"]');
+          navigateToMeme(row, newBtn._ca);
           return;
         }
         fireClick(originalBtn);
