@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.0
+// @version      10.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -13,58 +13,95 @@
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
-  const SAMPLE_SIZE   = 16;
+  const HASH_SIZE     = 32;
+  const HASH_BITS     = 8;
   const addedBtns     = [];
   const gradProxyBtns = [];
   const gradChannel   = new BroadcastChannel('axiom-tabs');
+  const hashCache     = new Map();
   let   gradCandidates = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
   let updateTimeout   = null;
-  let referencePixels = null;
+  let referenceHash   = null;
   let referenceSource = null;
 
-  function getPixels(src, cb) {
+  function dct1d(f) {
+    const N = f.length;
+    const F = new Float32Array(N);
+    const pi2N = Math.PI / (2 * N);
+    for (let u = 0; u < N; u++) {
+      let sum = 0;
+      for (let i = 0; i < N; i++) sum += f[i] * Math.cos((2 * i + 1) * u * pi2N);
+      F[u] = sum;
+    }
+    return F;
+  }
+
+  function computeHash(img) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = HASH_SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, HASH_SIZE, HASH_SIZE);
+    const data = ctx.getImageData(0, 0, HASH_SIZE, HASH_SIZE).data;
+    const gray = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let i = 0; i < data.length; i += 4)
+      gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    // Separable 2D DCT: rows then columns
+    const tmp = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let r = 0; r < HASH_SIZE; r++) {
+      const row = dct1d(gray.slice(r * HASH_SIZE, (r + 1) * HASH_SIZE));
+      for (let c = 0; c < HASH_SIZE; c++) tmp[r * HASH_SIZE + c] = row[c];
+    }
+    const dct = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let c = 0; c < HASH_SIZE; c++) {
+      const col = new Float32Array(HASH_SIZE);
+      for (let r = 0; r < HASH_SIZE; r++) col[r] = tmp[r * HASH_SIZE + c];
+      const colDCT = dct1d(col);
+      for (let r = 0; r < HASH_SIZE; r++) dct[r * HASH_SIZE + c] = colDCT[r];
+    }
+    // Top-left HASH_BITS×HASH_BITS — compute mean then build binary hash
+    let sum = 0;
+    for (let x = 0; x < HASH_BITS; x++)
+      for (let y = 0; y < HASH_BITS; y++) sum += dct[x * HASH_SIZE + y];
+    const mean = sum / (HASH_BITS * HASH_BITS);
+    let hash = '';
+    for (let x = 0; x < HASH_BITS; x++)
+      for (let y = 0; y < HASH_BITS; y++) hash += dct[x * HASH_SIZE + y] > mean ? '1' : '0';
+    return hash;
+  }
+
+  function getHash(src, cb) {
     if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
+    if (hashCache.has(src)) return cb(hashCache.get(src));
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = function () {
+    img.onload = function() {
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width  = SAMPLE_SIZE;
-        canvas.height = SAMPLE_SIZE;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        const raw = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-        cb(raw);
-      } catch (e) { cb(null); }
+        const hash = computeHash(img);
+        hashCache.set(src, hash);
+        cb(hash);
+      } catch(e) { cb(null); }
     };
     img.onerror = () => cb(null);
     img.src = src.includes('?') ? src : src + '?qb=1';
   }
 
-  function pixelSimilarity(p1, p2) {
-    if (!p1 || !p2) return null;
-    const len    = Math.min(p1.length, p2.length);
-    const pixels = len / 4;
-    let sum = 0;
-    for (let i = 0; i < len; i += 4) {
-      const dr = Math.abs(p1[i]     - p2[i])     / 255;
-      const dg = Math.abs(p1[i + 1] - p2[i + 1]) / 255;
-      const db = Math.abs(p1[i + 2] - p2[i + 2]) / 255;
-      sum += (dr + dg + db) / 3;
-    }
-    return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
+  function hashSimilarity(h1, h2) {
+    if (!h1 || !h2 || h1.length !== h2.length) return null;
+    let matches = 0;
+    for (let i = 0; i < h1.length; i++) if (h1[i] === h2[i]) matches++;
+    return parseFloat(((matches / h1.length) * 100).toFixed(1));
   }
 
   function setReference(src) {
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
-    referencePixels = null;
-    getPixels(src, (pixels) => {
-      referencePixels = pixels;
+    referenceHash   = null;
+    getHash(src, (hash) => {
+      referenceHash = hash;
       updateAllBadges();
       scheduleUpdate();
     });
@@ -276,9 +313,9 @@
     const row     = originalBtn.closest('[class*="max-h-[64px]"]');
     const coinImg = getRealImage(row);
     if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; if (onDone) onDone(); return; }
-    if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; if (onDone) onDone(); return; }
-    getPixels(coinImg.src, (rowPixels) => {
-      const pct = pixelSimilarity(referencePixels, rowPixels);
+    if (!referenceHash)           { badge.textContent = '…'; badge.style.color = '#888'; if (onDone) onDone(); return; }
+    getHash(coinImg.src, (rowHash) => {
+      const pct = hashSimilarity(referenceHash, rowHash);
       newBtn._matchPct = pct ?? 0;
       if (pct === null) {
         badge.textContent = '?'; badge.style.color = '#888';
@@ -560,12 +597,10 @@
     lastTopSrc = topImg.src;
     if (topImg.complete && topImg.naturalWidth > 0) {
       try {
-        const c = document.createElement('canvas');
-        c.width = c.height = SAMPLE_SIZE;
-        c.getContext('2d').drawImage(topImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+        const hash = computeHash(topImg);
+        hashCache.set(topImg.src, hash);
         referenceSource = topImg.src;
-        referencePixels = pixels;
+        referenceHash   = hash;
         updateAllBadges();
         scheduleUpdate();
         return;
@@ -818,13 +853,11 @@
         newBtn.appendChild(imgEl);
       }
 
-      if (referencePixels && coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
+      if (referenceHash && coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
         try {
-          const c = document.createElement('canvas');
-          c.width = c.height = SAMPLE_SIZE;
-          c.getContext('2d').drawImage(coinImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-          const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-          newBtn._matchPct = pixelSimilarity(referencePixels, pixels) ?? 0;
+          const hash = computeHash(coinImg);
+          hashCache.set(coinImg.src, hash);
+          newBtn._matchPct = hashSimilarity(referenceHash, hash) ?? 0;
         } catch(e) {}
       }
 
@@ -886,5 +919,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.97 — fix dataset.qbAdded not cleared on removeButtons');
+  console.log('🚀 Axiom QBuy v10.1 — pHash image comparison (DCT separable)');
 })();
