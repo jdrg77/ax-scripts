@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.0
+// @version      11.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -692,14 +692,14 @@
       newBtn.style.opacity = '1';
       if (newBtn._platform === 'raydium') {
         newBtn.style.setProperty('background', 'rgba(0,51,255,0.85)', 'important');
-        newBtn.style.outline   = '2px solid #0033FF';
+        newBtn.style.setProperty('outline', '2px solid #0033FF', 'important');
         newBtn.style.boxShadow = '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)';
       } else if (newBtn._platform === 'bonk') {
         newBtn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
-        newBtn.style.outline   = '2px solid #ff8c00';
+        newBtn.style.setProperty('outline', '2px solid #ff8c00', 'important');
         newBtn.style.boxShadow = '0 0 10px 3px rgba(255,140,0,0.6), 0 0 20px 6px rgba(255,140,0,0.3)';
       } else {
-        newBtn.style.outline   = '';
+        newBtn.style.setProperty('outline', 'none', 'important');
         newBtn.style.boxShadow = '';
       }
       const coinImg = getCoinImage(originalBtn);
