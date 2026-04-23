@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.5
+// @version      10.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,7 +20,6 @@
   let   gradCandidates = [];
   let scrollEl        = null;
   let lastPanel       = null;
-  let wrapperObserver = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
   let updateTimeout   = null;
@@ -153,13 +152,14 @@
     const ageSecs  = ageToSeconds(ageEl?.textContent?.trim() || '');
     const ageHours = ageSecs / 3600;
 
-    let mc = '', vol = '';
+    let mc = '';
     for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
       const spans     = [...container.querySelectorAll('span')];
-      const mcLabel   = spans.find(s => s.textContent.trim() === 'MC');
-      if (mcLabel && !mc) mc  = spans.find(s => s !== mcLabel  && s.textContent.trim())?.textContent.trim() || '';
-      const volLabel  = spans.find(s => s.textContent.trim() === 'V');
-      if (volLabel && !vol) vol = spans.find(s => s !== volLabel && s.textContent.trim())?.textContent.trim() || '';
+      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
+      if (labelSpan) {
+        mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || '';
+        break;
+      }
     }
     if (!mc) {
       const mcLabel = [...row.querySelectorAll('span')].find(s => s.textContent.trim() === 'MC');
@@ -172,7 +172,7 @@
       }
     }
 
-    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), volume: mcToNumber(vol), isGold, isGreen, match: newBtn._matchPct ?? 0, platform: newBtn._platform || 'other' };
+    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0, platform: newBtn._platform || 'other' };
   }
 
   function sortNormal(tokens, newPair, topRowPlat) {
@@ -546,9 +546,7 @@
     const bgColor   = originalBtn.style.background || '';
     const isSpecial = bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
     if (isSpecial) return true;
-    if (!lastPanel?.isConnected) return false;
-    const zIdx = lastPanel.parentElement?.style.zIndex;
-    return !zIdx || zIdx !== '-9999';
+    return !!(lastPanel && lastPanel.isConnected && isPanelVisible);
   }
 
   function getCoinImage(originalBtn) {
@@ -619,32 +617,16 @@
     const normalCandidates = visible;
 
     let sortedNormal = normalCandidates;
-    const panelActuallyVisible = !!(lastPanel?.isConnected && lastPanel.parentElement?.style.zIndex !== '-9999');
-    const limit = panelActuallyVisible ? sortedNormal.length : 5;
-
     if (newPair && normalCandidates.length > 0) {
-      const datas  = normalCandidates.map(v => v.data);
-      const sorted = sortNormal(datas, newPair, getTopRowPlatform());
-      sortedNormal = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
+      const datas     = normalCandidates.map(v => v.data);
+      const sorted    = sortNormal(datas, newPair, getTopRowPlatform());
+      sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
+      sortedNormal = sortedNormal.slice(0, 5);
+      const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
+      normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
+    } else {
+      sortedNormal = sortedNormal.slice(0, 5);
     }
-
-    if (panelActuallyVisible && sortedNormal.length > 0) {
-      const special = sortedNormal.filter(v => v.data.isGold || v.data.isGreen);
-      const blues   = sortedNormal.filter(v => !v.data.isGold && !v.data.isGreen);
-      blues.sort((a, b) => {
-        const da = a.data, db = b.data;
-        const qualA = da.match > 70 && da.ageHours < 24 && da.volume > 10000;
-        const qualB = db.match > 70 && db.ageHours < 24 && db.volume > 10000;
-        if (qualA && !qualB) return -1;
-        if (!qualA && qualB) return 1;
-        return db.ageHours - da.ageHours; // oldest first
-      });
-      sortedNormal = [...special, ...blues];
-    }
-
-    sortedNormal = sortedNormal.slice(0, limit);
-    const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
-    normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
 
     if (sortedNormal.length === 0) return;
 
@@ -673,14 +655,6 @@
   function scheduleUpdate() {
     if (updateTimeout) return;
     updateTimeout = setTimeout(() => { updatePositions(); updateTimeout = null; }, 16);
-  }
-
-  function attachWrapperObserver(panel) {
-    if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
-    const wrapper = panel?.parentElement;
-    if (!wrapper) return;
-    wrapperObserver = new MutationObserver(() => scheduleUpdate());
-    wrapperObserver.observe(wrapper, { attributes: true, attributeFilter: ['style'] });
   }
 
   function isSearchPanel(el) {
@@ -767,7 +741,6 @@
     if (!panel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
-      if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
       lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
       localStorage.removeItem('search-only-bonded');
       return;
@@ -785,7 +758,6 @@
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
       lastPanel = panel;
-      attachWrapperObserver(panel);
       expandPanel(panel);
       scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
       scrollEl.addEventListener('scroll', updatePositions);
@@ -914,5 +886,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v10.5 — observe wrapper style to show blues when panel opens');
+  console.log('🚀 Axiom QBuy v9.97 — fix dataset.qbAdded not cleared on removeButtons');
 })();
