@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.6
+// @version      8.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -367,11 +367,11 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 72;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 40;
       } else {
-        posLeft = rect.right - btnW - 11;
+        posLeft = rect.right - btnW - 43;
       }
-      posTop = rect.top + rect.height / 2 - btnH / 2 + 11;
+      posTop = rect.top + rect.height / 2 - btnH / 2 + 30;
       el.style.left   = posLeft + 'px';
       el.style.top    = posTop  + 'px';
       el.style.width  = btnW + 'px';
