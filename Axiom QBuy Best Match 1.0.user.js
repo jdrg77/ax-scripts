@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.16
+// @version      8.15
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -345,7 +345,6 @@
     if (existing?._label?.isConnected) existing._label.remove();
     const el = createMiniBtn(rowCA, best.btnTemplate);
     el._matchPct = best.matchPct;
-    el.dataset.qbmNewPairCa = localStorage.getItem('axiomNewPairCA') || '';
     return el;
   }
 
