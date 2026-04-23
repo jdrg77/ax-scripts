@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -27,8 +27,8 @@
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
-  let gradCandidates  = [];
-  let gradSeqApplied  = -1; // seq of the last accepted GRAD_DATA
+  let gradCandidates    = [];
+  let gradSeqApplied    = -1; // seq of the last accepted GRAD_DATA
   let awaitingT2Confirm = false;
   let awaitT2Timer      = null;
 
@@ -58,7 +58,7 @@
     clearTimeout(awaitT2Timer);
     if (hadGrad) {
       awaitingT2Confirm = true;
-      awaitT2Timer = setTimeout(() => { awaitingT2Confirm = false; updateMiniButtons(); }, 1000);
+      awaitT2Timer = setTimeout(() => { awaitingT2Confirm = false; }, 1000);
     }
     cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
@@ -333,7 +333,7 @@
   }
 
   function updateMiniButtons() {
-    if (isPanelVisible() || awaitingT2Confirm) {
+    if (isPanelVisible()) {
       miniPool.forEach(el => { if (el.isConnected) el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; });
       return;
     }
@@ -342,10 +342,12 @@
     const activeKeys = new Set();
     const seenCAs    = new Set();
 
-    rows.forEach(row => {
+    rows.forEach((row, rowIdx) => {
       const rowCA = getCAFromRow(row);
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
+
+      if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
       if (!best) return;
