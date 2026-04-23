@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.9
+// @version      10.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -459,16 +459,6 @@
     gradProxyBtns.length = 0;
   }
 
-  function parseMc(mc) {
-    if (!mc) return 0;
-    const s = mc.replace(/,/g, '').trim();
-    const n = parseFloat(s);
-    if (isNaN(n)) return 0;
-    if (/m$/i.test(s)) return n * 1e6;
-    if (/k$/i.test(s)) return n * 1e3;
-    return n;
-  }
-
   function renderGradProxies() {
     removeGradProxyBtns();
     if (!gradCandidates.length) return;
@@ -542,10 +532,6 @@
       if (token.platform === 'bonk')    btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
       if (token.platform === 'raydium') btn.style.setProperty('background', 'rgba(0,51,255,0.85)',   'important');
       btn.style.boxShadow = platGlow;
-      if (parseMc(token.mc) > 40000) {
-        btn.style.setProperty('background', 'rgba(200,0,0,0.9)', 'important');
-        btn.style.outline = '2px solid #ff2222';
-      }
       btn._isGradProxy = true;
       btn._gradToken   = token;
 
