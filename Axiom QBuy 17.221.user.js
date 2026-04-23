@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.6
+// @version      10.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -524,6 +524,7 @@
       btn.style.top       = (top0 + (startSlot + i) * rowHeight) + 'px';
       btn.style.cursor    = 'pointer';
       btn.style.outline   = `2px solid ${platColor}`;
+      if (token.platform === 'pump')    btn.style.setProperty('background', 'rgba(255,215,0,0.85)',  'important');
       if (token.platform === 'bonk')    btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
       if (token.platform === 'raydium') btn.style.setProperty('background', 'rgba(0,51,255,0.85)',   'important');
       btn.style.boxShadow = platGlow;
