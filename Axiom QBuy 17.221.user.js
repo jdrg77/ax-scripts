@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.5
+// @version      10.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -690,7 +690,6 @@
         newBtn.style.outline   = '2px solid #0033FF';
         newBtn.style.boxShadow = '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)';
       } else {
-        newBtn.style.removeProperty('background');
         newBtn.style.outline   = '';
         newBtn.style.boxShadow = '';
       }
