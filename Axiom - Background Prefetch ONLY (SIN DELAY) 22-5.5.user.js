@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      5.9
+// @version      6.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -82,6 +82,18 @@
     return nameSpan ? nameSpan.textContent.trim() : null;
   }
 
+  function getTopRowCA() {
+    const row = document.querySelector('[class*="group/pulseRow"]');
+    if (!row) return null;
+    for (const a of row.querySelectorAll('a[href]')) {
+      const h = a.href;
+      if (h.includes('/meme/'))   { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+      if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+      if (h.includes('bonk'))     { const m = h.match(/\/([A-Za-z0-9]{32,})/);        if (m) return m[1]; }
+    }
+    return null;
+  }
+
   function getTopRowImgSrc() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
@@ -101,6 +113,9 @@
 
   function prefetch(name) {
     if (!name || userOpen || window.axiomUserOpen || name === lastPrefetched) return;
+
+    const ca = getTopRowCA();
+    if (ca) localStorage.setItem('axiomNewPairCA', ca);
 
     console.log('🔄 Prefetch:', name);
     lastPrefetched = name;
