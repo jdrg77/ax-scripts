@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.0
+// @version      8.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -49,16 +49,10 @@
     prefetchCooldown = true;
     gradCandidates   = [];
     gradSeqApplied   = -1;
-    let lastSnapshot = getQBButtons();
-    const checkChanged = setInterval(() => {
-      const curr = getQBButtons();
-      if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
-        lastSnapshot = curr;
-        clearTimeout(cooldownTimer);
-        cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
-      }
-    }, 50);
-    setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
+    const newTopCA = getTopCA();
+    if (newTopCA) sessionBest.delete(newTopCA);
+    clearTimeout(cooldownTimer);
+    cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
 
   // === CA extraction ===
@@ -184,6 +178,7 @@
   }
 
   function updateGlow() {
+    if (prefetchCooldown) return;
     const normalBtns = getQBButtons(); // all are normal in v9.0
 
     if (normalBtns.length) {
@@ -518,5 +513,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v7.992 — fix mini button posTop always uses row center');
+  console.log('⭐ Axiom QBuy Best Match v8.1 — block analysis 400ms on new pair, clear new top row sessionBest');
 })();
