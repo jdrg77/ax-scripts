@@ -94,6 +94,18 @@
     return null;
   }
 
+  function getTopRowMemeHref() {
+    const row = document.querySelector('[class*="group/pulseRow"]');
+    if (!row) return null;
+    for (const a of row.querySelectorAll('a[href]')) {
+      if (a.href.includes('/meme/')) {
+        const url = new URL(a.href);
+        return url.pathname + url.search;
+      }
+    }
+    return null;
+  }
+
   function getTopRowImgSrc() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
@@ -116,6 +128,8 @@
 
     const ca = getTopRowCA();
     if (ca) localStorage.setItem('axiomNewPairCA', ca);
+    const memeHref = getTopRowMemeHref();
+    if (memeHref) localStorage.setItem('axiomNewPairMemeHref', memeHref);
 
     console.log('🔄 Prefetch:', name);
     lastPrefetched = name;
