@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Row Highlighter
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      3.0
 // @description  Pump bordes, Pump+DEX full verde claro + QB verde, Bonk naranja, migrados glow + botón dorado
 // @author       vos
 // @match        *://axiom.trade/*
@@ -24,6 +24,7 @@
   const PUMP_COLOR       = '0, 200, 80';
   const PUMP_DEX_COLOR   = '120, 255, 160'; // verde más claro
   const BONK_COLOR       = '255, 140, 0';
+  const RAYDIUM_COLOR    = '0, 51, 255';
   const MIGRATED_COLOR   = '255, 240, 0';
   const QB_COLOR         = '255, 215, 0';
 
@@ -43,13 +44,25 @@
         btn.style.background = '';
         btn.style.color = '';
       });
-      const isMigrated = !!row.querySelector('[style*="FFD700"], [style*="ffd700"], img[src*="-grad"]');
-      const isBonk     = !!row.querySelector('img[src*="bonk"]');
-      const isPump     = !!row.querySelector('img[src*="pump"]');
-      const hasDex     = !!row.querySelector('[class*="icon-dex-paid"]');
+      const isMigrated  = !!row.querySelector('[style*="FFD700"], [style*="ffd700"], img[src*="-grad"]');
+      const isBonk      = !!row.querySelector('img[src*="bonk"]');
+      const isRaydium   = !!row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]');
+      const isPump      = !isRaydium && !!row.querySelector('img[src*="pump"]');
+      const hasDex      = !!row.querySelector('[class*="icon-dex-paid"]');
 
+      // RAYDIUM V4
+      if (isRaydium) {
+        row.style.borderRadius = '8px';
+        row.style.background = `rgba(${RAYDIUM_COLOR}, 0.07)`;
+        row.style.boxShadow = `0 0 12px rgba(${RAYDIUM_COLOR}, 0.35)`;
+        const qbBtn = row.querySelector('[class*="bg-primaryBlue"]');
+        if (qbBtn) {
+          qbBtn.style.setProperty('background', `rgb(${RAYDIUM_COLOR})`, 'important');
+          qbBtn.style.color = '#fff';
+        }
+      }
       // BONK
-      if (isBonk) {
+      else if (isBonk) {
         row.style.borderRadius = '8px';
         row.style.background = `rgba(${BONK_COLOR}, 0.07)`;
         row.style.boxShadow = `0 0 12px rgba(${BONK_COLOR}, 0.35)`;
