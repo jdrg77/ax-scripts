@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.4
+// @version      10.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,6 +20,7 @@
   let   gradCandidates = [];
   let scrollEl        = null;
   let lastPanel       = null;
+  let wrapperObserver = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
   let updateTimeout   = null;
@@ -674,6 +675,14 @@
     updateTimeout = setTimeout(() => { updatePositions(); updateTimeout = null; }, 16);
   }
 
+  function attachWrapperObserver(panel) {
+    if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
+    const wrapper = panel?.parentElement;
+    if (!wrapper) return;
+    wrapperObserver = new MutationObserver(() => scheduleUpdate());
+    wrapperObserver.observe(wrapper, { attributes: true, attributeFilter: ['style'] });
+  }
+
   function isSearchPanel(el) {
     if (el.closest('[data-rht-toaster]')) return false;
     if (el.className.toString().includes('animate-enter-bottom')) return false;
@@ -758,6 +767,7 @@
     if (!panel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
+      if (wrapperObserver) { wrapperObserver.disconnect(); wrapperObserver = null; }
       lastPanel = null; isPanelVisible = false; hasActiveSearch = false;
       localStorage.removeItem('search-only-bonded');
       return;
@@ -775,6 +785,7 @@
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
       lastPanel = panel;
+      attachWrapperObserver(panel);
       expandPanel(panel);
       scrollEl = [...panel.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight) || panel;
       scrollEl.addEventListener('scroll', updatePositions);
@@ -903,5 +914,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.97 — fix dataset.qbAdded not cleared on removeButtons');
+  console.log('🚀 Axiom QBuy v10.5 — observe wrapper style to show blues when panel opens');
 })();
