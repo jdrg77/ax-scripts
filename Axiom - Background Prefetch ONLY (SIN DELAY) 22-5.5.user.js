@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      6.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -95,15 +95,26 @@
   }
 
   function getTopRowMemeHref() {
+    // Try pulse row first
     const row = document.querySelector('[class*="group/pulseRow"]');
-    if (!row) return null;
-    for (const a of row.querySelectorAll('a[href]')) {
-      if (a.href.includes('/meme/')) {
-        const url = new URL(a.href);
-        return url.pathname + url.search;
+    if (row) {
+      for (const a of row.querySelectorAll('a[href]')) {
+        if (a.href.includes('/meme/')) {
+          const url = new URL(a.href);
+          return url.pathname + url.search;
+        }
       }
     }
-    return null;
+    // Fallback: find via New Pairs column container (links are absolute-positioned siblings)
+    const newPairsSpan = Array.from(document.querySelectorAll('span'))
+      .find(s => s.textContent.trim() === 'New Pairs');
+    if (!newPairsSpan) return null;
+    let col = newPairsSpan;
+    for (let i = 0; i < 4; i++) col = col?.parentElement;
+    const link = col?.querySelector('a[href*="/meme/"]');
+    if (!link) return null;
+    const url = new URL(link.href);
+    return url.pathname + url.search;
   }
 
   function getTopRowImgSrc() {
