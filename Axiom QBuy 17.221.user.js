@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.2
+// @version      10.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -545,7 +545,9 @@
     const bgColor   = originalBtn.style.background || '';
     const isSpecial = bgColor.includes('255, 215, 0') || bgColor.includes('120, 255, 160');
     if (isSpecial) return true;
-    return !!(lastPanel && lastPanel.isConnected && isPanelVisible);
+    if (!lastPanel?.isConnected) return false;
+    const zIdx = lastPanel.parentElement?.style.zIndex;
+    return !zIdx || zIdx !== '-9999';
   }
 
   function getCoinImage(originalBtn) {
