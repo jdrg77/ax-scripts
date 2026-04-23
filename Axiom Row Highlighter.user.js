@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Row Highlighter
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Pump bordes, Pump+DEX full verde claro + QB verde, Bonk naranja, migrados glow + botón dorado
 // @author       vos
 // @match        *://axiom.trade/*
@@ -91,6 +91,39 @@
       }
     });
   }
-  const observer = new MutationObserver(() => highlightRows());
-  observer.observe(document.body, { childList: true, subtree: true });
+  // Observer acotado al panel + debounce con RAF + takeRecords() para evitar auto-loop
+  let rafPending = false;
+  let currentObserver = null;
+  let currentPanel = null;
+
+  function scheduleHighlight() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      highlightRows();
+      currentObserver?.takeRecords(); // descarta mutations generadas por nuestros propios cambios
+    });
+  }
+
+  function attachObserver() {
+    const panel = document.querySelector('[class*="bg-backgroundTertiary"]');
+    if (panel === currentPanel && currentObserver) return;
+
+    if (currentObserver) {
+      currentObserver.disconnect();
+      currentObserver = null;
+      currentPanel = null;
+    }
+
+    if (!panel) return;
+
+    currentPanel = panel;
+    currentObserver = new MutationObserver(scheduleHighlight);
+    currentObserver.observe(panel, { childList: true, subtree: true });
+    scheduleHighlight();
+  }
+
+  attachObserver();
+  setInterval(attachObserver, 1000); // re-attach si el panel se recrea
 })();
