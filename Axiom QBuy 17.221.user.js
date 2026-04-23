@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.1
+// @version      11.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -864,7 +864,8 @@
           : _cacheRow.querySelector('img[src*="pump"]') ? 'pump'
           : 'other')
         : 'other';
-      newBtn._hasDex = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
+      newBtn._hasDex     = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
+      newBtn._isMigrated = _cacheRow ? !!_cacheRow.querySelector('img[src*="-grad"]') : false;
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.10
+// @version      8.11
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -86,6 +86,7 @@
     if (!rows.length) return 'other';
     const row = rows[0];
     if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]')) return 'raydium';
     if (row.querySelector('img[src*="pump"]')) return 'pump';
     return 'other';
   }
@@ -96,10 +97,13 @@
   }
 
   function getBtnHasDex(btn) {
-    if (btn._isGrad) return false;
-    const bg = btn._original?.style?.background || '';
-    if (bg) return bg.includes('120, 255, 160') || bg.includes('120,255,160');
+    if (btn._isGrad) return btn.hasDex || false;
     return !!btn._hasDex;
+  }
+
+  function getBtnIsMigrated(btn) {
+    if (btn._isGrad) return btn.isMigrated || false;
+    return !!btn._isMigrated;
   }
 
   function getCAFromBtn(btn) {
@@ -171,9 +175,24 @@
   // === Glow ===
 
   function applyGlow(btn) {
-    if (btn._isGrad) return; // no DOM element to glow
-    btn.style.boxShadow = '0 0 18px 5px #ffd700, 0 0 36px 10px rgba(255,215,0,0.4)';
-    btn.style.outline   = '2px solid #ffd700';
+    if (btn._isGrad) return;
+    const platform   = btn._platform || 'other';
+    const isMigrated = btn._isMigrated || false;
+    const hasDex     = btn._hasDex || false;
+    const isPumpMig  = platform === 'pump' && isMigrated;
+    const isPumpDex  = platform === 'pump' && hasDex && !isMigrated;
+    const color = platform === 'bonk'    ? '#ff8c00'
+                : platform === 'raydium' ? '#0033FF'
+                : isPumpMig              ? '#ffd700'
+                : isPumpDex              ? '#78ffa0'
+                : '#ffd700';
+    const glow  = platform === 'bonk'    ? 'rgba(255,140,0,0.4)'
+                : platform === 'raydium' ? 'rgba(0,51,255,0.4)'
+                : isPumpMig              ? 'rgba(255,215,0,0.4)'
+                : isPumpDex              ? 'rgba(120,255,160,0.4)'
+                : 'rgba(255,215,0,0.4)';
+    btn.style.boxShadow = `0 0 18px 5px ${color}, 0 0 36px 10px ${glow}`;
+    btn.style.setProperty('outline', `2px solid ${color}`, 'important');
     btn.setAttribute('data-qbm-glow', '1');
   }
 
@@ -241,8 +260,9 @@
         imgSrc:   getBtnImgSrc(winner),
         matchPct: overallMax,
         isGrad:   !!winner._isGrad,
-        platform: getBtnPlatform(winner),
-        hasDex:   getBtnHasDex(winner),
+        platform:   getBtnPlatform(winner),
+        hasDex:     getBtnHasDex(winner),
+        isMigrated: getBtnIsMigrated(winner),
         age,
         mc,
         solText:  getBtnSolText(winner),
@@ -413,21 +433,22 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
-      const platBorder = pumpDex                       ? '#78ffa0'
-                       : best.platform === 'pump'      ? '#ffd700'
-                       : best.platform === 'bonk'      ? '#ff8c00'
-                       : best.platform === 'raydium'   ? '#0033FF'
+      const isPumpMigrated = best.platform === 'pump' && best.isMigrated;
+      const isPumpDex      = best.platform === 'pump' && best.hasDex && !best.isMigrated;
+      const platBorder = best.platform === 'bonk'    ? '#ff8c00'
+                       : best.platform === 'raydium' ? '#0033FF'
+                       : isPumpMigrated              ? '#ffd700'
+                       : isPumpDex                   ? '#78ffa0'
                        : badgeColor(best.matchPct);
-      const platGlow   = pumpDex                       ? 'rgba(120,255,160,0.7)'
-                       : best.platform === 'pump'      ? 'rgba(255,215,0,0.6)'
-                       : best.platform === 'bonk'      ? 'rgba(255,140,0,0.6)'
-                       : best.platform === 'raydium'   ? 'rgba(0,51,255,0.7)'
+      const platGlow   = best.platform === 'bonk'    ? 'rgba(255,140,0,0.6)'
+                       : best.platform === 'raydium' ? 'rgba(0,51,255,0.7)'
+                       : isPumpMigrated              ? 'rgba(255,215,0,0.6)'
+                       : isPumpDex                   ? 'rgba(120,255,160,0.7)'
                        : badgeColor(best.matchPct) + '40';
-      const platBg     = pumpDex                       ? 'rgba(120,255,160,0.85)'
-                       : best.platform === 'pump'      ? 'rgba(255,215,0,0.85)'
-                       : best.platform === 'bonk'      ? 'rgba(255,140,0,0.85)'
-                       : best.platform === 'raydium'   ? 'rgba(0,51,255,0.85)'
+      const platBg     = best.platform === 'bonk'    ? 'rgba(255,140,0,0.85)'
+                       : best.platform === 'raydium' ? 'rgba(0,51,255,0.85)'
+                       : isPumpMigrated              ? 'rgba(255,215,0,0.85)'
+                       : isPumpDex                   ? 'rgba(120,255,160,0.85)'
                        : 'rgba(20,20,30,0.92)';
       el.style.background = platBg;
       el.style.border    = `1.5px solid ${platBorder}`;
