@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.13
+// @version      8.14
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -252,20 +252,24 @@
     const existing = sessionBest.get(rowCA);
     if (!prefetchCooldown && !window.axiomUserOpen && Date.now() - stableCAStart >= 300 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
+      const winnerRow = winner._isGrad ? null : winner._original?.closest('[class*="max-h-[64px]"]');
+      const _memeLink = winnerRow?.querySelector('a[href*="/meme/"]');
+      const memeHref  = _memeLink ? (new URL(_memeLink.href).pathname + new URL(_memeLink.href).search) : null;
       sessionBest.set(rowCA, {
         rowCA,
-        ca:       getCAFromBtn(winner) || rowCA,
-        ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
-        name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
-        imgSrc:   getBtnImgSrc(winner),
-        matchPct: overallMax,
-        isGrad:   !!winner._isGrad,
+        ca:         getCAFromBtn(winner) || rowCA,
+        memeHref,
+        ticker:     winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        name:       winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
+        imgSrc:     getBtnImgSrc(winner),
+        matchPct:   overallMax,
+        isGrad:     !!winner._isGrad,
         platform:   getBtnPlatform(winner),
         hasDex:     getBtnHasDex(winner),
         isMigrated: getBtnIsMigrated(winner),
         age,
         mc,
-        solText:  getBtnSolText(winner),
+        solText:    getBtnSolText(winner),
       });
     }
   }
@@ -294,21 +298,9 @@
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best?.ca) {
-        const feedRows = document.querySelectorAll('[class*="group/pulseRow"]');
-        let memeLink = null;
-        for (const r of feedRows) {
-          const l = r.querySelector('a[href*="/meme/"]');
-          if (l && (r.querySelector(`a[href*="${best.ca}"]`) || l.href.includes(best.ca))) { memeLink = l; break; }
-        }
-        if (memeLink) {
-          const url = new URL(memeLink.href);
-          history.pushState({}, '', url.pathname + url.search);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        } else {
-          history.pushState({}, '', `/meme/${best.ca}?chain=sol`);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
+      if (best) {
+        const href = best.memeHref || (best.ca ? `/meme/${best.ca}?chain=sol` : null);
+        if (href) { history.pushState({}, '', href); window.dispatchEvent(new PopStateEvent('popstate')); }
       }
     });
     el.appendChild(coinImg);
