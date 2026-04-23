@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.3
+// @version      8.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -218,21 +218,21 @@
     const rowCA = getTopCA();
     if (!rowCA) return;
     const existing = sessionBest.get(rowCA);
-    if (!prefetchCooldown && !window.axiomUserOpen && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
-        ca:          getCAFromBtn(winner) || rowCA,
-        ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
-        name:        winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
-        imgSrc:      getBtnImgSrc(winner),
-        matchPct:    overallMax,
-        isGrad:      !!winner._isGrad,
-        platform:    getBtnPlatform(winner),
-        hasDex:      getBtnHasDex(winner),
+        ca:       getCAFromBtn(winner) || rowCA,
+        ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
+        imgSrc:   getBtnImgSrc(winner),
+        matchPct: overallMax,
+        isGrad:   !!winner._isGrad,
+        platform: getBtnPlatform(winner),
+        hasDex:   getBtnHasDex(winner),
         age,
         mc,
-        solText:     getBtnSolText(winner),
+        solText:  getBtnSolText(winner),
       });
     }
   }
@@ -511,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.3 — skip sessionBest save when panel opened manually');
+  console.log('⭐ Axiom QBuy Best Match v8.2 — best match only replaced by better, never cleared');
 })();

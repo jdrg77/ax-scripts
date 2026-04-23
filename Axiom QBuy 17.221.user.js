@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.3
+// @version      10.0
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,7 +12,6 @@
 (function () {
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
-
 
   const SAMPLE_SIZE   = 16;
   const addedBtns     = [];
@@ -448,7 +447,7 @@
       const r = firstPanelBtn.getBoundingClientRect();
       if (!r.width) return;
       top0      = r.top;
-      leftPos   = r.left - 794.5;
+      leftPos   = r.left - 621.5;
       btnW      = r.width  || 48;
       btnH      = r.height || 48;
       rowHeight = 64;
@@ -636,7 +635,7 @@
     const rowEl     = sortedNormal[0].originalBtn?.closest('[class*="max-h-[64px]"]');
     const rowHeight = rowEl?.getBoundingClientRect().height ||
                       (sortedNormal.length > 1 ? Math.abs(sortedNormal[1].rect.top - sortedNormal[0].rect.top) : 64);
-    const leftPos   = sortedNormal[0].rect.left - 794.5;
+    const leftPos   = sortedNormal[0].rect.left - 621.5;
 
     sortedNormal.forEach(({ newBtn, originalBtn }, i) => {
       newBtn.style.left    = leftPos + 'px';
@@ -749,11 +748,6 @@
 
     checkPanelState(panel);
 
-    const wrapper = panel.parentElement;
-    if (wrapper && wrapper.style.marginLeft !== '173px') {
-      wrapper.style.setProperty('margin-left', '173px', 'important');
-    }
-
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
 
@@ -812,7 +806,7 @@
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
       newBtn.style.overflow = 'visible';
-      newBtn.style.left     = (rect.left - 794.5) + 'px';
+      newBtn.style.left     = (rect.left - 621.5) + 'px';
       newBtn.style.top      = rect.top + 'px';
       newBtn.style.display  = 'none';
 
