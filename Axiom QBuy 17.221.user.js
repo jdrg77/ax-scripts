@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.5
+// @version      11.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -474,7 +474,16 @@
       _gmgnIframe.src = 'about:blank';
       document.body.appendChild(_gmgnIframe);
     }
-    _gmgnIframe.contentWindow.open(url, '_blank', 'noopener,noreferrer');
+    _gmgnIframe.contentWindow.open(url, 'axiom-gmgn-tab');
+  }
+
+  function fireClick(el) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(ev => {
+      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
+    });
   }
 
 
@@ -621,6 +630,7 @@
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
+        gradChannel.postMessage({ type: 'EXECUTE_BUY_GRAD', ticker: token.ticker, name: token.name, ca: token.ca });
         openInGmgn(btn._newPairCA || token.ca);
       });
 
@@ -950,6 +960,7 @@
           navigateToMeme(row, newBtn._ca);
           return;
         }
+        fireClick(originalBtn);
         openInGmgn(newBtn._newPairCA || newBtn._ca);
       });
 
