@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.0
+// @version      10.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -152,14 +152,13 @@
     const ageSecs  = ageToSeconds(ageEl?.textContent?.trim() || '');
     const ageHours = ageSecs / 3600;
 
-    let mc = '';
+    let mc = '', vol = '';
     for (const container of row.querySelectorAll('div[class*="gap-[4px]"]')) {
       const spans     = [...container.querySelectorAll('span')];
-      const labelSpan = spans.find(s => s.textContent.trim() === 'MC');
-      if (labelSpan) {
-        mc = spans.find(s => s !== labelSpan && s.textContent.trim())?.textContent.trim() || '';
-        break;
-      }
+      const mcLabel   = spans.find(s => s.textContent.trim() === 'MC');
+      if (mcLabel && !mc) mc  = spans.find(s => s !== mcLabel  && s.textContent.trim())?.textContent.trim() || '';
+      const volLabel  = spans.find(s => s.textContent.trim() === 'V');
+      if (volLabel && !vol) vol = spans.find(s => s !== volLabel && s.textContent.trim())?.textContent.trim() || '';
     }
     if (!mc) {
       const mcLabel = [...row.querySelectorAll('span')].find(s => s.textContent.trim() === 'MC');
@@ -172,7 +171,7 @@
       }
     }
 
-    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), isGold, isGreen, match: newBtn._matchPct ?? 0, platform: newBtn._platform || 'other' };
+    return { newBtn, ticker, name, ageHours, marketCap: mcToNumber(mc), volume: mcToNumber(vol), isGold, isGreen, match: newBtn._matchPct ?? 0, platform: newBtn._platform || 'other' };
   }
 
   function sortNormal(tokens, newPair, topRowPlat) {
@@ -617,16 +616,31 @@
     const normalCandidates = visible;
 
     let sortedNormal = normalCandidates;
+    const limit = isPanelVisible ? 7 : 5;
+
     if (newPair && normalCandidates.length > 0) {
-      const datas     = normalCandidates.map(v => v.data);
-      const sorted    = sortNormal(datas, newPair, getTopRowPlatform());
-      sortedNormal    = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
-      sortedNormal = sortedNormal.slice(0, 5);
-      const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
-      normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
-    } else {
-      sortedNormal = sortedNormal.slice(0, 5);
+      const datas  = normalCandidates.map(v => v.data);
+      const sorted = sortNormal(datas, newPair, getTopRowPlatform());
+      sortedNormal = sorted.map(d => normalCandidates.find(v => v.newBtn === d.newBtn)).filter(Boolean);
     }
+
+    if (isPanelVisible && sortedNormal.length > 0) {
+      const special = sortedNormal.filter(v => v.data.isGold || v.data.isGreen);
+      const blues   = sortedNormal.filter(v => !v.data.isGold && !v.data.isGreen);
+      blues.sort((a, b) => {
+        const da = a.data, db = b.data;
+        const qualA = da.match > 70 && da.ageHours < 24 && da.volume > 10000;
+        const qualB = db.match > 70 && db.ageHours < 24 && db.volume > 10000;
+        if (qualA && !qualB) return -1;
+        if (!qualA && qualB) return 1;
+        return db.ageHours - da.ageHours; // oldest first
+      });
+      sortedNormal = [...special, ...blues];
+    }
+
+    sortedNormal = sortedNormal.slice(0, limit);
+    const sortedSet = new Set(sortedNormal.map(v => v.newBtn));
+    normalCandidates.forEach(({ newBtn }) => { if (!sortedSet.has(newBtn)) newBtn.style.display = 'none'; });
 
     if (sortedNormal.length === 0) return;
 
