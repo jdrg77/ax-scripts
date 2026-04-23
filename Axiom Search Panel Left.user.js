@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Search Panel Left
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -12,27 +12,32 @@
 (function () {
   'use strict';
 
-  const observer = new MutationObserver(() => {
+  const SHIFT_X = 123;
+  const SHIFT_Y = 6;
+  let lastWrapper = null;
+
+  function applyShift() {
     const panel = document.querySelector('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]');
-    if (!panel || panel.dataset.moved) return;
-
-    panel.dataset.moved = 'true';
-
+    if (!panel) { lastWrapper = null; return; }
     const wrapper = panel.parentElement;
-    if (!wrapper) return;
+    if (!wrapper || wrapper === lastWrapper) return;
+    lastWrapper = wrapper;
 
-    const current = wrapper.style.transform;
-    const match = current.match(/translate\((\d+)px,\s*(\d+)px\)/);
+    // Double rAF: let React apply its initial transform first
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const t = getComputedStyle(wrapper).transform;
+      if (t && t !== 'none') {
+        const mat = new DOMMatrix(t);
+        mat.e += SHIFT_X;
+        mat.f += SHIFT_Y;
+        wrapper.style.setProperty('transform', mat.toString(), 'important');
+      } else {
+        wrapper.style.setProperty('margin-left', SHIFT_X + 'px', 'important');
+        wrapper.style.setProperty('margin-top',  SHIFT_Y + 'px', 'important');
+      }
+    }));
+  }
 
-    if (match) {
-      const x = parseInt(match[1]) - 135;
-      const y = parseInt(match[2]) - 152;
-      wrapper.style.transform = `translate(${x}px, ${y}px)`;
-    } else {
-      wrapper.style.marginLeft = '-277px';
-      wrapper.style.marginTop = '-152px';
-    }
-  });
-
+  const observer = new MutationObserver(applyShift);
   observer.observe(document.body, { childList: true, subtree: true });
 })();
