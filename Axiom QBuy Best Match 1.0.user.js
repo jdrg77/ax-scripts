@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -222,17 +222,17 @@
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
-        ca:       getCAFromBtn(winner) || rowCA,
-        ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
-        name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
-        imgSrc:   getBtnImgSrc(winner),
-        matchPct: overallMax,
-        isGrad:   !!winner._isGrad,
-        platform: getBtnPlatform(winner),
-        hasDex:   getBtnHasDex(winner),
+        ca:          getCAFromBtn(winner) || rowCA,
+        ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        name:        winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
+        imgSrc:      getBtnImgSrc(winner),
+        matchPct:    overallMax,
+        isGrad:      !!winner._isGrad,
+        platform:    getBtnPlatform(winner),
+        hasDex:      getBtnHasDex(winner),
         age,
         mc,
-        solText:  getBtnSolText(winner),
+        solText:     getBtnSolText(winner),
       });
     }
   }
@@ -398,52 +398,24 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      // Sync style from the QBuy 17 overlay button for this CA (if visible)
-      const srcBtn = !best.isGrad
-        ? [...document.querySelectorAll('button')].find(b =>
-            b.style?.position === 'fixed' && b.style?.zIndex === '9999' &&
-            b.style?.display !== 'none' && b._ca === best.ca && !b._isGradProxy)
-        : null;
+      const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
+      const platBorder = pumpDex                  ? '#78ffa0'
+                       : best.platform === 'pump' ? '#ffd700'
+                       : best.platform === 'bonk' ? '#ff8c00'
+                       : badgeColor(best.matchPct);
+      const platGlow   = pumpDex                  ? 'rgba(120,255,160,0.7)'
+                       : best.platform === 'pump' ? 'rgba(255,215,0,0.6)'
+                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
+                       : badgeColor(best.matchPct) + '40';
+      const platBg     = pumpDex                  ? 'rgba(120,255,160,0.85)'
+                       : best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
+                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
+                       : 'rgba(20,20,30,0.92)';
+      el.style.background = platBg;
+      el.style.border    = `1.5px solid ${platBorder}`;
+      el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
-      if (srcBtn) {
-        el.className        = srcBtn.className;
-        el.style.background = srcBtn.style.background;
-        el.style.color      = srcBtn.style.color;
-        el.style.border     = '';
-        el.style.boxShadow  = '';
-      } else {
-        const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
-        const platBorder = pumpDex                  ? '#78ffa0'
-                         : best.platform === 'pump' ? '#ffd700'
-                         : best.platform === 'bonk' ? '#ff8c00'
-                         : badgeColor(best.matchPct);
-        const platGlow   = pumpDex                  ? 'rgba(120,255,160,0.7)'
-                         : best.platform === 'pump' ? 'rgba(255,215,0,0.6)'
-                         : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
-                         : badgeColor(best.matchPct) + '40';
-        const platBg     = pumpDex                  ? 'rgba(120,255,160,0.85)'
-                         : best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
-                         : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
-                         : 'rgba(20,20,30,0.92)';
-        el.style.background = platBg;
-        el.style.border     = `1.5px solid ${platBorder}`;
-        el.style.boxShadow  = `0 0 8px 2px ${platGlow}`;
-      }
-
-      // Re-apply overrides after className change
-      el.style.position      = 'fixed';
-      el.style.zIndex        = '99999';
-      el.style.overflow      = 'visible';
-      el.style.width         = btnW + 'px';
-      el.style.height        = btnH + 'px';
-      el.style.left          = posLeft + 'px';
-      el.style.top           = posTop  + 'px';
-      el.style.transform     = 'scale(0.7842)';
-      el.style.transformOrigin = 'top-left';
-      el.style.cursor        = 'pointer';
-      el.style.display       = 'flex';
-      el.style.alignItems    = 'center';
-      el.style.justifyContent = 'center';
+      el.style.display = 'flex';
     });
 
     miniPool.forEach((el, key) => {
@@ -539,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.4 — mini button copies style from QBuy17 overlay button');
+  console.log('⭐ Axiom QBuy Best Match v8.3 — skip sessionBest save when panel opened manually');
 })();
