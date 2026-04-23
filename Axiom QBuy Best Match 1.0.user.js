@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.3
+// @version      8.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -261,10 +261,10 @@
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best?.ca) {
-        const existing = document.querySelector(`a[href*="${best.ca}"]`);
+      if (best && rowCA) {
+        const existing = document.querySelector(`a[href*="/meme/${rowCA}"]`);
         if (existing) { existing.click(); }
-        else { history.pushState({}, '', `/meme/${best.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+        else { history.pushState({}, '', `/meme/${rowCA}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
       }
     });
     el.appendChild(coinImg);
@@ -511,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.3 — skip sessionBest save when panel opened manually');
+  console.log('⭐ Axiom QBuy Best Match v8.4 — coin image always navigates via meme ID (rowCA)');
 })();
