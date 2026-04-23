@@ -751,6 +751,8 @@
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
 
+    if (!panel.querySelector('input')) return;
+
     if (panel !== lastPanel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }

@@ -278,7 +278,7 @@
 
     const pctBadge = document.createElement('span');
     pctBadge.className = 'qbm-pct';
-    pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
+    pctBadge.style.cssText = 'position:absolute;left:-32px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:18px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;z-index:10001;';
     el.appendChild(pctBadge);
 
     const amountEl = document.createElement('div');
@@ -380,8 +380,7 @@
         const pctText = best.matchPct.toFixed(1) + '%';
         if (pctBadge.textContent !== pctText) pctBadge.textContent = pctText;
         const col = badgeColor(best.matchPct);
-        pctBadge.style.color       = col;
-        pctBadge.style.borderColor = col;
+        pctBadge.style.color = col;
       }
 
       const amountEl = el.querySelector('.qbm-amount');
