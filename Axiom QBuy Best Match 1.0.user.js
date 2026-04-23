@@ -226,7 +226,7 @@
     const rowCA = getTopCA();
     if (!rowCA) return;
     const existing = sessionBest.get(rowCA);
-    if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       sessionBest.set(rowCA, {
         rowCA,
