@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.5
+// @version      8.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -59,6 +59,11 @@
     const meme = row.querySelector('a[href*="/meme/"]');
     if (meme) {
       const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    const pump = row.querySelector('a[href*="pump.fun/coin/"]');
+    if (pump) {
+      const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
       if (m) return m[1];
     }
     return null;
@@ -256,10 +261,10 @@
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best && rowCA) {
-        const existing = document.querySelector(`a[href*="/meme/${rowCA}"]`);
+      if (best?.ca) {
+        const existing = document.querySelector(`a[href*="${best.ca}"]`);
         if (existing) { existing.click(); }
-        else { history.pushState({}, '', `/meme/${rowCA}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+        else { history.pushState({}, '', `/meme/${best.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
       }
     });
     el.appendChild(coinImg);
@@ -506,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.5 — getCAFromRow meme ID only, no pump fallback');
+  console.log('⭐ Axiom QBuy Best Match v8.3 — skip sessionBest save when panel opened manually');
 })();
