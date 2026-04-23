@@ -425,7 +425,8 @@
     removeGradProxyBtns();
     if (!gradCandidates.length) return;
 
-    const visible = addedBtns.filter(b => b.style.display !== 'none');
+    const visible = addedBtns.filter(b => b.style.display !== 'none')
+      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
 
     let top0, leftPos, btnW, btnH, rowHeight, startSlot;
 
@@ -439,7 +440,7 @@
       const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
       rowHeight = rowEl?.getBoundingClientRect().height ||
                   (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
-      startSlot = visible.length + 1;
+      startSlot = visible.length;
     } else {
       const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
       if (!firstPanelBtn) return;
