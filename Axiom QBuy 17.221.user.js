@@ -262,7 +262,7 @@
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'qb-sim-badge';
-      badge.style.cssText = 'position:absolute;left:-52px;top:-18px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;border-radius:4px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;transition:color 0.3s;';
+      badge.style.cssText = 'position:absolute;left:-52px;top:-18px;font-size:8px;font-weight:700;font-family:monospace;color:#fff;border-radius:4px;pointer-events:none;white-space:nowrap;z-index:10001;transition:color 0.3s;';
       newBtn.appendChild(badge);
     }
     return badge;
@@ -505,7 +505,7 @@
       const badge = document.createElement('span');
       badge.className = 'qb-sim-badge';
       badge.textContent = token.match.toFixed(1) + '%';
-      badge.style.cssText = `position:absolute;left:-52px;top:-18px;font-size:11px;font-weight:700;font-family:monospace;color:${col};border-radius:4px;pointer-events:none;white-space:nowrap;border:1px solid ${col};z-index:10001;`;
+      badge.style.cssText = `position:absolute;left:-52px;top:-18px;font-size:8px;font-weight:700;font-family:monospace;color:${col};border-radius:4px;pointer-events:none;white-space:nowrap;z-index:10001;`;
       btn.appendChild(badge);
 
       const label = document.createElement('div');
