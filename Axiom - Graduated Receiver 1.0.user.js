@@ -290,7 +290,7 @@
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 1000);
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 500);
     console.log('⏱ Grad: safeTimer set 1000ms');
   }
 
@@ -363,7 +363,7 @@
             });
           });
         });
-      }, 300);
+      }, 100);
     }
 
     if (msg.type === 'EXECUTE_BUY_GRAD') {
