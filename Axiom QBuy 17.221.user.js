@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.3
+// @version      10.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -619,7 +619,7 @@
 
     let sortedNormal = normalCandidates;
     const panelActuallyVisible = !!(lastPanel?.isConnected && lastPanel.parentElement?.style.zIndex !== '-9999');
-    const limit = 7;
+    const limit = panelActuallyVisible ? sortedNormal.length : 5;
 
     if (newPair && normalCandidates.length > 0) {
       const datas  = normalCandidates.map(v => v.data);
