@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.80
+// @version      1.81
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -195,9 +195,10 @@
       if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    const isBonk = !!row.querySelector('img[src*="bonk"]');
-    const isPump  = !!row.querySelector('img[src*="pump"]');
-    const platform = isBonk ? 'bonk' : isPump ? 'pump' : 'other';
+    const isBonk    = !!row.querySelector('img[src*="bonk"]');
+    const isRaydium = !!row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]');
+    const isPump    = !isRaydium && !!row.querySelector('img[src*="pump"]');
+    const platform  = isBonk ? 'bonk' : isRaydium ? 'raydium' : isPump ? 'pump' : 'other';
     let ca = '';
     for (const a of row.querySelectorAll('a[href]')) {
       const h = a.href;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      10.1
+// @version      10.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -126,6 +126,7 @@
     if (!rows.length) return 'other';
     const row = rows[0];
     if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]')) return 'raydium';
     if (row.querySelector('img[src*="pump"]')) return 'pump';
     return 'other';
   }
@@ -500,13 +501,16 @@
     gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca)).slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
-      const platColor = token.platform === 'pump' ? '#ffd700'
-                      : token.platform === 'bonk' ? '#ff8c00'
+      const platColor = token.platform === 'pump'    ? '#ffd700'
+                      : token.platform === 'bonk'    ? '#ff8c00'
+                      : token.platform === 'raydium' ? '#0033FF'
                       : '#5b8fff';
       const platGlow  = token.platform === 'pump'
                       ? '0 0 10px 3px rgba(120,255,160,0.7), 0 0 20px 6px rgba(120,255,160,0.3)'
                       : token.platform === 'bonk'
                       ? '0 0 10px 3px rgba(255,140,0,0.6), 0 0 20px 6px rgba(255,140,0,0.3)'
+                      : token.platform === 'raydium'
+                      ? '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)'
                       : '0 0 10px 3px rgba(91,143,255,0.5), 0 0 20px 6px rgba(91,143,255,0.25)';
       btn.style.position  = 'fixed';
       btn.style.zIndex    = '9999';
@@ -677,6 +681,13 @@
       newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
       newBtn.style.display = '';
       newBtn.style.opacity = '1';
+      if (newBtn._platform === 'raydium') {
+        newBtn.style.outline   = '2px solid #0033FF';
+        newBtn.style.boxShadow = '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)';
+      } else {
+        newBtn.style.outline   = '';
+        newBtn.style.boxShadow = '';
+      }
       const coinImg = getCoinImage(originalBtn);
       const imgEl   = newBtn.querySelector('img.qb-coin-img');
       if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
@@ -834,7 +845,10 @@
       }
       newBtn._ca = _ca;
       newBtn._platform = _cacheRow
-        ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk' : _cacheRow.querySelector('img[src*="pump"]') ? 'pump' : 'other')
+        ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk'
+          : _cacheRow.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]') ? 'raydium'
+          : _cacheRow.querySelector('img[src*="pump"]') ? 'pump'
+          : 'other')
         : 'other';
       newBtn._hasDex = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
       newBtn.style.cssText  = originalBtn.style.cssText;
@@ -919,5 +933,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v10.1 — pHash image comparison (DCT separable)');
+  console.log('🚀 Axiom QBuy v10.2 — Raydium V4 detection + blue glow');
 })();
