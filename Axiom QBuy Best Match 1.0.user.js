@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.4
+// @version      8.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -59,11 +59,6 @@
     const meme = row.querySelector('a[href*="/meme/"]');
     if (meme) {
       const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
-      if (m) return m[1];
-    }
-    const pump = row.querySelector('a[href*="pump.fun/coin/"]');
-    if (pump) {
-      const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
       if (m) return m[1];
     }
     return null;
@@ -511,5 +506,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.4 — coin image always navigates via meme ID (rowCA)');
+  console.log('⭐ Axiom QBuy Best Match v8.5 — getCAFromRow meme ID only, no pump fallback');
 })();
