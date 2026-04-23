@@ -49,6 +49,7 @@
     prefetchCooldown = true;
     gradCandidates   = [];
     gradSeqApplied   = -1;
+    sessionBest.clear();
     let lastSnapshot = getQBButtons();
     const checkChanged = setInterval(() => {
       const curr = getQBButtons();
