@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.3
+// @version      8.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -519,7 +519,7 @@
 
   // === Main loop ===
 
-  setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 10);
 
   console.log('⭐ Axiom QBuy Best Match v8.2 — best match only replaced by better, never cleared');
 })();
