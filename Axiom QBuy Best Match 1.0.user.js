@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.1
+// @version      8.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -49,8 +49,6 @@
     prefetchCooldown = true;
     gradCandidates   = [];
     gradSeqApplied   = -1;
-    const newTopCA = getTopCA();
-    if (newTopCA) sessionBest.delete(newTopCA);
     clearTimeout(cooldownTimer);
     cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
@@ -513,5 +511,5 @@
 
   setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
 
-  console.log('⭐ Axiom QBuy Best Match v8.1 — block analysis 400ms on new pair, clear new top row sessionBest');
+  console.log('⭐ Axiom QBuy Best Match v8.2 — best match only replaced by better, never cleared');
 })();
