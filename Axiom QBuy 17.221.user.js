@@ -458,19 +458,9 @@
       ? visible[0]._original
       : lastPanel?.querySelector('[class*="group/quickBuyButton"]');
 
-    const normalCAs = new Set(
-      addedBtns.map(b => {
-        const row = b._original?.closest('[class*="max-h-[64px]"]');
-        if (!row) return null;
-        for (const a of row.querySelectorAll('a[href]')) {
-          const m = a.href.match(/\/coin\/([A-Za-z0-9]{32,})/) || a.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
-          if (m) return m[1];
-        }
-        return null;
-      }).filter(Boolean)
-    );
+    const normalMemeIds = new Set(visible.map(b => b._ca).filter(Boolean));
 
-    gradCandidates.filter(t => !t.ca || !normalCAs.has(t.ca)).slice(0, 3).forEach((token, i) => {
+    gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca)).slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
       const platColor = token.platform === 'pump' ? '#ffd700'
