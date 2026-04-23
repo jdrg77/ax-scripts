@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Search Panel Left
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        *://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -25,12 +25,12 @@
     const match = current.match(/translate\((\d+)px,\s*(\d+)px\)/);
 
     if (match) {
-      const x = parseInt(match[1]) - 258;
-      const y = parseInt(match[2]) - 158;
+      const x = parseInt(match[1]) - 135;
+      const y = parseInt(match[2]) - 152;
       wrapper.style.transform = `translate(${x}px, ${y}px)`;
     } else {
-      wrapper.style.marginLeft = '-400px';
-      wrapper.style.marginTop = '-158px';
+      wrapper.style.marginLeft = '-277px';
+      wrapper.style.marginTop = '-152px';
     }
   });
 
