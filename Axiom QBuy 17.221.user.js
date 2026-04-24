@@ -20,6 +20,7 @@
   const gradChannel   = new BroadcastChannel('axiom-tabs');
   const hashCache     = new Map();
   let   gradCandidates = [];
+  let   gradProxyAnchor = null;
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -473,44 +474,71 @@
     gradProxyBtns.length = 0;
   }
 
+  function captureAnchorPosition() {
+    const visible = addedBtns.filter(b => b.style.display !== 'none')
+      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+    if (!visible.length) return null;
+    const r = visible[0].getBoundingClientRect();
+    const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+    return {
+      top0:      parseFloat(visible[0].style.top),
+      left:      parseFloat(visible[0].style.left),
+      btnW:      r.width  || 48,
+      btnH:      r.height || 48,
+      rowHeight: rowEl?.getBoundingClientRect().height ||
+                 (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - parseFloat(visible[0].style.top)) : 64),
+      startSlot: visible.length,
+      refSource: visible[0]._original,
+    };
+  }
+
   function renderGradProxies() {
     removeGradProxyBtns();
     if (!gradCandidates.length) return;
 
-    const visible = addedBtns.filter(b => b.style.display !== 'none')
-      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+    let top0, leftPos, btnW, btnH, rowHeight, startSlot, refSource;
 
-    let top0, leftPos, btnW, btnH, rowHeight, startSlot;
-
-    if (visible.length) {
-      top0      = parseFloat(visible[0].style.top);
-      leftPos   = parseFloat(visible[0].style.left);
+    const anchor = gradProxyAnchor;
+    if (anchor) {
+      top0      = anchor.top0;
+      leftPos   = anchor.left;
+      btnW      = anchor.btnW;
+      btnH      = anchor.btnH;
+      rowHeight = anchor.rowHeight;
+      startSlot = anchor.startSlot;
+      refSource = anchor.refSource;
       if (isNaN(top0) || isNaN(leftPos)) return;
-      const r   = visible[0].getBoundingClientRect();
-      btnW      = r.width  || 48;
-      btnH      = r.height || 48;
-      const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
-      rowHeight = rowEl?.getBoundingClientRect().height ||
-                  (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
-      startSlot = visible.length;
     } else {
-      const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-      if (!firstPanelBtn) return;
-      const r = firstPanelBtn.getBoundingClientRect();
-      if (!r.width) return;
-      top0      = r.top;
-      leftPos   = r.left - 621.5;
-      btnW      = r.width  || 48;
-      btnH      = r.height || 48;
-      rowHeight = 64;
-      startSlot = 0;
+      const visible = addedBtns.filter(b => b.style.display !== 'none')
+        .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+      if (visible.length) {
+        top0      = parseFloat(visible[0].style.top);
+        leftPos   = parseFloat(visible[0].style.left);
+        if (isNaN(top0) || isNaN(leftPos)) return;
+        const r   = visible[0].getBoundingClientRect();
+        btnW      = r.width  || 48;
+        btnH      = r.height || 48;
+        const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+        rowHeight = rowEl?.getBoundingClientRect().height ||
+                    (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
+        startSlot = visible.length;
+        refSource = visible[0]._original;
+      } else {
+        const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+        if (!firstPanelBtn) return;
+        const r = firstPanelBtn.getBoundingClientRect();
+        if (!r.width) return;
+        top0      = r.top;
+        leftPos   = r.left - 621.5;
+        btnW      = r.width  || 48;
+        btnH      = r.height || 48;
+        rowHeight = 64;
+        startSlot = 0;
+        refSource = firstPanelBtn;
+      }
     }
 
-    const refSource = visible.length
-      ? visible[0]._original
-      : lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-
-    const normalMemeIds = new Set(visible.map(b => b._ca).filter(Boolean));
+    const normalMemeIds = new Set(addedBtns.filter(b => b.style.display !== 'none').map(b => b._ca).filter(Boolean));
 
     const _eligible  = gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca));
     const _raydium   = _eligible.filter(t => t.platform === 'raydium' && t.match > 70).slice(0, 2);
@@ -798,6 +826,7 @@
   window.addEventListener('axiomPrefetchStart', () => {
     console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq actual=${window.__gradSeq ?? 'undefined'}`);
     gradCandidates = [];
+    gradProxyAnchor = null;
     removeGradProxyBtns();
   });
 
@@ -816,7 +845,8 @@
       return;
     }
     gradCandidates = newTokens;
-    console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | llamando renderGradProxies`);
+    gradProxyAnchor = captureAnchorPosition();
+    console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | anchor=${gradProxyAnchor ? 'OK' : 'null'} | llamando renderGradProxies`);
     scheduleUpdate();
     setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
   };
