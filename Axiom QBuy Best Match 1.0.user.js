@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      7.993
+// @version      8.16
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -27,8 +27,12 @@
 
   // Graduated candidates received from Tab 2 via BroadcastChannel
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
-  let gradCandidates  = [];
-  let gradSeqApplied  = -1; // seq of the last accepted GRAD_DATA
+  let gradCandidates    = [];
+  let gradSeqApplied    = -1; // seq of the last accepted GRAD_DATA
+  let awaitingT2Confirm = false;
+  let awaitT2Timer      = null;
+  let stableCA          = null;
+  let stableCAStart     = 0;
 
   // ======= BROADCHANNEL =======
 
@@ -38,6 +42,8 @@
       if (msg.seq !== undefined && msg.seq !== window.__gradSeq) return; // stale scan, discard
       gradCandidates = (msg.tokens || []).map(t => ({ ...t, _isGrad: true }));
       gradSeqApplied = msg.seq ?? -1;
+      clearTimeout(awaitT2Timer);
+      awaitingT2Confirm = false;
       updateGlow();
     }
   };
@@ -47,18 +53,16 @@
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
     prefetchCooldown = true;
+    const hadGrad    = gradCandidates.length > 0;
     gradCandidates   = [];
     gradSeqApplied   = -1;
-    let lastSnapshot = getQBButtons();
-    const checkChanged = setInterval(() => {
-      const curr = getQBButtons();
-      if (curr.length !== lastSnapshot.length || curr.some(b => !lastSnapshot.includes(b))) {
-        lastSnapshot = curr;
-        clearTimeout(cooldownTimer);
-        cooldownTimer = setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 100);
-      }
-    }, 50);
-    setTimeout(() => { clearInterval(checkChanged); prefetchCooldown = false; }, 3000);
+    clearTimeout(cooldownTimer);
+    clearTimeout(awaitT2Timer);
+    if (hadGrad) {
+      awaitingT2Confirm = true;
+      awaitT2Timer = setTimeout(() => { awaitingT2Confirm = false; }, 1000);
+    }
+    cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
 
   // === CA extraction ===
@@ -82,6 +86,7 @@
     if (!rows.length) return 'other';
     const row = rows[0];
     if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]')) return 'raydium';
     if (row.querySelector('img[src*="pump"]')) return 'pump';
     return 'other';
   }
@@ -92,10 +97,13 @@
   }
 
   function getBtnHasDex(btn) {
-    if (btn._isGrad) return false;
-    const bg = btn._original?.style?.background || '';
-    if (bg) return bg.includes('120, 255, 160') || bg.includes('120,255,160');
+    if (btn._isGrad) return btn.hasDex || false;
     return !!btn._hasDex;
+  }
+
+  function getBtnIsMigrated(btn) {
+    if (btn._isGrad) return btn.isMigrated || false;
+    return !!btn._isMigrated;
   }
 
   function getCAFromBtn(btn) {
@@ -167,9 +175,24 @@
   // === Glow ===
 
   function applyGlow(btn) {
-    if (btn._isGrad) return; // no DOM element to glow
-    btn.style.boxShadow = '0 0 18px 5px #ffd700, 0 0 36px 10px rgba(255,215,0,0.4)';
-    btn.style.outline   = '2px solid #ffd700';
+    if (btn._isGrad) return;
+    const platform   = btn._platform || 'other';
+    const isMigrated = btn._isMigrated || false;
+    const hasDex     = btn._hasDex || false;
+    const isPumpMig  = platform === 'pump' && isMigrated;
+    const isPumpDex  = platform === 'pump' && hasDex && !isMigrated;
+    const color = platform === 'bonk'    ? '#ff8c00'
+                : platform === 'raydium' ? '#0033FF'
+                : isPumpMig              ? '#ffd700'
+                : isPumpDex              ? '#78ffa0'
+                : '#ffd700';
+    const glow  = platform === 'bonk'    ? 'rgba(255,140,0,0.4)'
+                : platform === 'raydium' ? 'rgba(0,51,255,0.4)'
+                : isPumpMig              ? 'rgba(255,215,0,0.4)'
+                : isPumpDex              ? 'rgba(120,255,160,0.4)'
+                : 'rgba(255,215,0,0.4)';
+    btn.style.boxShadow = `0 0 18px 5px ${color}, 0 0 36px 10px ${glow}`;
+    btn.style.setProperty('outline', `2px solid ${color}`, 'important');
     btn.setAttribute('data-qbm-glow', '1');
   }
 
@@ -184,6 +207,7 @@
   }
 
   function updateGlow() {
+    if (prefetchCooldown) return;
     const normalBtns = getQBButtons(); // all are normal in v9.0
 
     if (normalBtns.length) {
@@ -224,42 +248,47 @@
     if (overallMax < 0) return;
     const rowCA = getTopCA();
     if (!rowCA) return;
+    if (rowCA !== stableCA) { stableCA = rowCA; stableCAStart = Date.now(); }
     const existing = sessionBest.get(rowCA);
-    if (prefetchCount > 2 && !prefetchCooldown && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && !window.axiomUserOpen && Date.now() - stableCAStart >= 300 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
+      const winnerRow = winner._isGrad ? null : winner._original?.closest('[class*="max-h-[64px]"]');
+      const _memeLink = winnerRow?.querySelector('a[href*="/meme/"]');
+      const memeHref  = _memeLink ? (new URL(_memeLink.href).pathname + new URL(_memeLink.href).search) : null;
       sessionBest.set(rowCA, {
         rowCA,
-        ca:       getCAFromBtn(winner) || rowCA,
-        ticker:   winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
-        name:     winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
-        imgSrc:   getBtnImgSrc(winner),
-        matchPct: overallMax,
-        isGrad:   !!winner._isGrad,
-        platform: getBtnPlatform(winner),
-        hasDex:   getBtnHasDex(winner),
+        ca:          getCAFromBtn(winner) || rowCA,
+        newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
+        memeHref,
+        btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
+        ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
+        name:       winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
+        imgSrc:     getBtnImgSrc(winner),
+        matchPct:   overallMax,
+        isGrad:     !!winner._isGrad,
+        platform:   getBtnPlatform(winner),
+        hasDex:     getBtnHasDex(winner),
+        isMigrated: getBtnIsMigrated(winner),
         age,
         mc,
-        solText:  getBtnSolText(winner),
+        solText:    getBtnSolText(winner),
       });
     }
   }
 
   // === Mini buttons ===
 
-  function createMiniBtn(rowCA) {
-    const el = document.createElement('button');
+  function createMiniBtn(rowCA, template) {
+    const el = template ? template.cloneNode(true) : document.createElement('button');
+    delete el.dataset.qbAdded;
     el.setAttribute('data-qbm-mini', rowCA);
-    el.style.position       = 'fixed';
-    el.style.zIndex         = '99999';
-    el.style.display        = 'none';
-    el.style.overflow       = 'visible';
-    el.style.background     = 'rgba(20,20,30,0.92)';
-    el.style.border         = '1.5px solid rgba(255,215,0,0.7)';
-    el.style.borderRadius   = '6px';
-    el.style.cursor         = 'pointer';
-    el.style.alignItems     = 'center';
-    el.style.justifyContent = 'center';
-    el.style.transform      = 'scale(0.7842)';
+    el.style.cssText         = '';
+    el.style.position        = 'fixed';
+    el.style.zIndex          = '99999';
+    el.style.display         = 'none';
+    el.style.overflow        = 'visible';
+    el.style.cursor          = 'pointer';
+    el.style.transform       = 'scale(0.7842)';
     el.style.transformOrigin = 'top-left';
 
     const coinImg = document.createElement('img');
@@ -268,10 +297,9 @@
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best?.ca) {
-        const existing = document.querySelector(`a[href*="${best.ca}"]`);
-        if (existing) { existing.click(); }
-        else { history.pushState({}, '', `/meme/${best.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+      if (best) {
+        const href = best.memeHref || (best.ca ? `/meme/${best.ca}?chain=sol` : null);
+        if (href) { history.pushState({}, '', href); window.dispatchEvent(new PopStateEvent('popstate')); }
       }
     });
     el.appendChild(coinImg);
@@ -280,11 +308,6 @@
     pctBadge.className = 'qbm-pct';
     pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
-
-    const amountEl = document.createElement('div');
-    amountEl.className = 'qbm-amount';
-    amountEl.style.cssText = 'font-size:11px;font-weight:700;font-family:monospace;color:#fff;pointer-events:none;text-align:center;line-height:1.2;';
-    el.appendChild(amountEl);
 
     const label = document.createElement('div');
     label.className = 'qbm-label';
@@ -316,11 +339,15 @@
     return el;
   }
 
-  function getOrCreateMiniBtn(rowCA) {
+  function getOrCreateMiniBtn(rowCA, best) {
     const existing = miniPool.get(rowCA);
-    if (existing?.isConnected) return existing;
+    if (existing?.isConnected && existing._matchPct === best.matchPct) return existing;
+    if (existing?.isConnected) existing.remove();
     if (existing?._label?.isConnected) existing._label.remove();
-    return createMiniBtn(rowCA);
+    const el = createMiniBtn(rowCA, best.btnTemplate);
+    el._matchPct = best.matchPct;
+    el.dataset.qbmNewPairCa = best.newPairCA || '';
+    return el;
   }
 
   function isPanelVisible() {
@@ -339,10 +366,12 @@
     const activeKeys = new Set();
     const seenCAs    = new Set();
 
-    rows.forEach(row => {
+    rows.forEach((row, rowIdx) => {
       const rowCA = getCAFromRow(row);
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
+
+      if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
       if (!best) return;
@@ -352,7 +381,7 @@
 
       activeKeys.add(rowCA);
 
-      const el   = getOrCreateMiniBtn(rowCA);
+      const el   = getOrCreateMiniBtn(rowCA, best);
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
@@ -362,11 +391,11 @@
       let posLeft, posTop;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 72;
+        posLeft = sr.left + sr.width  / 2 - btnW / 2 + 40;
       } else {
-        posLeft = rect.right - btnW - 11;
+        posLeft = rect.right - btnW - 43;
       }
-      posTop = rect.top + rect.height / 2 - btnH / 2 + 11;
+      posTop = rect.top + rect.height / 2 - btnH / 2 + 30;
       el.style.left   = posLeft + 'px';
       el.style.top    = posTop  + 'px';
       el.style.width  = btnW + 'px';
@@ -405,18 +434,22 @@
       const infoBar = el.querySelector('.qbm-info-bar');
       if (infoBar) infoBar.style.display = (best.age || best.mc) ? '' : 'none';
 
-      const pumpDex    = best.platform === 'pump' && !best.isGrad && best.hasDex;
-      const platBorder = pumpDex                  ? '#78ffa0'
-                       : best.platform === 'pump' ? '#ffd700'
-                       : best.platform === 'bonk' ? '#ff8c00'
+      const isPumpMigrated = best.platform === 'pump' && best.isMigrated;
+      const isPumpDex      = best.platform === 'pump' && best.hasDex && !best.isMigrated;
+      const platBorder = best.platform === 'bonk'    ? '#ff8c00'
+                       : best.platform === 'raydium' ? '#0033FF'
+                       : isPumpMigrated              ? '#ffd700'
+                       : isPumpDex                   ? '#78ffa0'
                        : badgeColor(best.matchPct);
-      const platGlow   = pumpDex                  ? 'rgba(120,255,160,0.7)'
-                       : best.platform === 'pump' ? 'rgba(255,215,0,0.6)'
-                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.6)'
+      const platGlow   = best.platform === 'bonk'    ? 'rgba(255,140,0,0.6)'
+                       : best.platform === 'raydium' ? 'rgba(0,51,255,0.7)'
+                       : isPumpMigrated              ? 'rgba(255,215,0,0.6)'
+                       : isPumpDex                   ? 'rgba(120,255,160,0.7)'
                        : badgeColor(best.matchPct) + '40';
-      const platBg     = pumpDex                  ? 'rgba(120,255,160,0.85)'
-                       : best.platform === 'pump' ? 'rgba(255,215,0,0.85)'
-                       : best.platform === 'bonk' ? 'rgba(255,140,0,0.85)'
+      const platBg     = best.platform === 'bonk'    ? 'rgba(255,140,0,0.85)'
+                       : best.platform === 'raydium' ? 'rgba(0,51,255,0.85)'
+                       : isPumpMigrated              ? 'rgba(255,215,0,0.85)'
+                       : isPumpDex                   ? 'rgba(120,255,160,0.85)'
                        : 'rgba(20,20,30,0.92)';
       el.style.background = platBg;
       el.style.border    = `1.5px solid ${platBorder}`;
@@ -516,7 +549,7 @@
 
   // === Main loop ===
 
-  setInterval(() => { updateGlow(); updateMiniButtons(); }, 50);
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 10);
 
-  console.log('⭐ Axiom QBuy Best Match v7.992 — fix mini button posTop always uses row center');
+  console.log('⭐ Axiom QBuy Best Match v8.10 — Raydium V4 blue styling');
 })();

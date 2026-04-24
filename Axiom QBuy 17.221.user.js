@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      9.98
+// @version      11.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -13,58 +13,95 @@
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
-  const SAMPLE_SIZE   = 16;
+  const HASH_SIZE     = 32;
+  const HASH_BITS     = 8;
   const addedBtns     = [];
   const gradProxyBtns = [];
   const gradChannel   = new BroadcastChannel('axiom-tabs');
+  const hashCache     = new Map();
   let   gradCandidates = [];
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
   let hasActiveSearch = false;
   let updateTimeout   = null;
-  let referencePixels = null;
+  let referenceHash   = null;
   let referenceSource = null;
 
-  function getPixels(src, cb) {
+  function dct1d(f) {
+    const N = f.length;
+    const F = new Float32Array(N);
+    const pi2N = Math.PI / (2 * N);
+    for (let u = 0; u < N; u++) {
+      let sum = 0;
+      for (let i = 0; i < N; i++) sum += f[i] * Math.cos((2 * i + 1) * u * pi2N);
+      F[u] = sum;
+    }
+    return F;
+  }
+
+  function computeHash(img) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = HASH_SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, HASH_SIZE, HASH_SIZE);
+    const data = ctx.getImageData(0, 0, HASH_SIZE, HASH_SIZE).data;
+    const gray = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let i = 0; i < data.length; i += 4)
+      gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    // Separable 2D DCT: rows then columns
+    const tmp = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let r = 0; r < HASH_SIZE; r++) {
+      const row = dct1d(gray.slice(r * HASH_SIZE, (r + 1) * HASH_SIZE));
+      for (let c = 0; c < HASH_SIZE; c++) tmp[r * HASH_SIZE + c] = row[c];
+    }
+    const dct = new Float32Array(HASH_SIZE * HASH_SIZE);
+    for (let c = 0; c < HASH_SIZE; c++) {
+      const col = new Float32Array(HASH_SIZE);
+      for (let r = 0; r < HASH_SIZE; r++) col[r] = tmp[r * HASH_SIZE + c];
+      const colDCT = dct1d(col);
+      for (let r = 0; r < HASH_SIZE; r++) dct[r * HASH_SIZE + c] = colDCT[r];
+    }
+    // Top-left HASH_BITS×HASH_BITS — compute mean then build binary hash
+    let sum = 0;
+    for (let x = 0; x < HASH_BITS; x++)
+      for (let y = 0; y < HASH_BITS; y++) sum += dct[x * HASH_SIZE + y];
+    const mean = sum / (HASH_BITS * HASH_BITS);
+    let hash = '';
+    for (let x = 0; x < HASH_BITS; x++)
+      for (let y = 0; y < HASH_BITS; y++) hash += dct[x * HASH_SIZE + y] > mean ? '1' : '0';
+    return hash;
+  }
+
+  function getHash(src, cb) {
     if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
+    if (hashCache.has(src)) return cb(hashCache.get(src));
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = function () {
+    img.onload = function() {
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width  = SAMPLE_SIZE;
-        canvas.height = SAMPLE_SIZE;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        const raw = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-        cb(raw);
-      } catch (e) { cb(null); }
+        const hash = computeHash(img);
+        hashCache.set(src, hash);
+        cb(hash);
+      } catch(e) { cb(null); }
     };
     img.onerror = () => cb(null);
     img.src = src.includes('?') ? src : src + '?qb=1';
   }
 
-  function pixelSimilarity(p1, p2) {
-    if (!p1 || !p2) return null;
-    const len    = Math.min(p1.length, p2.length);
-    const pixels = len / 4;
-    let sum = 0;
-    for (let i = 0; i < len; i += 4) {
-      const dr = Math.abs(p1[i]     - p2[i])     / 255;
-      const dg = Math.abs(p1[i + 1] - p2[i + 1]) / 255;
-      const db = Math.abs(p1[i + 2] - p2[i + 2]) / 255;
-      sum += (dr + dg + db) / 3;
-    }
-    return parseFloat(((1 - sum / pixels) * 100).toFixed(1));
+  function hashSimilarity(h1, h2) {
+    if (!h1 || !h2 || h1.length !== h2.length) return null;
+    let matches = 0;
+    for (let i = 0; i < h1.length; i++) if (h1[i] === h2[i]) matches++;
+    return parseFloat(((matches / h1.length) * 100).toFixed(1));
   }
 
   function setReference(src) {
     if (!src || src.startsWith('data:') || src === referenceSource) return;
     referenceSource = src;
-    referencePixels = null;
-    getPixels(src, (pixels) => {
-      referencePixels = pixels;
+    referenceHash   = null;
+    getHash(src, (hash) => {
+      referenceHash = hash;
       updateAllBadges();
       scheduleUpdate();
     });
@@ -89,6 +126,7 @@
     if (!rows.length) return 'other';
     const row = rows[0];
     if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]')) return 'raydium';
     if (row.querySelector('img[src*="pump"]')) return 'pump';
     return 'other';
   }
@@ -262,7 +300,7 @@
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'qb-sim-badge';
-      badge.style.cssText = 'position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid currentColor;z-index:10001;transition:color 0.3s;';
+      badge.style.cssText = 'position:absolute;left:-52px;top:-18px;font-size:8px;font-weight:700;font-family:monospace;color:#fff;border-radius:4px;pointer-events:none;white-space:nowrap;z-index:10001;transition:color 0.3s;';
       newBtn.appendChild(badge);
     }
     return badge;
@@ -276,9 +314,9 @@
     const row     = originalBtn.closest('[class*="max-h-[64px]"]');
     const coinImg = getRealImage(row);
     if (!coinImg || !coinImg.src) { badge.textContent = '—'; badge.style.color = '#888'; if (onDone) onDone(); return; }
-    if (!referencePixels)         { badge.textContent = '…'; badge.style.color = '#888'; if (onDone) onDone(); return; }
-    getPixels(coinImg.src, (rowPixels) => {
-      const pct = pixelSimilarity(referencePixels, rowPixels);
+    if (!referenceHash)           { badge.textContent = '…'; badge.style.color = '#888'; if (onDone) onDone(); return; }
+    getHash(coinImg.src, (rowHash) => {
+      const pct = hashSimilarity(referenceHash, rowHash);
       newBtn._matchPct = pct ?? 0;
       if (pct === null) {
         badge.textContent = '?'; badge.style.color = '#888';
@@ -398,6 +436,20 @@
     }
   }
 
+  function navigateToMeme(row, fallbackCA) {
+    const link = row?.querySelector('a[href*="/meme/"]');
+    if (link) {
+      const url = new URL(link.href);
+      history.pushState({}, '', url.pathname + url.search);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
+    if (fallbackCA) {
+      history.pushState({}, '', `/meme/${fallbackCA}?chain=sol`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }
+
   function fireClick(el) {
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2;
@@ -425,7 +477,8 @@
     removeGradProxyBtns();
     if (!gradCandidates.length) return;
 
-    const visible = addedBtns.filter(b => b.style.display !== 'none');
+    const visible = addedBtns.filter(b => b.style.display !== 'none')
+      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
 
     let top0, leftPos, btnW, btnH, rowHeight, startSlot;
 
@@ -439,7 +492,7 @@
       const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
       rowHeight = rowEl?.getBoundingClientRect().height ||
                   (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
-      startSlot = visible.length + 1;
+      startSlot = visible.length;
     } else {
       const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
       if (!firstPanelBtn) return;
@@ -457,17 +510,28 @@
       ? visible[0]._original
       : lastPanel?.querySelector('[class*="group/quickBuyButton"]');
 
-    gradCandidates.slice(0, 3).forEach((token, i) => {
+    const normalMemeIds = new Set(visible.map(b => b._ca).filter(Boolean));
+
+    const _eligible  = gradCandidates.filter(t => !t.ca || !normalMemeIds.has(t.ca));
+    const _raydium   = _eligible.filter(t => t.platform === 'raydium' && t.match > 70).slice(0, 2);
+    const _others    = _eligible.filter(t => t.platform !== 'raydium');
+    [..._raydium, ..._others].slice(0, 3).forEach((token, i) => {
       const btn = refSource ? refSource.cloneNode(true) : document.createElement('button');
       delete btn.dataset.qbAdded;
-      const platColor = token.platform === 'pump' ? '#ffd700'
-                      : token.platform === 'bonk' ? '#ff8c00'
-                      : '#5b8fff';
-      const platGlow  = token.platform === 'pump'
-                      ? '0 0 10px 3px rgba(120,255,160,0.7), 0 0 20px 6px rgba(120,255,160,0.3)'
-                      : token.platform === 'bonk'
+      const isPumpMigrated = token.platform === 'pump' && token.isMigrated;
+      const isPumpDex      = token.platform === 'pump' && token.hasDex;
+      const platColor = token.platform === 'bonk'   ? '#ff8c00'
+                      : token.platform === 'raydium' ? '#0033FF'
+                      : isPumpMigrated               ? '#ffd700'
+                      : isPumpDex                    ? '#78ffa0'
+                      : '';
+      const platGlow  = token.platform === 'bonk'
                       ? '0 0 10px 3px rgba(255,140,0,0.6), 0 0 20px 6px rgba(255,140,0,0.3)'
-                      : '0 0 10px 3px rgba(91,143,255,0.5), 0 0 20px 6px rgba(91,143,255,0.25)';
+                      : token.platform === 'raydium'
+                      ? '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)'
+                      : isPumpMigrated || isPumpDex
+                      ? '0 0 10px 3px rgba(120,255,160,0.7), 0 0 20px 6px rgba(120,255,160,0.3)'
+                      : '';
       btn.style.position  = 'fixed';
       btn.style.zIndex    = '9999';
       btn.style.overflow  = 'visible';
@@ -476,8 +540,11 @@
       btn.style.left      = leftPos + 'px';
       btn.style.top       = (top0 + (startSlot + i) * rowHeight) + 'px';
       btn.style.cursor    = 'pointer';
-      btn.style.outline   = `2px solid ${platColor}`;
-      if (token.platform === 'bonk') btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
+      btn.style.outline   = platColor ? `2px solid ${platColor}` : '';
+      if (isPumpMigrated)               btn.style.setProperty('background', 'rgba(255,215,0,0.85)',  'important');
+      else if (isPumpDex)               btn.style.setProperty('background', 'rgba(120,255,160,0.85)','important');
+      if (token.platform === 'bonk')    btn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
+      if (token.platform === 'raydium') btn.style.setProperty('background', 'rgba(0,51,255,0.85)',   'important');
       btn.style.boxShadow = platGlow;
       btn._isGradProxy = true;
       btn._gradToken   = token;
@@ -490,9 +557,12 @@
         img.addEventListener('click', e => {
           e.stopPropagation(); e.preventDefault();
           if (token.ca) {
-            const existing = document.querySelector(`a[href*="${token.ca}"]`);
-            if (existing) existing.click();
-            else { history.pushState({}, '', `/meme/${token.ca}?chain=sol`); window.dispatchEvent(new PopStateEvent('popstate')); }
+            const feedRows = document.querySelectorAll('[class*="group/pulseRow"]');
+            let memeRow = null;
+            for (const r of feedRows) {
+              if (r.querySelector(`a[href*="${token.ca}"]`)) { memeRow = r; break; }
+            }
+            navigateToMeme(memeRow, token.ca);
           }
         });
         btn.appendChild(img);
@@ -502,7 +572,7 @@
       const badge = document.createElement('span');
       badge.className = 'qb-sim-badge';
       badge.textContent = token.match.toFixed(1) + '%';
-      badge.style.cssText = `position:absolute;left:-66px;top:-10px;font-size:11px;font-weight:700;font-family:monospace;color:${col};background:rgba(0,0,0,0.72);border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1px solid ${col};z-index:10001;`;
+      badge.style.cssText = `position:absolute;left:-52px;top:-18px;font-size:8px;font-weight:700;font-family:monospace;color:${col};border-radius:4px;pointer-events:none;white-space:nowrap;z-index:10001;`;
       btn.appendChild(badge);
 
       const label = document.createElement('div');
@@ -557,12 +627,10 @@
     lastTopSrc = topImg.src;
     if (topImg.complete && topImg.naturalWidth > 0) {
       try {
-        const c = document.createElement('canvas');
-        c.width = c.height = SAMPLE_SIZE;
-        c.getContext('2d').drawImage(topImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+        const hash = computeHash(topImg);
+        hashCache.set(topImg.src, hash);
         referenceSource = topImg.src;
-        referencePixels = pixels;
+        referenceHash   = hash;
         updateAllBadges();
         scheduleUpdate();
         return;
@@ -639,6 +707,18 @@
       newBtn.style.top     = (slot1Top + i * rowHeight) + 'px';
       newBtn.style.display = '';
       newBtn.style.opacity = '1';
+      if (newBtn._platform === 'raydium') {
+        newBtn.style.setProperty('background', 'rgba(0,51,255,0.85)', 'important');
+        newBtn.style.setProperty('outline', '2px solid #0033FF', 'important');
+        newBtn.style.boxShadow = '0 0 10px 3px rgba(0,51,255,0.7), 0 0 20px 6px rgba(0,51,255,0.35)';
+      } else if (newBtn._platform === 'bonk') {
+        newBtn.style.setProperty('background', 'rgba(255,140,0,0.85)', 'important');
+        newBtn.style.setProperty('outline', '2px solid #ff8c00', 'important');
+        newBtn.style.boxShadow = '0 0 10px 3px rgba(255,140,0,0.6), 0 0 20px 6px rgba(255,140,0,0.3)';
+      } else {
+        newBtn.style.setProperty('outline', 'none', 'important');
+        newBtn.style.boxShadow = '';
+      }
       const coinImg = getCoinImage(originalBtn);
       const imgEl   = newBtn.querySelector('img.qb-coin-img');
       if (coinImg && imgEl && imgEl.src !== coinImg.src) { imgEl.src = coinImg.src; updateBadge(newBtn); }
@@ -694,11 +774,8 @@
     if (qbImg) {
       const parentBtn = addedBtns.find(b => b.contains(qbImg));
       if (parentBtn?._original) {
-        const row    = parentBtn._original.closest('[class*="max-h-[64px]"]');
-        const link   = row?.querySelector('a[href*="/meme/"]');
-        if (link) { window.location.href = link.href; return; }
-        const rowBtn = parentBtn._original.closest('div[role="button"]');
-        if (rowBtn) { fireClick(rowBtn); return; }
+        const row = parentBtn._original.closest('[class*="max-h-[64px]"]');
+        navigateToMeme(row, parentBtn._ca);
       }
       return;
     }
@@ -748,6 +825,9 @@
     const panelRect = panel.getBoundingClientRect();
     if (panelRect.left < 0 || panelRect.top < 0 || panelRect.width < 100) return;
 
+    const panelInput = panel.querySelector('input');
+    if (!panelInput || !panelInput.value.trim()) return;
+
     if (panel !== lastPanel) {
       removeButtons();
       if (scrollEl) { scrollEl.removeEventListener('scroll', updatePositions); scrollEl = null; }
@@ -793,9 +873,13 @@
       }
       newBtn._ca = _ca;
       newBtn._platform = _cacheRow
-        ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk' : _cacheRow.querySelector('img[src*="pump"]') ? 'pump' : 'other')
+        ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk'
+          : _cacheRow.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]') ? 'raydium'
+          : _cacheRow.querySelector('img[src*="pump"]') ? 'pump'
+          : 'other')
         : 'other';
-      newBtn._hasDex = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
+      newBtn._hasDex     = _cacheRow ? !!_cacheRow.querySelector('[class*="icon-dex-paid"]') : false;
+      newBtn._isMigrated = _cacheRow ? !!_cacheRow.querySelector('img[src*="-grad"]') : false;
       newBtn.style.cssText  = originalBtn.style.cssText;
       newBtn.style.position = 'fixed';
       newBtn.style.zIndex   = '9999';
@@ -812,13 +896,11 @@
         newBtn.appendChild(imgEl);
       }
 
-      if (referencePixels && coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
+      if (referenceHash && coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
         try {
-          const c = document.createElement('canvas');
-          c.width = c.height = SAMPLE_SIZE;
-          c.getContext('2d').drawImage(coinImg, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-          const pixels = c.getContext('2d').getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-          newBtn._matchPct = pixelSimilarity(referencePixels, pixels) ?? 0;
+          const hash = computeHash(coinImg);
+          hashCache.set(coinImg.src, hash);
+          newBtn._matchPct = hashSimilarity(referenceHash, hash) ?? 0;
         } catch(e) {}
       }
 
@@ -843,11 +925,8 @@
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
         if (e.target.closest('img.qb-coin-img')) {
-          const row  = originalBtn.closest('[class*="max-h-[64px]"]');
-          const link = row?.querySelector('a[href*="/meme/"]');
-          if (link) { window.location.href = link.href; return; }
-          const rowBtn = originalBtn.closest('div[role="button"]');
-          if (rowBtn) { fireClick(rowBtn); return; }
+          const row = originalBtn.closest('[class*="max-h-[64px]"]');
+          navigateToMeme(row, newBtn._ca);
           return;
         }
         fireClick(originalBtn);
@@ -880,5 +959,5 @@
 
   setInterval(() => { checkTopPulseReference(); }, 500);
 
-  console.log('🚀 Axiom QBuy v9.97 — fix dataset.qbAdded not cleared on removeButtons');
+  console.log('🚀 Axiom QBuy v10.3 — Raydium V4 blue background + glow');
 })();
