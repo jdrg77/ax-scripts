@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.83
+// @version      1.84
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -244,7 +244,7 @@
     if (expectedName) {
       const inputVal = (panel.querySelector('input')?.value || '').trim().toLowerCase();
       const expected = expectedName.trim().toLowerCase();
-      if (!inputVal.includes(expected) && !expected.includes(inputVal)) {
+      if (!inputVal || (!inputVal.includes(expected) && !expected.includes(inputVal))) {
         console.log('⏳ Grad: panel input mismatch, skipping stale scan. input:', inputVal, 'expected:', expected);
         return;
       }
@@ -293,18 +293,36 @@
     const panel = getPanel();
     if (!panel) { doScan(id, refPixels, seq, expectedName); return; }
 
-    let fired = false;
-    panelObs = new MutationObserver(() => {
-      if (fired) return;
-      if (!panel.querySelectorAll('[class*="group/quickBuyButton"]').length) return;
-      fired = true;
-      console.log('🔔 Grad: MutationObserver fired (QB buttons found)');
-      if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 50);
-    });
-    panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 800);
-    console.log('⏱ Grad: safeTimer set 1000ms');
+    function beginObserving() {
+      if (id !== scanId) return;
+      let fired = false;
+      panelObs = new MutationObserver(() => {
+        if (fired) return;
+        if (!panel.querySelectorAll('[class*="group/quickBuyButton"]').length) return;
+        fired = true;
+        console.log('🔔 Grad: MutationObserver fired (QB buttons found)');
+        if (debTimer) clearTimeout(debTimer);
+        debTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 50);
+      });
+      panelObs.observe(panel, { childList: true, subtree: true });
+      safeTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 800);
+      console.log('⏱ Grad: safeTimer set 800ms');
+    }
+
+    // If panel already has stale buttons, wait for them to clear before observing for new ones
+    if (panel.querySelectorAll('[class*="group/quickBuyButton"]').length > 0) {
+      console.log('⏳ Grad: waiting for stale buttons to clear before scan');
+      const clearObs = new MutationObserver(() => {
+        if (id !== scanId) { clearObs.disconnect(); return; }
+        if (panel.querySelectorAll('[class*="group/quickBuyButton"]').length > 0) return;
+        clearObs.disconnect();
+        beginObserving();
+      });
+      clearObs.observe(panel, { childList: true, subtree: true });
+      setTimeout(() => { clearObs.disconnect(); if (id === scanId) beginObserving(); }, 600);
+    } else {
+      beginObserving();
+    }
   }
 
   // ======= BUY EXECUTION =======
