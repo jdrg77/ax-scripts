@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.4
+// @version      11.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -924,6 +924,7 @@
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
+        window.postMessage({ type: 'AX_OPEN_GMGN', ca: localStorage.getItem('axiomNewPairCA') }, '*');
         if (e.target.closest('img.qb-coin-img')) {
           const row = originalBtn.closest('[class*="max-h-[64px]"]');
           navigateToMeme(row, newBtn._ca);
