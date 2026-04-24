@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.4
+// @version      11.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,6 +20,7 @@
   const gradChannel   = new BroadcastChannel('axiom-tabs');
   const hashCache     = new Map();
   let   gradCandidates = [];
+  let   waitingForGradData = false;
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -475,6 +476,7 @@
 
   function renderGradProxies() {
     removeGradProxyBtns();
+    if (waitingForGradData) return;
     if (!gradCandidates.length) return;
 
     const visible = addedBtns.filter(b => b.style.display !== 'none')
@@ -797,12 +799,14 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     gradCandidates = [];
+    waitingForGradData = true;
     removeButtons();
   });
 
   gradChannel.onmessage = (e) => {
     if (e.data.type !== 'GRAD_DATA') return;
     if (e.data.seq !== undefined && e.data.seq !== window.__gradSeq) return;
+    waitingForGradData = false;
     gradCandidates = e.data.tokens || [];
     scheduleUpdate();
     setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
