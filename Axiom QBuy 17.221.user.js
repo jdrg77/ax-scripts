@@ -798,7 +798,7 @@
   window.addEventListener('axiomPrefetchStart', () => {
     console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq actual=${window.__gradSeq ?? 'undefined'}`);
     gradCandidates = [];
-    removeButtons();
+    removeGradProxyBtns();
   });
 
   gradChannel.onmessage = (e) => {

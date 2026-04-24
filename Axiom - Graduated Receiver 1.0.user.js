@@ -297,6 +297,7 @@
         const stable = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
         if (!stable) { sawEmpty = true; return; } // disappeared = stale cache, keep watching
         fired = true;
+        if (safeTimer) { clearTimeout(safeTimer); safeTimer = null; }
         console.log('✅ [8] MutationObserver: botones estables en panel, count:', stable);
         doScan(id, refPixels, seq);
       }, 200);
