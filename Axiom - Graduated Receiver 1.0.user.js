@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.82
+// @version      1.82-debug
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -229,22 +229,22 @@
   }
 
   function doScan(id, refPixels, seq) {
-    console.log('🔔 Grad: doScan fired id:', id, 'scanId:', scanId, 'match:', id === scanId);
-    if (id !== scanId) return;
+    if (id !== scanId) { console.log('🚫 [9] doScan abortado id:', id, 'scanId:', scanId); return; }
     abortScan();
     scanId = id;
 
     const panel = getPanel();
     if (!panel) {
-      console.log('❌ Grad: panel gone at doScan');
+      console.log('❌ [9] doScan: panel gone');
       channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq });
       return;
     }
 
+    const inputNow = panel.querySelector('input')?.value || '';
     const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
-    console.log('🔍 Grad: scanning', btns.length, 'buttons, chip active:', isGraduatedChipActive(panel));
+    console.log('🔍 [9] doScan — input:', inputNow, '| botones:', btns.length, '| chip:', isGraduatedChipActive(panel), '| seq:', seq);
     const rawInfos = btns.map(extractBtnInfo);
-    console.log('📋 Grad: rawInfos:', rawInfos.map((x,i) => `[${i}]:${x ? (x.ticker||'empty') : 'NULL'}`).join(' '));
+    console.log('📋 [10] tickers encontrados:', rawInfos.map((x,i) => `[${i}]:${x ? (x.ticker||'?') : 'NULL'}`).join(' '));
     const infos = rawInfos.filter(Boolean);
     if (!infos.length) {
       console.log('⚠️ Grad: 0 tokens found in panel');
@@ -274,28 +274,32 @@
 
   function broadcastResults(tokens, seq) {
     tokens.sort((a, b) => b.match - a.match);
-    console.log('📡 Grad broadcast:', tokens.length, 'tokens, top:', tokens[0]?.ticker, tokens[0]?.match + '%', '| seq:', seq);
+    console.log('📡 [11] BROADCAST', tokens.length, 'tokens | seq:', seq, '| top:', tokens.map(t => t.ticker + ' ' + t.match + '%').join(', '));
     channel.postMessage({ type: 'GRAD_DATA', tokens, seq });
   }
 
   function startScan(id, refPixels, seq) {
-    console.log('🔄 Grad: startScan id:', id, 'scanId:', scanId);
-    if (id !== scanId) { console.log('🚫 Grad: startScan aborted'); return; }
+    if (id !== scanId) { console.log('🚫 [7] startScan abortado'); return; }
     const panel = getPanel();
+    const btnsNow = panel ? panel.querySelectorAll('[class*="group/quickBuyButton"]').length : 0;
+    console.log('🔄 [7] startScan — panel:', panel ? 'OK' : 'NULL', '| botones actuales:', btnsNow);
     if (!panel) { doScan(id, refPixels, seq); return; }
 
     let fired = false;
     panelObs = new MutationObserver(() => {
       if (fired) return;
-      if (!panel.querySelectorAll('[class*="group/quickBuyButton"]').length) return;
+      const count = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
+      if (!count) return;
       fired = true;
-      console.log('🔔 Grad: MutationObserver fired (QB buttons found)');
+      console.log('✅ [8] MutationObserver: botones aparecieron en panel, count:', count);
       if (debTimer) clearTimeout(debTimer);
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 800);
-    console.log('⏱ Grad: safeTimer set 1000ms');
+    safeTimer = setTimeout(() => {
+      if (!fired) console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
+      doScan(id, refPixels, seq);
+    }, 800);
   }
 
   // ======= BUY EXECUTION =======
@@ -348,21 +352,28 @@
     const msg = e.data;
 
     if (msg.type === 'NEW_PAIR') {
-      console.log('📨 Grad: NEW_PAIR received:', msg.name, '| seq:', msg.seq);
+      const t0 = Date.now();
+      console.log('📨 [1] NEW_PAIR recibido:', msg.name, '| seq:', msg.seq, '| t=0ms');
       if (newPairTimer) clearTimeout(newPairTimer);
       newPairTimer = setTimeout(() => {
         newPairTimer = null;
         const id = ++scanId;
         const seq = msg.seq;
+        console.log('⏱ [2] timer 200ms listo, id:', id, '| t=' + (Date.now()-t0) + 'ms');
         getPixels(msg.refImgSrc, pixels => {
-          if (id !== scanId) return;
+          if (id !== scanId) { console.log('🚫 [3] ABORTADO en getPixels, id:', id, 'scanId:', scanId); return; }
+          console.log('🖼 [3] getPixels listo, pixels:', pixels ? 'OK' : 'NULL', '| t=' + (Date.now()-t0) + 'ms');
           ensurePanelOpen(() => {
-            if (id !== scanId) return;
+            if (id !== scanId) { console.log('🚫 [4] ABORTADO en ensurePanelOpen'); return; }
             const panel = getPanel();
+            console.log('🔍 [4] panel:', panel ? 'ENCONTRADO' : 'NULL', '| t=' + (Date.now()-t0) + 'ms');
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
-              if (id !== scanId) return;
+              if (id !== scanId) { console.log('🚫 [5] ABORTADO en ensureGraduatedView'); return; }
+              console.log('🎛 [5] graduatedView OK, typeo nombre:', msg.name, '| t=' + (Date.now()-t0) + 'ms');
               typeInPanel(msg.name);
+              const inputVal = panel.querySelector('input')?.value;
+              console.log('⌨️ [6] input ahora dice:', inputVal, '| botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length, '| t=' + (Date.now()-t0) + 'ms');
               startScan(id, pixels, seq);
             });
           });
@@ -378,5 +389,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.792 active');
+  console.log('📡 Axiom Graduated Receiver v1.82-debug active');
 })();
