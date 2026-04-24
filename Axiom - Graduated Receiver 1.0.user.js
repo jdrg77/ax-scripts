@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.85
+// @version      1.83
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -228,7 +228,7 @@
     if (safeTimer) { clearTimeout(safeTimer); safeTimer = null; }
   }
 
-  function doScan(id, refPixels, seq, expectedName) {
+  function doScan(id, refPixels, seq) {
     console.log('🔔 Grad: doScan fired id:', id, 'scanId:', scanId, 'match:', id === scanId);
     if (id !== scanId) return;
     abortScan();
@@ -239,15 +239,6 @@
       console.log('❌ Grad: panel gone at doScan');
       channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq });
       return;
-    }
-
-    if (expectedName) {
-      const inputVal = (panel.querySelector('input')?.value || '').trim().toLowerCase();
-      const expected = expectedName.trim().toLowerCase();
-      if (!inputVal || (!inputVal.includes(expected) && !expected.includes(inputVal))) {
-        console.log('⏳ Grad: panel input mismatch, skipping stale scan. input:', inputVal, 'expected:', expected);
-        return;
-      }
     }
 
     const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
@@ -287,11 +278,11 @@
     channel.postMessage({ type: 'GRAD_DATA', tokens, seq });
   }
 
-  function startScan(id, refPixels, seq, expectedName) {
+  function startScan(id, refPixels, seq) {
     console.log('🔄 Grad: startScan id:', id, 'scanId:', scanId);
     if (id !== scanId) { console.log('🚫 Grad: startScan aborted'); return; }
     const panel = getPanel();
-    if (!panel) { doScan(id, refPixels, seq, expectedName); return; }
+    if (!panel) { doScan(id, refPixels, seq); return; }
 
     let fired = false;
     panelObs = new MutationObserver(() => {
@@ -300,11 +291,11 @@
       fired = true;
       console.log('🔔 Grad: MutationObserver fired (QB buttons found)');
       if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 50);
+      debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq, expectedName), 800);
-    console.log('⏱ Grad: safeTimer set 800ms');
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 800);
+    console.log('⏱ Grad: safeTimer set 1000ms');
   }
 
   // ======= BUY EXECUTION =======
@@ -371,23 +362,9 @@
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
               if (id !== scanId) return;
-              // Clear input first so old results disappear before we type the new name
-              typeInPanel('');
-              const pollEmpty = setInterval(() => {
-                if (id !== scanId) { clearInterval(pollEmpty); return; }
-                if (panel.querySelectorAll('[class*="group/quickBuyButton"]').length === 0) {
-                  clearInterval(pollEmpty);
-                  if (id !== scanId) return;
-                  typeInPanel(msg.name);
-                  startScan(id, pixels, seq, msg.name);
-                }
-              }, 30);
-              setTimeout(() => {
-                clearInterval(pollEmpty);
-                if (id !== scanId) return;
-                typeInPanel(msg.name);
-                startScan(id, pixels, seq, msg.name);
-              }, 500);
+              channel.postMessage({ type: 'SCAN_START', seq });
+              typeInPanel(msg.name);
+              startScan(id, pixels, seq);
             });
           });
         });

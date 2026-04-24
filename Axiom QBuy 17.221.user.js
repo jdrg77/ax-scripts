@@ -20,7 +20,7 @@
   const gradChannel   = new BroadcastChannel('axiom-tabs');
   const hashCache     = new Map();
   let   gradCandidates = [];
-  let   waitingForGradData = false;
+  let   confirmedSeq   = -1;
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -476,7 +476,6 @@
 
   function renderGradProxies() {
     removeGradProxyBtns();
-    if (waitingForGradData) return;
     if (!gradCandidates.length) return;
 
     const visible = addedBtns.filter(b => b.style.display !== 'none')
@@ -799,14 +798,18 @@
 
   window.addEventListener('axiomPrefetchStart', () => {
     gradCandidates = [];
-    waitingForGradData = true;
+    confirmedSeq   = -1;
     removeButtons();
   });
 
   gradChannel.onmessage = (e) => {
+    if (e.data.type === 'SCAN_START') {
+      if (e.data.seq !== undefined && e.data.seq === window.__gradSeq) confirmedSeq = e.data.seq;
+      return;
+    }
     if (e.data.type !== 'GRAD_DATA') return;
     if (e.data.seq !== undefined && e.data.seq !== window.__gradSeq) return;
-    waitingForGradData = false;
+    if (e.data.seq !== undefined && e.data.seq !== confirmedSeq) return;
     gradCandidates = e.data.tokens || [];
     scheduleUpdate();
     setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
