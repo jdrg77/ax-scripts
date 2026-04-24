@@ -478,18 +478,36 @@
   function captureAnchorPosition() {
     const visible = addedBtns.filter(b => b.style.display !== 'none')
       .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
-    if (!visible.length) return null;
-    const r = visible[0].getBoundingClientRect();
-    const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+
+    if (visible.length) {
+      const r = visible[0].getBoundingClientRect();
+      const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+      return {
+        top0:      parseFloat(visible[0].style.top),
+        left:      parseFloat(visible[0].style.left),
+        btnW:      r.width  || 48,
+        btnH:      r.height || 48,
+        rowHeight: rowEl?.getBoundingClientRect().height ||
+                   (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - parseFloat(visible[0].style.top)) : 64),
+        startSlot: visible.length,
+        refSource: visible[0]._original,
+      };
+    }
+
+    // addedBtns vacío — leer directamente del panel (Tab 2 respondió antes de que addButtons() corriera)
+    if (!lastPanel || !lastPanel.isConnected) return null;
+    const panelBtns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
+    const rects = panelBtns.map(b => ({ el: b, r: b.getBoundingClientRect() })).filter(x => x.r.width > 0);
+    if (!rects.length) return null;
+    const rowHeight = rects.length > 1 ? Math.abs(rects[1].r.top - rects[0].r.top) : 64;
     return {
-      top0:      parseFloat(visible[0].style.top),
-      left:      parseFloat(visible[0].style.left),
-      btnW:      r.width  || 48,
-      btnH:      r.height || 48,
-      rowHeight: rowEl?.getBoundingClientRect().height ||
-                 (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - parseFloat(visible[0].style.top)) : 64),
-      startSlot: visible.length,
-      refSource: visible[0]._original,
+      top0:      rects[0].r.top,
+      left:      rects[0].r.left - 621.5,
+      btnW:      rects[0].r.width  || 48,
+      btnH:      rects[0].r.height || 48,
+      rowHeight,
+      startSlot: rects.length,
+      refSource: rects[0].el,
     };
   }
 
