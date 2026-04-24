@@ -466,6 +466,7 @@
       btn.remove();
     });
     addedBtns.length = 0;
+    gradProxyAnchor = null;
     removeGradProxyBtns();
   }
 
