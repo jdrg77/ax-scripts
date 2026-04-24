@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.17
+// @version      8.16
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -29,7 +29,9 @@
   // Each: { ticker, name, age, mc, imgSrc, match, _isGrad: true }
   let gradCandidates    = [];
   let gradSeqApplied    = -1; // seq of the last accepted GRAD_DATA
-let stableCA          = null;
+  let awaitingT2Confirm = false;
+  let awaitT2Timer      = null;
+  let stableCA          = null;
   let stableCAStart     = 0;
 
   // ======= BROADCHANNEL =======
@@ -37,10 +39,11 @@ let stableCA          = null;
   gradChannel.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === 'GRAD_DATA') {
-      if (msg.seq !== undefined && msg.seq !== window.__gradSeq) return;
-      if (gradSeqApplied === msg.seq) return; // already processed this seq, ignore duplicates
+      if (msg.seq !== undefined && msg.seq !== window.__gradSeq) return; // stale scan, discard
       gradCandidates = (msg.tokens || []).map(t => ({ ...t, _isGrad: true }));
       gradSeqApplied = msg.seq ?? -1;
+      clearTimeout(awaitT2Timer);
+      awaitingT2Confirm = false;
       updateGlow();
     }
   };
@@ -50,9 +53,15 @@ let stableCA          = null;
   window.addEventListener('axiomPrefetchStart', () => {
     prefetchCount++;
     prefetchCooldown = true;
+    const hadGrad    = gradCandidates.length > 0;
     gradCandidates   = [];
     gradSeqApplied   = -1;
     clearTimeout(cooldownTimer);
+    clearTimeout(awaitT2Timer);
+    if (hadGrad) {
+      awaitingT2Confirm = true;
+      awaitT2Timer = setTimeout(() => { awaitingT2Confirm = false; }, 1000);
+    }
     cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
 
@@ -361,6 +370,8 @@ let stableCA          = null;
       const rowCA = getCAFromRow(row);
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
+
+      if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
       if (!best) return;
