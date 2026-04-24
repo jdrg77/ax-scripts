@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.83
+// @version      1.82
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -362,7 +362,6 @@
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
               if (id !== scanId) return;
-              channel.postMessage({ type: 'SCAN_START', seq });
               typeInPanel(msg.name);
               startScan(id, pixels, seq);
             });
