@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.82
+// @version      1.83
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -362,8 +362,20 @@
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
               if (id !== scanId) return;
-              typeInPanel(msg.name);
-              startScan(id, pixels, seq);
+              typeInPanel('');
+              const pollStart = Date.now();
+              const pollEmpty = setInterval(() => {
+                if (id !== scanId) { clearInterval(pollEmpty); return; }
+                const ready = panel.querySelectorAll('[class*="group/quickBuyButton"]').length === 0;
+                const timedOut = Date.now() - pollStart > 500;
+                if (ready || timedOut) {
+                  clearInterval(pollEmpty);
+                  if (id !== scanId) return;
+                  channel.postMessage({ type: 'SCAN_START', seq });
+                  typeInPanel(msg.name);
+                  startScan(id, pixels, seq);
+                }
+              }, 30);
             });
           });
         });
@@ -378,5 +390,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.792 active');
+  console.log('📡 Axiom Graduated Receiver v1.83 active');
 })();
