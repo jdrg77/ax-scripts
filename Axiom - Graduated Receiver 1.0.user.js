@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.83
+// @version      1.792
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -195,12 +195,9 @@
       if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
     }
     const coinImg = getRealImage(row);
-    const isBonk      = !!row.querySelector('img[src*="bonk"]');
-    const isRaydium   = !!row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]');
-    const isPump      = !isRaydium && !!row.querySelector('img[src*="pump"]');
-    const platform    = isBonk ? 'bonk' : isRaydium ? 'raydium' : isPump ? 'pump' : 'other';
-    const isMigrated  = !!row.querySelector('img[src*="-grad"]');
-    const hasDex      = !!row.querySelector('[class*="icon-dex-paid"]');
+    const isBonk = !!row.querySelector('img[src*="bonk"]');
+    const isPump  = !!row.querySelector('img[src*="pump"]');
+    const platform = isBonk ? 'bonk' : isPump ? 'pump' : 'other';
     let ca = '';
     for (const a of row.querySelectorAll('a[href]')) {
       const h = a.href;
@@ -208,7 +205,7 @@
       else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { ca = m[1]; break; } }
       else if (h.includes('/meme/') && !ca) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) ca = m[1]; }
     }
-    return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca, platform, isMigrated, hasDex };
+    return { ticker, name, age, mc, imgSrc: coinImg?.src || '', ca, platform };
   }
 
   function fireClick(el) {
@@ -257,15 +254,14 @@
 
     infos.forEach(info => {
       if (!info.imgSrc || !refPixels) {
-        results.push({ ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, ca: info.ca, platform: info.platform, isMigrated: info.isMigrated, hasDex: info.hasDex, match: 0 });
+        results.push({ ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, ca: info.ca, platform: info.platform, match: 0 });
         if (--pending === 0) broadcastResults(results, seq);
         return;
       }
       getPixels(info.imgSrc, pixels => {
         results.push({
           ticker: info.ticker, name: info.name, age: info.age, mc: info.mc, imgSrc: info.imgSrc, ca: info.ca, platform: info.platform,
-          match: pixels ? pixelSimilarity(refPixels, pixels) : 0,
-          isMigrated: info.isMigrated, hasDex: info.hasDex
+          match: pixels ? pixelSimilarity(refPixels, pixels) : 0
         });
         if (--pending === 0) broadcastResults(results, seq);
       });
@@ -294,7 +290,7 @@
       debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
-    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 800);
+    safeTimer = setTimeout(() => doScan(id, refPixels, seq), 1000);
     console.log('⏱ Grad: safeTimer set 1000ms');
   }
 
@@ -362,24 +358,12 @@
             if (!panel) { channel.postMessage({ type: 'GRAD_DATA', tokens: [], seq }); return; }
             ensureGraduatedView(panel, () => {
               if (id !== scanId) return;
-              typeInPanel('');
-              const pollStart = Date.now();
-              const pollEmpty = setInterval(() => {
-                if (id !== scanId) { clearInterval(pollEmpty); return; }
-                const ready = panel.querySelectorAll('[class*="group/quickBuyButton"]').length === 0;
-                const timedOut = Date.now() - pollStart > 500;
-                if (ready || timedOut) {
-                  clearInterval(pollEmpty);
-                  if (id !== scanId) return;
-                  channel.postMessage({ type: 'SCAN_START', seq });
-                  typeInPanel(msg.name);
-                  startScan(id, pixels, seq);
-                }
-              }, 30);
+              typeInPanel(msg.name);
+              startScan(id, pixels, seq);
             });
           });
         });
-      }, 200);
+      }, 300);
     }
 
     if (msg.type === 'EXECUTE_BUY_GRAD') {
@@ -390,5 +374,5 @@
     }
   };
 
-  console.log('📡 Axiom Graduated Receiver v1.83 active');
+  console.log('📡 Axiom Graduated Receiver v1.792 active');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Background Prefetch ONLY (SIN DELAY) 22
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      5.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Background%20Prefetch%20ONLY%20(SIN%20DELAY)%2022-5.5.user.js
@@ -82,22 +82,6 @@
     return nameSpan ? nameSpan.textContent.trim() : null;
   }
 
-  function getTopRowCA() {
-    const firstRow = document.querySelector('[class*="group/pulseRow"]');
-    if (!firstRow) return null;
-    const copyBtn = firstRow.querySelector('button[class*="group/copy"]');
-    if (!copyBtn) return null;
-    const fiberKey = Object.keys(copyBtn).find(k => k.startsWith('__reactFiber'));
-    if (!fiberKey) return null;
-    let fiber = copyBtn[fiberKey];
-    for (let i = 0; i < 15 && fiber; i++) {
-      const ca = fiber.memoizedProps?.pairAddress;
-      if (ca && /^[A-Za-z0-9]{32,44}$/.test(ca)) return ca;
-      fiber = fiber.return;
-    }
-    return null;
-  }
-
   function getTopRowImgSrc() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
@@ -117,9 +101,6 @@
 
   function prefetch(name) {
     if (!name || userOpen || window.axiomUserOpen || name === lastPrefetched) return;
-
-    const ca = getTopRowCA();
-    if (ca) localStorage.setItem('axiomNewPairCA', ca);
 
     console.log('🔄 Prefetch:', name);
     lastPrefetched = name;
