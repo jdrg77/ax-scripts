@@ -126,6 +126,7 @@
 
     window.dispatchEvent(new CustomEvent('axiomPrefetchStart', { detail: { name } }));
     window.__gradSeq = (window.__gradSeq || 0) + 1;
+    console.log(`[T1-GRAD] NEW_PAIR enviado — name="${name}" __gradSeq=${window.__gradSeq} t=${Date.now()}`);
     gradChannel.postMessage({ type: 'NEW_PAIR', name, refImgSrc: getTopRowImgSrc(), seq: window.__gradSeq });
 
     if (!getPanel()) {

@@ -796,14 +796,22 @@
   }, true);
 
   window.addEventListener('axiomPrefetchStart', () => {
+    console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq será ${window.__gradSeq + 1}`);
     gradCandidates = [];
     removeButtons();
   });
 
   gradChannel.onmessage = (e) => {
     if (e.data.type !== 'GRAD_DATA') return;
-    if (e.data.seq !== undefined && e.data.seq !== window.__gradSeq) return;
+    const rxSeq = e.data.seq;
+    const curSeq = window.__gradSeq;
+    console.log(`[T1-GRAD] GRAD_DATA recibido | rxSeq=${rxSeq} curSeq=${curSeq} tokens=${(e.data.tokens||[]).length} top=${(e.data.tokens||[]).slice(0,2).map(t=>t.ticker+'@'+Math.round((t.match||0)*100)+'%').join(', ')}`);
+    if (rxSeq !== undefined && rxSeq !== curSeq) {
+      console.log(`[T1-GRAD] RECHAZADO — seq mismatch (rxSeq=${rxSeq} !== curSeq=${curSeq})`);
+      return;
+    }
     gradCandidates = e.data.tokens || [];
+    console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | llamando renderGradProxies`);
     scheduleUpdate();
     setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
   };
