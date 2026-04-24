@@ -285,16 +285,21 @@
     if (!panel) { doScan(id, refPixels, seq); return; }
 
     let fired = false;
-    let sawEmpty = (btnsNow === 0); // only scan fresh results, not stale buttons from previous pair
+    let sawEmpty = (btnsNow === 0);
     panelObs = new MutationObserver(() => {
       if (fired) return;
       const count = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
       if (!count) { sawEmpty = true; return; }
-      if (!sawEmpty) return; // panel still showing old buttons, wait for them to clear first
-      fired = true;
-      console.log('✅ [8] MutationObserver: botones aparecieron en panel, count:', count, sawEmpty ? '' : '(STALE - ignorado)');
+      if (!sawEmpty) return;
+      // buttons appeared after empty — wait 200ms to confirm they're stable (not a React cache flash)
       if (debTimer) clearTimeout(debTimer);
-      debTimer = setTimeout(() => doScan(id, refPixels, seq), 50);
+      debTimer = setTimeout(() => {
+        const stable = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
+        if (!stable) { sawEmpty = true; return; } // disappeared = stale cache, keep watching
+        fired = true;
+        console.log('✅ [8] MutationObserver: botones estables en panel, count:', stable);
+        doScan(id, refPixels, seq);
+      }, 200);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => {
