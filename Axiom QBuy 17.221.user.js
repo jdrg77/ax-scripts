@@ -805,12 +805,17 @@
     if (e.data.type !== 'GRAD_DATA') return;
     const rxSeq = e.data.seq;
     const curSeq = window.__gradSeq;
-    console.log(`[T1-GRAD] GRAD_DATA recibido | rxSeq=${rxSeq} curSeq=${curSeq} tokens=${(e.data.tokens||[]).length} top=${(e.data.tokens||[]).slice(0,2).map(t=>t.ticker+'@'+Math.round((t.match||0)*100)+'%').join(', ')}`);
+    const newTokens = e.data.tokens || [];
+    console.log(`[T1-GRAD] GRAD_DATA recibido | rxSeq=${rxSeq} curSeq=${curSeq} tokens=${newTokens.length} top=${newTokens.slice(0,2).map(t=>t.ticker+'@'+Math.round((t.match||0)*100)+'%').join(', ')}`);
     if (rxSeq !== undefined && rxSeq !== curSeq) {
       console.log(`[T1-GRAD] RECHAZADO — seq mismatch (rxSeq=${rxSeq} !== curSeq=${curSeq})`);
       return;
     }
-    gradCandidates = e.data.tokens || [];
+    if (newTokens.length === 0 && gradCandidates.length > 0) {
+      console.log(`[T1-GRAD] IGNORADO — broadcast vacío pero ya tenemos ${gradCandidates.length} candidates`);
+      return;
+    }
+    gradCandidates = newTokens;
     console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | llamando renderGradProxies`);
     scheduleUpdate();
     setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early

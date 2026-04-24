@@ -297,7 +297,8 @@
     });
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => {
-      if (!fired) console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
+      if (fired) return;
+      console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
       doScan(id, refPixels, seq);
     }, 800);
   }
