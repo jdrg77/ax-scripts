@@ -231,7 +231,6 @@
   function doScan(id, refPixels, seq) {
     if (id !== scanId) { console.log('🚫 [9] doScan abortado id:', id, 'scanId:', scanId); return; }
     abortScan();
-    scanId = id;
 
     const panel = getPanel();
     if (!panel) {
@@ -300,6 +299,7 @@
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => {
       if (fired) return;
+      if (id !== scanId) return;
       console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
       doScan(id, refPixels, seq);
     }, 800);
@@ -358,6 +358,7 @@
       const t0 = Date.now();
       console.log('📨 [1] NEW_PAIR recibido:', msg.name, '| seq:', msg.seq, '| t=0ms');
       if (newPairTimer) clearTimeout(newPairTimer);
+      abortScan();
       newPairTimer = setTimeout(() => {
         newPairTimer = null;
         const id = ++scanId;

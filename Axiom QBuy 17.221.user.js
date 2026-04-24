@@ -796,7 +796,7 @@
   }, true);
 
   window.addEventListener('axiomPrefetchStart', () => {
-    console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq será ${window.__gradSeq + 1}`);
+    console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq actual=${window.__gradSeq ?? 'undefined'}`);
     gradCandidates = [];
     removeButtons();
   });
