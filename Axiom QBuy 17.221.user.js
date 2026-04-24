@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.6
+// @version      11.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -475,8 +475,8 @@
   }
 
   function renderGradProxies() {
-    if (waitingForGradData) return;
     removeGradProxyBtns();
+    if (waitingForGradData) return;
     if (!gradCandidates.length) return;
 
     const visible = addedBtns.filter(b => b.style.display !== 'none')
