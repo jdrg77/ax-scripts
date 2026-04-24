@@ -867,7 +867,22 @@
     gradProxyAnchor = captureAnchorPosition();
     console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | anchor=${gradProxyAnchor ? 'OK' : 'null'} | llamando renderGradProxies`);
     scheduleUpdate();
-    setTimeout(renderGradProxies, 30); // fallback if updatePositions returns early
+    setTimeout(renderGradProxies, 30);
+    if (!gradProxyAnchor) {
+      // panel aún vacío — reintentar captura hasta 500ms mientras el seq no cambie
+      const captureSeq = rxSeq;
+      let tries = 0;
+      const retryCapture = setInterval(() => {
+        if (window.__gradSeq !== captureSeq || ++tries > 10) { clearInterval(retryCapture); return; }
+        const anchor = captureAnchorPosition();
+        if (anchor) {
+          gradProxyAnchor = anchor;
+          clearInterval(retryCapture);
+          console.log(`[T1-GRAD] anchor capturado en reintento ${tries}`);
+          renderGradProxies();
+        }
+      }, 50);
+    }
   };
 
   function addButtons() {
