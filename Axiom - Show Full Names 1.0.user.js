@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Show Full Names
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Show%20Full%20Names%201.0.user.js
@@ -35,7 +35,28 @@
       name.style.maxWidth = 'none';
       name.style.width = 'auto';
       name.style.zIndex = '2147483647';
-      name.style.pointerEvents = 'none';
+      name.style.pointerEvents = 'auto';
+
+      if (!name.__clickFixed) {
+        name.__clickFixed = true;
+        name.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          name.style.pointerEvents = 'none';
+          const below = document.elementFromPoint(e.clientX, e.clientY);
+          name.style.pointerEvents = 'auto';
+          if (below && below !== name) {
+            below.click();
+          } else if (name.__placeholder) {
+            const phRect = name.__placeholder.getBoundingClientRect();
+            const phBelow = document.elementFromPoint(
+              phRect.left + phRect.width / 2,
+              phRect.top + phRect.height / 2
+            );
+            if (phBelow) phBelow.click();
+          }
+        });
+      }
     });
   }
 
@@ -44,5 +65,5 @@
   window.addEventListener('scroll', fix, true);
   window.addEventListener('resize', fix);
 
-  console.log('🚀 Axiom Show Full Names 1.1 loaded');
+  console.log('🚀 Axiom Show Full Names 1.2 loaded');
 })();
