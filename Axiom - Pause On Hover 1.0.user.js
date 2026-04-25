@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Pause On Hover
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Pause%20On%20Hover%201.0.user.js
@@ -12,54 +12,38 @@
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
-  let pf = null;
-
   function initPauseFns() {
     const scrollable = document.querySelector('.absolute.inset-0.overflow-y-auto');
     if (!scrollable) return null;
     const fk = Object.keys(scrollable).find(k => k.startsWith('__reactFiber'));
     if (!fk) return null;
     const handlerFiber = scrollable[fk].return;
-
-    // Buscar el atom de Jotai que controla el pause
-    let store = null, atom = null;
-    let cur = handlerFiber.return;
-    for (let n = 0; n < 100 && cur; n++) {
-      if (cur.tag === 0) {
-        let h = cur.memoizedState, i = 0;
-        while (h && i < 30) {
-          const t = h.memoizedState;
-          if (t && typeof t === 'object' && !Array.isArray(t) &&
-              typeof t[1]?.set === 'function' && typeof t[2]?.init === 'boolean') {
-            store = t[1]; atom = t[2]; break;
-          }
-          h = h.next; i++;
-        }
-      }
-      if (store) break;
-      cur = cur.return;
-    }
-
-    if (!store) return null;
+    const handlerDom = handlerFiber.stateNode;
 
     let origLeave = null;
 
     return {
       pause() {
-        store.set(atom, true);
+        if (origLeave) return;
         origLeave = handlerFiber.memoizedProps.onMouseLeave;
         handlerFiber.memoizedProps = { ...handlerFiber.memoizedProps, onMouseLeave: () => {} };
+        if (handlerFiber.pendingProps) {
+          handlerFiber.pendingProps = { ...handlerFiber.pendingProps, onMouseLeave: () => {} };
+        }
       },
       resume() {
-        if (origLeave) {
-          handlerFiber.memoizedProps = { ...handlerFiber.memoizedProps, onMouseLeave: origLeave };
-          origLeave = null;
+        if (!origLeave) return;
+        handlerFiber.memoizedProps = { ...handlerFiber.memoizedProps, onMouseLeave: origLeave };
+        if (handlerFiber.pendingProps) {
+          handlerFiber.pendingProps = { ...handlerFiber.pendingProps, onMouseLeave: origLeave };
         }
-        store.set(atom, false);
+        origLeave = null;
+        handlerDom.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
       }
     };
   }
 
+  let pf = null;
   let attached = new WeakSet();
 
   function attachListeners() {
@@ -80,5 +64,5 @@
   observer.observe(document.body, { childList: true, subtree: true });
   attachListeners();
 
-  console.log('🚀 Axiom Pause On Hover 1.3 loaded');
+  console.log('🚀 Axiom Pause On Hover 1.4 loaded');
 })();
