@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Show Full Names
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Show%20Full%20Names%201.0.user.js
@@ -35,28 +35,7 @@
       name.style.maxWidth = 'none';
       name.style.width = 'auto';
       name.style.zIndex = '2147483647';
-      name.style.pointerEvents = 'auto';
-
-      if (!name.__clickFixed) {
-        name.__clickFixed = true;
-        name.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          name.style.pointerEvents = 'none';
-          const below = document.elementFromPoint(e.clientX, e.clientY);
-          name.style.pointerEvents = 'auto';
-          if (below && below !== name) {
-            below.click();
-          } else if (name.__placeholder) {
-            const phRect = name.__placeholder.getBoundingClientRect();
-            const phBelow = document.elementFromPoint(
-              phRect.left + phRect.width / 2,
-              phRect.top + phRect.height / 2
-            );
-            if (phBelow) phBelow.click();
-          }
-        });
-      }
+      name.style.pointerEvents = 'none';
     });
   }
 
@@ -65,5 +44,25 @@
   window.addEventListener('scroll', fix, true);
   window.addEventListener('resize', fix);
 
-  console.log('🚀 Axiom Show Full Names 1.2 loaded');
+  let syntheticFiring = false;
+  document.addEventListener('click', (e) => {
+    if (syntheticFiring) return;
+    const names = document.querySelectorAll('div.truncate.text-left, [class*="truncate"][class*="text-left"]');
+    for (const name of names) {
+      if (name.style.position !== 'fixed') continue;
+      const rect = name.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) continue;
+      // Click dentro del name flotante — si hay imagen abajo, dejarlo pasar
+      if (e.target && (e.target.tagName === 'IMG' || e.target.closest('img'))) return;
+      // Sin imagen abajo — disparar click en el name para que Click Search lo capture
+      syntheticFiring = true;
+      name.style.pointerEvents = 'auto';
+      name.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: e.clientX, clientY: e.clientY }));
+      name.style.pointerEvents = 'none';
+      syntheticFiring = false;
+      return;
+    }
+  }, true);
+
+  console.log('🚀 Axiom Show Full Names 1.3 loaded');
 })();
