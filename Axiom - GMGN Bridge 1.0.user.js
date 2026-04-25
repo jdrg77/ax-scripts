@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.2
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
+// @match        https://*.gmgn.ai/*
 // @grant        GM_setValue
 // @grant        GM_addValueChangeListener
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20GMGN%20Bridge%201.0.user.js
@@ -15,44 +16,27 @@
 
   if (location.hostname.includes('axiom.trade')) {
 
-    function extractCAFromRow(row) {
-      for (const a of row.querySelectorAll('a[href]')) {
-        const h = a.href;
-        let m;
-        if (h.includes('pump.fun')) m = h.match(/\/coin\/([A-Za-z0-9]{32,})/);
-        else if (h.includes('bonk'))   m = h.match(/\/([A-Za-z0-9]{32,})/);
-        else if (h.includes('/meme/')) m = h.match(/\/meme\/([A-Za-z0-9]{32,})/);
-        if (m) return m[1];
-      }
-      return null;
+    function sendCA(ca) {
+      if (!ca) return;
+      GM_setValue('axiom_gmgn_ca', JSON.stringify({ ca, t: Date.now() }));
+      console.log('[GMGN Bridge] CA enviado:', ca);
     }
 
-    document.addEventListener('mousedown', (e) => {
-      let ca = null;
+    // Intercept history.pushState — catches QBuy button clicks, mini button image clicks,
+    // and pulseRow image clicks that navigate to /meme/{CA}
+    const origPushState = history.pushState.bind(history);
+    history.pushState = function (state, title, url) {
+      origPushState(state, title, url);
+      const m = (url || '').toString().match(/\/meme\/([A-Za-z0-9]{32,})/);
+      if (m) sendCA(m[1]);
+    };
 
-      // QBuy button click — walk up looking for _ca
-      let el = e.target;
-      while (el) {
-        if (el._ca) { ca = el._ca; break; }
-        el = el.parentElement;
-      }
+    window.addEventListener('popstate', () => {
+      const m = location.pathname.match(/\/meme\/([A-Za-z0-9]{32,})/);
+      if (m) sendCA(m[1]);
+    });
 
-      // Image click in pulseRow
-      if (!ca) {
-        const img = e.target.closest('img[class*="object-cover"]');
-        if (img) {
-          const row = img.closest('[class*="group/pulseRow"]');
-          if (row) ca = extractCAFromRow(row);
-        }
-      }
-
-      if (ca) {
-        GM_setValue('axiom_gmgn_ca', JSON.stringify({ ca, t: Date.now() }));
-        console.log('[GMGN Bridge] CA enviado:', ca);
-      }
-    }, true);
-
-    console.log('🚀 GMGN Bridge — Axiom side loaded');
+    console.log('🚀 GMGN Bridge v1.2 — Axiom side loaded');
   }
 
   if (location.hostname.includes('gmgn.ai')) {
