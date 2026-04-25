@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.8
+// @version      11.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -740,7 +740,10 @@ function navigateToMeme(row, fallbackCA) {
       sortedNormal = sortedNormal.slice(0, 5);
     }
 
-    if (sortedNormal.length === 0) return;
+    if (sortedNormal.length === 0) {
+      if (gradCandidates.length) renderGradProxies();
+      return;
+    }
 
     const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
     const slot1Top  = firstPanelBtn?.getBoundingClientRect().top ?? Math.min(...sortedNormal.map(v => v.rect.top));
