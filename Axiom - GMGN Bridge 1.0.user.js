@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
 // @match        https://*.gmgn.ai/*
@@ -48,7 +48,7 @@
       let el = e.target;
       while (el && el !== document.body) {
         if (el.style?.position === 'fixed' && el.style?.zIndex === '9999' && el.querySelector?.('.qb-sim-badge')) {
-          const ca = el._ca || el._original?._ca;
+          const ca = localStorage.getItem('axiomTopPairCA');
           if (ca) { sendCA(ca); return; }
           break;
         }
