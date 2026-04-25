@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.18
+// @version      8.19
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -255,9 +255,13 @@
       const winnerRow = winner._isGrad ? null : winner._original?.closest('[class*="max-h-[64px]"]');
       const _memeLink = winnerRow?.querySelector('a[href*="/meme/"]');
       const memeHref  = _memeLink ? (new URL(_memeLink.href).pathname + new URL(_memeLink.href).search) : null;
+      const topFeedRow = document.querySelectorAll('[class*="group/pulseRow"]')[0];
+      const feedMeme   = topFeedRow?.querySelector('a[href*="/meme/"]');
+      const pairAddress = feedMeme?.href?.match(/\/meme\/([A-Za-z0-9]{32,})/)?.[1] || null;
       sessionBest.set(rowCA, {
         rowCA,
         ca:          getCAFromBtn(winner) || rowCA,
+        pairAddress,
         newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
         memeHref,
         btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
@@ -384,6 +388,7 @@
       }
 
       const el   = getOrCreateMiniBtn(rowCA, best);
+      if (best.pairAddress) el.dataset.qbmPair = best.pairAddress;
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 

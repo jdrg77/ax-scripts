@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -199,9 +199,9 @@
   }
 
   function scan() {
-    // Best Match mini buttons
+    // Best Match mini buttons — preferir data-qbm-pair (pair address) sobre data-qbm-mini (pump CA)
     document.querySelectorAll('[data-qbm-mini]').forEach(btn => {
-      hook(btn, el => el.getAttribute('data-qbm-mini'));
+      hook(btn, el => el.dataset.qbmPair || el.getAttribute('data-qbm-mini'));
     });
 
     // QBuy fixed buttons
