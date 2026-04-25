@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.18
+// @version      8.19
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -250,7 +250,7 @@
     if (!rowCA) return;
     if (rowCA !== stableCA) { stableCA = rowCA; stableCAStart = Date.now(); }
     const existing = sessionBest.get(rowCA);
-    if (!prefetchCooldown && !window.axiomUserOpen && Date.now() - stableCAStart >= 100 && (!existing || overallMax > existing.matchPct)) {
+    if (!prefetchCooldown && !window.axiomUserOpen && Date.now() - stableCAStart >= 200 && (!existing || overallMax > existing.matchPct)) {
       const { age, mc } = getBtnInfoBar(winner);
       const winnerRow = winner._isGrad ? null : winner._original?.closest('[class*="max-h-[64px]"]');
       const _memeLink = winnerRow?.querySelector('a[href*="/meme/"]');
