@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -30,6 +30,8 @@
       createdAt:    new Date(row[3]),
       liquiditySol: row[4],
       makerAddress: row[6],
+      priceSol:     row[7],
+      priceUsd:     row[8],
       totalSol:     row[10],
       totalUsd:     row[11],
     };
@@ -63,9 +65,9 @@
     return Math.floor(s / 3600) + 'h';
   }
 
-  function fmtMC(liquiditySol, totalSol, totalUsd) {
-    if (!totalSol) return '—';
-    const solPrice = totalUsd / totalSol;
+  function fmtMC(liquiditySol, priceSol, priceUsd) {
+    if (!priceSol || !priceUsd) return '—';
+    const solPrice = priceUsd / priceSol;
     const mc = liquiditySol * 2 * solPrice;
     if (mc >= 1e6) return '$' + (mc / 1e6).toFixed(1) + 'M';
     if (mc >= 1e3) return '$' + (mc / 1e3).toFixed(1) + 'K';
@@ -124,7 +126,7 @@
       return `<div style="display:flex;align-items:center;padding:2px 10px;gap:4px;border-bottom:1px solid #13151c">
         <span style="color:${col};width:8px;font-size:9px">${icon}</span>
         <span style="color:${col};width:46px">${fmtSol(t.totalSol)}</span>
-        <span style="color:#666;width:62px;text-align:right">${fmtMC(t.liquiditySol, t.totalSol, t.totalUsd)}</span>
+        <span style="color:#666;width:62px;text-align:right">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
         <span style="color:#aaa;flex:1;padding-left:8px">${fmtWallet(t.makerAddress)}</span>
         <span style="color:#444;width:30px;text-align:right">${fmtAge(t.createdAt)}</span>
       </div>`;
@@ -189,13 +191,20 @@
     el.addEventListener('mouseleave', hide);
   }
 
+  function getPairFromRow(row) {
+    const a = row.querySelector('a[href*="/meme/"]');
+    if (!a) return null;
+    const m = a.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
+    return m ? m[1] : null;
+  }
+
   function scan() {
-    // Best Match mini buttons — data-qbm-mini contiene el rowCA (pair address del meme link)
+    // Best Match mini buttons
     document.querySelectorAll('[data-qbm-mini]').forEach(btn => {
       hook(btn, el => el.getAttribute('data-qbm-mini'));
     });
 
-    // QBuy fixed buttons — busca pair address en el row via _original
+    // QBuy fixed buttons
     document.querySelectorAll('button').forEach(btn => {
       if (btn.style?.position !== 'fixed' || btn.style?.zIndex !== '9999') return;
       if (!btn.querySelector?.('.qb-sim-badge') || btn._isGradProxy) return;
@@ -206,13 +215,17 @@
             if (row?.className?.includes('max-h-[64px]')) break;
             row = row?.parentElement;
           }
-          if (row) {
-            const a = row.querySelector('a[href*="/meme/"]');
-            if (a) { const m = a.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
-          }
+          if (row) return getPairFromRow(row);
         }
         return el._ca || null;
       });
+    });
+
+    // Filas nativas del feed (Pulse/Discover/Scanner)
+    document.querySelectorAll('[class*="group/pulseRow"]').forEach(row => {
+      const ca = getPairFromRow(row);
+      if (!ca) return;
+      hook(row, () => ca);
     });
   }
 
