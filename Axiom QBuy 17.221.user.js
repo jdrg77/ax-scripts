@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.9
+// @version      11.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -437,22 +437,7 @@
     }
   }
 
-  function getPauseFns() {
-    const scrollable = document.querySelector('.absolute.inset-0.overflow-y-auto');
-    if (!scrollable) return null;
-    const fk = Object.keys(scrollable).find(k => k.startsWith('__reactFiber'));
-    if (!fk) return null;
-    let fiber = scrollable[fk];
-    for (let i = 0; i < 50; i++) {
-      if (fiber?.memoizedProps?.onMouseEnter) {
-        return { pause: fiber.memoizedProps.onMouseEnter, resume: fiber.memoizedProps.onMouseLeave };
-      }
-      fiber = fiber.return;
-    }
-    return null;
-  }
-
-  function navigateToMeme(row, fallbackCA) {
+function navigateToMeme(row, fallbackCA) {
     const link = row?.querySelector('a[href*="/meme/"]');
     if (link) {
       const url = new URL(link.href);
@@ -660,9 +645,6 @@
         }
         btn.appendChild(bar);
       }
-
-      btn.addEventListener('mouseenter', () => getPauseFns()?.pause());
-      btn.addEventListener('mouseleave', () => getPauseFns()?.resume());
 
       btn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
@@ -1016,9 +998,6 @@
 
       document.body.appendChild(newBtn);
       addedBtns.push(newBtn);
-
-      newBtn.addEventListener('mouseenter', () => getPauseFns()?.pause());
-      newBtn.addEventListener('mouseleave', () => getPauseFns()?.resume());
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
