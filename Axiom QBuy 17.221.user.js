@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.6
+// @version      11.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -801,7 +801,7 @@
       if (match) {
         wrapper.style.transform = `translate(${parseFloat(match[1])}px, ${parseFloat(match[2]) + 57}px)`;
       } else {
-        wrapper.style.marginTop = '50px';
+        wrapper.style.marginTop = '57px';
       }
     }
   }
