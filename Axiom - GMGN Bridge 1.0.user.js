@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
 // @match        https://*.gmgn.ai/*
@@ -22,6 +22,20 @@
       console.log('[GMGN Bridge] CA enviado:', ca);
     }
 
+    function readTopNewPairCA() {
+      const col = Array.from(document.querySelectorAll('span'))
+        .find(s => s.textContent.trim() === 'New Pairs')
+        ?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
+      const ca = Array.from(col?.querySelectorAll('a[href*="pump.fun/coin/"]') || [])[0]
+        ?.href?.match(/pump\.fun\/coin\/([A-Za-z0-9]+)/)?.[1];
+      if (ca) localStorage.setItem('axiomTopPairCA', ca);
+      return ca || null;
+    }
+
+    readTopNewPairCA();
+    const pairObserver = new MutationObserver(readTopNewPairCA);
+    pairObserver.observe(document.body, { childList: true, subtree: true });
+
     document.addEventListener('mousedown', (e) => {
       // Best Match mini button — usa rowCA (data-qbm-mini)
       const miniBtn = e.target.closest('[data-qbm-mini]');
@@ -30,19 +44,19 @@
         if (rowCA) { sendCA(rowCA); return; }
       }
 
-      // QBuy 17.221 button — usa newPairCA de localStorage
+      // QBuy 17.221 button — usa el _ca del boton mismo
       let el = e.target;
       while (el && el !== document.body) {
-        if (el.tagName === 'BUTTON' && el.style?.position === 'fixed' && el.style?.zIndex === '9999' && !el.getAttribute('data-qbm-mini')) {
-          const newPairCA = localStorage.getItem('axiomNewPairCA');
-          if (newPairCA) { sendCA(newPairCA); return; }
+        if (el.style?.position === 'fixed' && el.style?.zIndex === '9999' && el.querySelector?.('.qb-sim-badge')) {
+          const ca = el._ca || el._original?._ca;
+          if (ca) { sendCA(ca); return; }
           break;
         }
         el = el.parentElement;
       }
     }, true);
 
-    console.log('🚀 GMGN Bridge v1.3 — Axiom side loaded');
+    console.log('🚀 GMGN Bridge v1.4 — Axiom side loaded');
   }
 
   if (location.hostname.includes('gmgn.ai')) {
