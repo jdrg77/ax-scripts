@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.17
+// @version      8.18
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -362,24 +362,26 @@
       return;
     }
 
-    const rows      = document.querySelectorAll('[class*="group/pulseRow"]');
-    const activeKeys = new Set();
-    const seenCAs    = new Set();
+    const rows    = document.querySelectorAll('[class*="group/pulseRow"]');
+    const seenCAs = new Set();
 
     rows.forEach((row, rowIdx) => {
       const rowCA = getCAFromRow(row);
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
 
-      if (awaitingT2Confirm && rowIdx === 0) return;
+      // Only block row 0 while waiting for grad scan if it has no saved entry
+      if (awaitingT2Confirm && rowIdx === 0 && !sessionBest.has(rowCA)) return;
 
       const best = sessionBest.get(rowCA);
       if (!best) return;
 
       const rect = row.getBoundingClientRect();
-      if (rect.width < 10 || rect.bottom < 0 || rect.top > window.innerHeight) return;
-
-      activeKeys.add(rowCA);
+      if (rect.width < 10 || rect.bottom < 0 || rect.top > window.innerHeight) {
+        const el = miniPool.get(rowCA);
+        if (el?.isConnected) { el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; }
+        return;
+      }
 
       const el   = getOrCreateMiniBtn(rowCA, best);
       const btnW = lastNormalSize.w;
@@ -456,10 +458,6 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
-    });
-
-    miniPool.forEach((el, key) => {
-      if (!activeKeys.has(key) && el.isConnected) { el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; }
     });
   }
 
