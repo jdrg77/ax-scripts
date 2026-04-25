@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.9
+// @version      11.10
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,7 +20,6 @@
   const gradChannel   = new BroadcastChannel('axiom-tabs');
   const hashCache     = new Map();
   let   gradCandidates = [];
-  let   gradProxyAnchor = null;
   let scrollEl        = null;
   let lastPanel       = null;
   let isPanelVisible  = false;
@@ -466,7 +465,6 @@ function navigateToMeme(row, fallbackCA) {
       btn.remove();
     });
     addedBtns.length = 0;
-    gradProxyAnchor = null;
     removeGradProxyBtns();
   }
 
@@ -475,86 +473,39 @@ function navigateToMeme(row, fallbackCA) {
     gradProxyBtns.length = 0;
   }
 
-  function captureAnchorPosition() {
-    const visible = addedBtns.filter(b => b.style.display !== 'none')
-      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
-
-    if (visible.length) {
-      const r = visible[0].getBoundingClientRect();
-      const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
-      return {
-        top0:      parseFloat(visible[0].style.top),
-        left:      parseFloat(visible[0].style.left),
-        btnW:      r.width  || 48,
-        btnH:      r.height || 48,
-        rowHeight: rowEl?.getBoundingClientRect().height ||
-                   (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - parseFloat(visible[0].style.top)) : 64),
-        startSlot: visible.length,
-        refSource: visible[0]._original,
-      };
-    }
-
-    // addedBtns vacío — leer directamente del panel (Tab 2 respondió antes de que addButtons() corriera)
-    if (!lastPanel || !lastPanel.isConnected) return null;
-    const panelBtns = [...lastPanel.querySelectorAll('[class*="group/quickBuyButton"]')];
-    const rects = panelBtns.map(b => ({ el: b, r: b.getBoundingClientRect() })).filter(x => x.r.width > 0);
-    if (!rects.length) return null;
-    const rowHeight = rects.length > 1 ? Math.abs(rects[1].r.top - rects[0].r.top) : 64;
-    return {
-      top0:      rects[0].r.top,
-      left:      rects[0].r.left - 594.5,
-      btnW:      rects[0].r.width  || 48,
-      btnH:      rects[0].r.height || 48,
-      rowHeight,
-      startSlot: rects.length,
-      refSource: rects[0].el,
-    };
-  }
-
   function renderGradProxies() {
     removeGradProxyBtns();
     if (!gradCandidates.length) return;
 
+    const visible = addedBtns.filter(b => b.style.display !== 'none')
+      .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+
     let top0, leftPos, btnW, btnH, rowHeight, startSlot, refSource;
 
-    const anchor = gradProxyAnchor;
-    if (anchor) {
-      top0      = anchor.top0;
-      leftPos   = anchor.left;
-      btnW      = anchor.btnW;
-      btnH      = anchor.btnH;
-      rowHeight = anchor.rowHeight;
-      startSlot = anchor.startSlot;
-      refSource = anchor.refSource;
+    if (visible.length) {
+      top0      = parseFloat(visible[0].style.top);
+      leftPos   = parseFloat(visible[0].style.left);
       if (isNaN(top0) || isNaN(leftPos)) return;
+      const r   = visible[0].getBoundingClientRect();
+      btnW      = r.width  || 48;
+      btnH      = r.height || 48;
+      const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
+      rowHeight = rowEl?.getBoundingClientRect().height ||
+                  (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
+      startSlot = visible.length;
+      refSource = visible[0]._original;
     } else {
-      const visible = addedBtns.filter(b => b.style.display !== 'none')
-        .slice().sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
-      if (visible.length) {
-        top0      = parseFloat(visible[0].style.top);
-        leftPos   = parseFloat(visible[0].style.left);
-        if (isNaN(top0) || isNaN(leftPos)) return;
-        const r   = visible[0].getBoundingClientRect();
-        btnW      = r.width  || 48;
-        btnH      = r.height || 48;
-        const rowEl = visible[0]._original?.closest('[class*="max-h-[64px]"]');
-        rowHeight = rowEl?.getBoundingClientRect().height ||
-                    (visible.length > 1 ? Math.abs(parseFloat(visible[1].style.top) - top0) : 64);
-        startSlot = visible.length;
-        refSource = visible[0]._original;
-      } else {
-        const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
-        if (!firstPanelBtn) return;
-        const r = firstPanelBtn.getBoundingClientRect();
-        if (!r.width) return;
-        top0      = r.top;
-        leftPos   = r.left - 594.5;
-        btnW      = r.width  || 48;
-        btnH      = r.height || 48;
-        rowHeight = 64;
-        startSlot = 0;
-        refSource = firstPanelBtn;
-      }
+      const firstPanelBtn = lastPanel?.querySelector('[class*="group/quickBuyButton"]');
+      if (!firstPanelBtn) return;
+      const r = firstPanelBtn.getBoundingClientRect();
+      if (!r.width) return;
+      top0      = r.top;
+      leftPos   = r.left - 594.5;
+      btnW      = r.width  || 48;
+      btnH      = r.height || 48;
+      rowHeight = 64;
+      startSlot = 0;
+      refSource = firstPanelBtn;
     }
 
     const normalMemeIds = new Set(addedBtns.filter(b => b.style.display !== 'none').map(b => b._ca).filter(Boolean));
@@ -848,7 +799,6 @@ function navigateToMeme(row, fallbackCA) {
   window.addEventListener('axiomPrefetchStart', () => {
     console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq actual=${window.__gradSeq ?? 'undefined'}`);
     gradCandidates = [];
-    gradProxyAnchor = null;
     removeGradProxyBtns();
   });
 
@@ -867,25 +817,9 @@ function navigateToMeme(row, fallbackCA) {
       return;
     }
     gradCandidates = newTokens;
-    gradProxyAnchor = captureAnchorPosition();
-    console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | anchor=${gradProxyAnchor ? 'OK' : 'null'} | llamando renderGradProxies`);
+    console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | llamando renderGradProxies`);
     scheduleUpdate();
     setTimeout(renderGradProxies, 30);
-    if (!gradProxyAnchor) {
-      // panel aún vacío — reintentar captura hasta 500ms mientras el seq no cambie
-      const captureSeq = rxSeq;
-      let tries = 0;
-      const retryCapture = setInterval(() => {
-        if (window.__gradSeq !== captureSeq || ++tries > 10) { clearInterval(retryCapture); return; }
-        const anchor = captureAnchorPosition();
-        if (anchor) {
-          gradProxyAnchor = anchor;
-          clearInterval(retryCapture);
-          console.log(`[T1-GRAD] anchor capturado en reintento ${tries}`);
-          renderGradProxies();
-        }
-      }, 50);
-    }
   };
 
   function addButtons() {
