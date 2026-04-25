@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.16
+// @version      8.17
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -549,7 +549,7 @@
 
   // === Main loop ===
 
-  setInterval(() => { updateGlow(); updateMiniButtons(); }, 10);
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 4);
 
   console.log('⭐ Axiom QBuy Best Match v8.10 — Raydium V4 blue styling');
 })();

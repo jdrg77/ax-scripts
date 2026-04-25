@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Show Full Names
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Show%20Full%20Names%201.0.user.js
@@ -51,7 +51,7 @@ function fix() {
   }
 
   fix();
-  setInterval(fix, 10);
+  setInterval(fix, 4);
   window.addEventListener('scroll', fix, true);
   window.addEventListener('resize', fix);
 
