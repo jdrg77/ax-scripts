@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Pause On Hover
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Pause%20On%20Hover%201.0.user.js
@@ -27,21 +27,21 @@
     return null;
   }
 
-  // Selector de todos los botones fixed de QBuy y Best Match
-  function getFixedBtns() {
+  // Todos los elementos hovereables de QBuy y Best Match
+  function getTargets() {
     return document.querySelectorAll(
-      'button[style*="position: fixed"], button[style*="position:fixed"], [data-qbm-mini]'
+      'button[style*="position: fixed"], button[style*="position:fixed"], [data-qbm-mini], img.qb-coin-img, img.qbm-coin-img'
     );
   }
 
   let attached = new WeakSet();
 
   function attachListeners() {
-    getFixedBtns().forEach(btn => {
-      if (attached.has(btn)) return;
-      attached.add(btn);
-      btn.addEventListener('mouseenter', () => getPauseFns()?.pause());
-      btn.addEventListener('mouseleave', () => getPauseFns()?.resume());
+    getTargets().forEach(el => {
+      if (attached.has(el)) return;
+      attached.add(el);
+      el.addEventListener('mouseenter', () => getPauseFns()?.pause());
+      el.addEventListener('mouseleave', () => getPauseFns()?.resume());
     });
   }
 
@@ -49,5 +49,5 @@
   observer.observe(document.body, { childList: true, subtree: true });
   attachListeners();
 
-  console.log('🚀 Axiom Pause On Hover 1.0 loaded');
+  console.log('🚀 Axiom Pause On Hover 1.1 loaded');
 })();
