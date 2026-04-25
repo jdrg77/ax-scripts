@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
 // @match        https://*.gmgn.ai/*
@@ -14,12 +14,19 @@
 (function () {
   'use strict';
 
+  const GMGN_HOME = 'https://gmgn.ai/?chain=sol&ref=j4dra';
+
   if (location.hostname.includes('axiom.trade')) {
 
     function sendCA(ca) {
       if (!ca) return;
       GM_setValue('axiom_gmgn_ca', JSON.stringify({ ca, t: Date.now() }));
       console.log('[GMGN Bridge] CA enviado:', ca);
+    }
+
+    function sendURL(url) {
+      GM_setValue('axiom_gmgn_url', JSON.stringify({ url, t: Date.now() }));
+      console.log('[GMGN Bridge] URL enviada:', url);
     }
 
     function readTopNewPairCA() {
@@ -37,6 +44,10 @@
     pairObserver.observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener('mousedown', (e) => {
+      // Boton Flex — abre GMGN home
+      const flexBtn = e.target.closest('button[class*="text-nowrap"][class*="text-primaryBlue"]');
+      if (flexBtn) { sendURL(GMGN_HOME); return; }
+
       // Best Match mini button — usa rowCA (data-qbm-mini)
       const miniBtn = e.target.closest('[data-qbm-mini]');
       if (miniBtn) {
@@ -44,7 +55,7 @@
         if (rowCA) { sendCA(rowCA); return; }
       }
 
-      // QBuy 17.221 button — usa el _ca del boton mismo
+      // QBuy 17.221 button — usa axiomTopPairCA
       let el = e.target;
       while (el && el !== document.body) {
         if (el.style?.position === 'fixed' && el.style?.zIndex === '9999' && el.querySelector?.('.qb-sim-badge')) {
@@ -56,7 +67,7 @@
       }
     }, true);
 
-    console.log('🚀 GMGN Bridge v1.4 — Axiom side loaded');
+    console.log('🚀 GMGN Bridge v1.6 — Axiom side loaded');
   }
 
   if (location.hostname.includes('gmgn.ai')) {
@@ -65,8 +76,19 @@
       try {
         const { ca } = JSON.parse(new_val);
         if (ca) {
-          console.log('[GMGN Bridge] Navegando a:', ca);
+          console.log('[GMGN Bridge] Navegando a token:', ca);
           window.location.href = `https://gmgn.ai/sol/token/${ca}`;
+        }
+      } catch (e) {}
+    });
+
+    GM_addValueChangeListener('axiom_gmgn_url', (name, old_val, new_val, remote) => {
+      if (!remote || !new_val) return;
+      try {
+        const { url } = JSON.parse(new_val);
+        if (url) {
+          console.log('[GMGN Bridge] Navegando a URL:', url);
+          window.location.href = url;
         }
       } catch (e) {}
     });
