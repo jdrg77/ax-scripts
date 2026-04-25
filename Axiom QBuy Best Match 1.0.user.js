@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.17
+// @version      8.18
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -21,6 +21,7 @@
   const miniPool    = new Map();
   let lastGlowBtns  = [];
   let lastNormalSize = { w: 48, h: 48 };
+  let lastNormalBtnTemplate = null;
   let prefetchCount    = 0;
   let prefetchCooldown = false;
   let cooldownTimer    = null;
@@ -260,7 +261,7 @@
         ca:          getCAFromBtn(winner) || rowCA,
         newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
         memeHref,
-        btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
+        btnTemplate: winner._isGrad ? null : (() => { const t = winner._original?.cloneNode(true); if (t) lastNormalBtnTemplate = t.cloneNode(true); return t; })(),
         ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
         name:       winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
         imgSrc:     getBtnImgSrc(winner),
@@ -279,7 +280,7 @@
   // === Mini buttons ===
 
   function createMiniBtn(rowCA, template) {
-    const el = template ? template.cloneNode(true) : document.createElement('button');
+    const el = (template || lastNormalBtnTemplate) ? (template || lastNormalBtnTemplate).cloneNode(true) : document.createElement('button');
     delete el.dataset.qbAdded;
     el.setAttribute('data-qbm-mini', rowCA);
     el.style.cssText         = '';
