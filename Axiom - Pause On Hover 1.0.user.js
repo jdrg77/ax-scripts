@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Axiom - Pause On Hover
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @match        https://axiom.trade/*
 // @grant        none
+// @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Pause%20On%20Hover%201.0.user.js
 // @downloadURL  https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Pause%20On%20Hover%201.0.user.js
 // ==/UserScript==
@@ -12,65 +13,56 @@
   'use strict';
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
-  function isOurElement(el) {
-    if (!el) return false;
-    let cur = el;
-    while (cur && cur !== document.body) {
-      // QBuy button: position:fixed inline + zIndex 9999
-      if (cur.tagName === 'BUTTON' && cur.style?.position === 'fixed' && cur.style?.zIndex === '9999') return true;
-      // Best Match mini button
-      if (cur.hasAttribute?.('data-qbm-mini')) return true;
-      // Coin images (outside button bounds)
-      if (cur.classList?.contains('qb-coin-img')) return true;
-      if (cur.classList?.contains('qbm-coin-img')) return true;
-      cur = cur.parentElement;
-    }
-    return false;
+  function getHandlerDom() {
+    const scrollable = document.querySelector('.absolute.inset-0.overflow-y-auto');
+    if (!scrollable) return null;
+    const fk = Object.keys(scrollable).find(k => k.startsWith('__reactFiber'));
+    if (!fk) return null;
+    return scrollable[fk].return.stateNode;
   }
 
-  function installWrap() {
-    const scrollable = document.querySelector('.absolute.inset-0.overflow-y-auto');
-    if (!scrollable) return false;
-    const fk = Object.keys(scrollable).find(k => k.startsWith('__reactFiber'));
-    if (!fk) return false;
-    const hf = scrollable[fk].return;
-    if (!hf?.memoizedProps?.onMouseLeave) return false;
-    if (hf.memoizedProps.onMouseLeave?.__pauseWrapped) return true;
+  function attachToEl(el, handlerDom) {
+    if (el.__qbMoveHooked) return;
+    el.__qbMoveHooked = true;
+    el.addEventListener('mouseenter', (e) => {
+      handlerDom.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true, cancelable: true,
+        clientX: e.clientX, clientY: e.clientY
+      }));
+    });
+    el.addEventListener('mousemove', (e) => {
+      handlerDom.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true, cancelable: true,
+        clientX: e.clientX, clientY: e.clientY
+      }));
+    });
+  }
 
-    const origLeave = hf.memoizedProps.onMouseLeave;
-
-    function wrappedLeave(e) {
-      // React SyntheticEvent: relatedTarget puede estar en e o en e.nativeEvent
-      const dest = e.relatedTarget || e.nativeEvent?.relatedTarget;
-      if (isOurElement(dest)) return;
-      origLeave(e);
-    }
-    wrappedLeave.__pauseWrapped = true;
-
-    hf.memoizedProps = { ...hf.memoizedProps, onMouseLeave: wrappedLeave };
-    if (hf.pendingProps) hf.pendingProps = { ...hf.pendingProps, onMouseLeave: wrappedLeave };
-
+  function installHook() {
+    const hd = getHandlerDom();
+    if (!hd) return false;
+    [...document.querySelectorAll('button')]
+      .filter(b => b.style?.position === 'fixed')
+      .forEach(b => attachToEl(b, hd));
+    [...document.querySelectorAll('img.qb-coin-img, img.qbm-coin-img')]
+      .forEach(b => attachToEl(b, hd));
     return true;
   }
 
-  // Instalar cuando el DOM esté listo
-  const initInterval = setInterval(() => {
-    if (installWrap()) {
-      console.log('🚀 Axiom Pause On Hover 1.6 — wrap instalado');
-      clearInterval(initInterval);
-    }
+  const mo = new MutationObserver(() => {
+    const hd = getHandlerDom();
+    if (!hd) return;
+    [...document.querySelectorAll('button')]
+      .filter(b => b.style?.position === 'fixed')
+      .forEach(b => attachToEl(b, hd));
+    [...document.querySelectorAll('img.qb-coin-img, img.qbm-coin-img')]
+      .forEach(b => attachToEl(b, hd));
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+
+  const interval = setInterval(() => {
+    if (installHook()) clearInterval(interval);
   }, 500);
 
-  // Re-aplicar si React re-renderiza y borra el wrap
-  setInterval(() => {
-    const scrollable = document.querySelector('.absolute.inset-0.overflow-y-auto');
-    if (!scrollable) return;
-    const fk = Object.keys(scrollable).find(k => k.startsWith('__reactFiber'));
-    if (!fk) return;
-    const hf = scrollable[fk].return;
-    if (hf?.memoizedProps?.onMouseLeave && !hf.memoizedProps.onMouseLeave.__pauseWrapped) {
-      installWrap();
-    }
-  }, 2000);
-
+  console.log('✅ Axiom Pause On Hover 1.7 loaded');
 })();
