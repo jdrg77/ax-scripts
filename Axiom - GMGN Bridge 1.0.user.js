@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
 // @match        https://*.gmgn.ai/*
@@ -22,21 +22,27 @@
       console.log('[GMGN Bridge] CA enviado:', ca);
     }
 
-    // Intercept history.pushState — catches QBuy button clicks, mini button image clicks,
-    // and pulseRow image clicks that navigate to /meme/{CA}
-    const origPushState = history.pushState.bind(history);
-    history.pushState = function (state, title, url) {
-      origPushState(state, title, url);
-      const m = (url || '').toString().match(/\/meme\/([A-Za-z0-9]{32,})/);
-      if (m) sendCA(m[1]);
-    };
+    document.addEventListener('mousedown', (e) => {
+      // Best Match mini button — usa rowCA (data-qbm-mini)
+      const miniBtn = e.target.closest('[data-qbm-mini]');
+      if (miniBtn) {
+        const rowCA = miniBtn.getAttribute('data-qbm-mini');
+        if (rowCA) { sendCA(rowCA); return; }
+      }
 
-    window.addEventListener('popstate', () => {
-      const m = location.pathname.match(/\/meme\/([A-Za-z0-9]{32,})/);
-      if (m) sendCA(m[1]);
-    });
+      // QBuy 17.221 button — usa newPairCA de localStorage
+      let el = e.target;
+      while (el && el !== document.body) {
+        if (el.tagName === 'BUTTON' && el.style?.position === 'fixed' && el.style?.zIndex === '9999' && !el.getAttribute('data-qbm-mini')) {
+          const newPairCA = localStorage.getItem('axiomNewPairCA');
+          if (newPairCA) { sendCA(newPairCA); return; }
+          break;
+        }
+        el = el.parentElement;
+      }
+    }, true);
 
-    console.log('🚀 GMGN Bridge v1.2 — Axiom side loaded');
+    console.log('🚀 GMGN Bridge v1.3 — Axiom side loaded');
   }
 
   if (location.hostname.includes('gmgn.ai')) {
