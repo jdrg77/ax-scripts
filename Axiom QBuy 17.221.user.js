@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.9
+// @version      11.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -356,7 +356,7 @@
     if (!label) {
       label = document.createElement('div');
       label.className = 'qb-name-label';
-      label.style.cssText = 'position:absolute;bottom:100%;left:-36px;transform:translateX(-50%);margin-bottom:2px;text-align:center;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:2147483647;';
+      label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;text-align:center;font-size:10px;font-weight:600;font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
       newBtn.appendChild(label);
     }
     return label;
@@ -625,7 +625,7 @@
       const label = document.createElement('div');
       label.className = 'qb-name-label';
       label.textContent = token.name || token.ticker;
-      label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#aaf;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:2147483647;';
+      label.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-size:10px;font-weight:600;font-family:monospace;color:#aaf;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:10001;';
       btn.appendChild(label);
 
       if (token.age || token.mc) {
