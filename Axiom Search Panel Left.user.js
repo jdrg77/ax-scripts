@@ -26,11 +26,11 @@
 
     if (match) {
       const x = parseInt(match[1]) - 258;
-      const y = parseInt(match[2]) - 158;
+      const y = parseInt(match[2]) - 151;
       wrapper.style.transform = `translate(${x}px, ${y}px)`;
     } else {
       wrapper.style.marginLeft = '-400px';
-      wrapper.style.marginTop = '-158px';
+      wrapper.style.marginTop = '-151px';
     }
   });
 

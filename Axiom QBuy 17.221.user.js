@@ -799,7 +799,7 @@
       const current = wrapper.style.transform;
       const match   = current.match(/translate\((.+)px,\s*(.+)px\)/);
       if (match) {
-        wrapper.style.transform = `translate(${parseFloat(match[1])}px, ${parseFloat(match[2]) + 50}px)`;
+        wrapper.style.transform = `translate(${parseFloat(match[1])}px, ${parseFloat(match[2]) + 57}px)`;
       } else {
         wrapper.style.marginTop = '50px';
       }
