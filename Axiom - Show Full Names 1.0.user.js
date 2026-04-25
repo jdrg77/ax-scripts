@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Show Full Names
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Show%20Full%20Names%201.0.user.js
@@ -20,7 +20,10 @@
 function fix() {
     const names = document.querySelectorAll('div.truncate.text-left, [class*="truncate"][class*="text-left"]');
 
-    if (isPanelOpen()) return;
+    if (isPanelOpen()) {
+      names.forEach(name => { name.style.zIndex = '0'; });
+      return;
+    }
 
     names.forEach(name => {
       if (!name.__placeholder) {
@@ -72,5 +75,5 @@ function fix() {
     }
   }, true);
 
-  console.log('🚀 Axiom Show Full Names 1.5 loaded');
+  console.log('🚀 Axiom Show Full Names 1.6 loaded');
 })();
