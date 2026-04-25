@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.16
+// @version      8.17
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -279,6 +279,10 @@
   // === Mini buttons ===
 
   function createMiniBtn(rowCA, template) {
+    if (!template) {
+      const qbBtns = getQBButtons();
+      if (qbBtns.length > 0) template = qbBtns[0];
+    }
     const el = template ? template.cloneNode(true) : document.createElement('button');
     delete el.dataset.qbAdded;
     el.setAttribute('data-qbm-mini', rowCA);
