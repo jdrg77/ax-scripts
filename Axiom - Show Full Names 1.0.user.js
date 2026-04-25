@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Show Full Names
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/jdrg77/ax-scripts/main/Axiom%20-%20Show%20Full%20Names%201.0.user.js
@@ -66,6 +66,7 @@ function fix() {
       // Click dentro del name flotante — si hay imagen abajo, dejarlo pasar
       if (e.target && (e.target.tagName === 'IMG' || e.target.closest('img'))) return;
       // Sin imagen abajo — disparar click en el name para que Click Search lo capture
+      e.stopPropagation();
       syntheticFiring = true;
       name.style.pointerEvents = 'auto';
       name.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: e.clientX, clientY: e.clientY }));
@@ -75,5 +76,5 @@ function fix() {
     }
   }, true);
 
-  console.log('🚀 Axiom Show Full Names 1.7 loaded');
+  console.log('🚀 Axiom Show Full Names 1.8 loaded');
 })();
