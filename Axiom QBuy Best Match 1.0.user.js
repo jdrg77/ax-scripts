@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.23
+// @version      8.24
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -67,16 +67,21 @@
 
   window.addEventListener('axiomAPIResult', (e) => {
     const d = e.detail;
-    if (!d?.rowCA || !d.pairAddress) return;
-    const existing = sessionBest.get(d.rowCA);
+    if (!d?.ca || !d.pairAddress) return;
+
+    const keyCA    = d.ca;
+    const existing = sessionBest.get(keyCA);
     if (existing && d.matchPct <= existing.matchPct) return;
-    sessionBest.set(d.rowCA, {
-      rowCA:       d.rowCA,
+
+    const template = getQBButtons()[0]?._original?.cloneNode(true) || null;
+
+    sessionBest.set(keyCA, {
+      rowCA:       keyCA,
       ca:          d.ca,
       pairAddress: d.pairAddress,
-      newPairCA:   d.rowCA,
-      memeHref:    null,
-      btnTemplate: lastNormalBtnTemplate || null,
+      newPairCA:   d._rescuedRowCA || d.rowCA || keyCA,
+      memeHref:    `/meme/${d.pairAddress}?chain=sol`,
+      btnTemplate: template,
       ticker:      d.ticker,
       name:        d.name,
       imgSrc:      d.imgSrc,
