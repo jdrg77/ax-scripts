@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,8 +11,6 @@
 
 (function () {
   'use strict';
-  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
-
   const SERVERS   = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const CACHE_TTL = 8000;
   const cache     = new Map();
