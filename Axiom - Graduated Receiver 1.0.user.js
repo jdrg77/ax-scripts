@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.84
+// @version      1.85
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -292,7 +292,7 @@
       const count = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
       if (!count) { sawEmpty = true; return; }
       if (!sawEmpty) return;
-      // buttons appeared after empty — wait 200ms to confirm they're stable (not a React cache flash)
+      // buttons appeared after empty — wait 100ms to confirm they're stable (not a React cache flash)
       if (debTimer) clearTimeout(debTimer);
       debTimer = setTimeout(() => {
         const stable = panel.querySelectorAll('[class*="group/quickBuyButton"]').length;
@@ -301,7 +301,7 @@
         if (safeTimer) { clearTimeout(safeTimer); safeTimer = null; }
         console.log('✅ [8] MutationObserver: botones estables en panel, count:', stable);
         doScan(id, refPixels, seq);
-      }, 200);
+      }, 100);
     });
     panelObs.observe(panel, { childList: true, subtree: true });
     safeTimer = setTimeout(() => {
@@ -309,7 +309,7 @@
       if (id !== scanId) return;
       console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
       doScan(id, refPixels, seq);
-    }, 800);
+    }, 400);
   }
 
   // ======= BUY EXECUTION =======
@@ -370,7 +370,7 @@
         newPairTimer = null;
         const id = ++scanId;
         const seq = msg.seq;
-        console.log('⏱ [2] timer 200ms listo, id:', id, '| t=' + (Date.now()-t0) + 'ms');
+        console.log('⏱ [2] timer 50ms listo, id:', id, '| t=' + (Date.now()-t0) + 'ms');
         getPixels(msg.refImgSrc, pixels => {
           if (id !== scanId) { console.log('🚫 [3] ABORTADO en getPixels, id:', id, 'scanId:', scanId); return; }
           console.log('🖼 [3] getPixels listo, pixels:', pixels ? 'OK' : 'NULL', '| t=' + (Date.now()-t0) + 'ms');

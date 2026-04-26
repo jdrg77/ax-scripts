@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.13
+// @version      11.14
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -832,7 +832,7 @@ function navigateToMeme(row, fallbackCA) {
     gradCandidates = newTokens;
     console.log(`[T1-GRAD] ACEPTADO | gradCandidates=${gradCandidates.length} | llamando renderGradProxies`);
     scheduleUpdate();
-    setTimeout(renderGradProxies, 30);
+    setTimeout(renderGradProxies, 0);
   };
 
   function addButtons() {
