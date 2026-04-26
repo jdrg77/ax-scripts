@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - API Prefetch Rescue
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -18,7 +18,7 @@
   const CACHE_MAX = 300;
   const hashCache = new Map();
 
-  // === DCT hash (mismo algoritmo que QBuy 17.221) ===
+  // === DCT hash ===
 
   function dct1d(f) {
     const N = f.length;
@@ -87,13 +87,35 @@
     return parseFloat(((m / h1.length) * 100).toFixed(1));
   }
 
-  // === Top row image (fallback) ===
+  // === Top row helpers ===
 
   function getTopRowImgSrc() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
     if (!rows.length) return null;
     return Array.from(rows[0].querySelectorAll('img[class*="object-cover"]'))
       .find(img => img.src && !img.src.startsWith('data:'))?.src || null;
+  }
+
+  function getTopRowTokenCA() {
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    if (!rows.length) return null;
+    const row = rows[0];
+    const meme = row.querySelector('a[href*="/meme/"]');
+    if (meme) {
+      const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    const pump = row.querySelector('a[href*="pump.fun/coin/"]');
+    if (pump) {
+      const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  function isPlaceholderImg(src) {
+    if (!src) return true;
+    return src.includes('/pfps/') || src.includes('axiom-assets');
   }
 
   // === API ===
@@ -123,7 +145,11 @@
   // === Rescue ===
 
   async function rescueViaAPI({ name, refImgSrc, rowCA, graduated }) {
-    console.log('[Rescue] 🚨 Iniciando rescue via API:', name, '| rowCA:', rowCA, '| graduated:', graduated);
+    if (isPlaceholderImg(refImgSrc)) {
+      console.log('[Rescue] ⏭️ Placeholder img, cancelado para:', name);
+      return;
+    }
+    console.log('[Rescue] 🚨 Iniciando:', name, '| rowCA:', rowCA?.slice(0, 8), '| graduated:', graduated);
 
     const [results, refHash] = await Promise.all([
       searchTokenAPI(name, graduated || false),
@@ -131,11 +157,11 @@
     ]);
 
     if (!results || !results.length) {
-      console.log('[Rescue] ❌ Sin resultados de API para:', name);
+      console.log('[Rescue] ❌ Sin resultados para:', name);
       return;
     }
     if (!refHash) {
-      console.log('[Rescue] ❌ Sin refHash para:', name, '| imgSrc:', refImgSrc);
+      console.log('[Rescue] ❌ Sin refHash para:', name);
       return;
     }
 
@@ -157,7 +183,7 @@
     ]);
 
     if (!best) {
-      console.log('[Rescue] ❌ No se encontró best match para:', name);
+      console.log('[Rescue] ❌ No best match para:', name);
       return;
     }
 
@@ -165,13 +191,14 @@
 
     window.dispatchEvent(new CustomEvent('axiomAPIResult', {
       detail: {
-        rowCA,
-        ca:          best.tokenAddress,
-        pairAddress: best.pairAddress,
-        ticker:      best.tokenTicker || '',
-        name:        best.tokenName   || '',
-        imgSrc:      `https://axiomtrading.axiom-cdn.io/${best.tokenAddress}.webp`,
-        matchPct:    bestPct,
+        rowCA:         best.tokenAddress,
+        ca:            best.tokenAddress,
+        pairAddress:   best.pairAddress,
+        ticker:        best.tokenTicker || '',
+        name:          best.tokenName   || '',
+        imgSrc:        `https://axiomtrading.axiom-cdn.io/${best.tokenAddress}.webp`,
+        matchPct:      bestPct,
+        _rescuedRowCA: rowCA,
       },
     }));
   }
@@ -184,11 +211,8 @@
     const newName = e.detail?.name;
     if (!newName) return;
 
-    // refImgSrc, rowCA y graduated vienen del prefetch script en el detail,
-    // capturados en el momento exacto antes de que la row y localStorage cambien.
-    // getTopRowImgSrc() y localStorage son fallback por compatibilidad.
     const snapImg  = e.detail?.refImgSrc || getTopRowImgSrc();
-    const snapCA   = e.detail?.rowCA     || localStorage.getItem('axiomNewPairCA') || '';
+    const snapCA   = e.detail?.rowCA     || getTopRowTokenCA() || localStorage.getItem('axiomNewPairCA') || '';
     const snapGrad = e.detail?.graduated || false;
 
     if (currentAnalysis && currentAnalysis.name !== newName) {
@@ -203,6 +227,12 @@
     };
   });
 
-  console.log('🚨 Axiom API Prefetch Rescue v1.2 loaded');
+  console.log('🚨 Axiom API Prefetch Rescue v1.3 loaded');
+
+  window.__rescue__ = {
+    rescueViaAPI, searchTokenAPI, getHash, hashSimilarity,
+    getTopRowImgSrc, getTopRowTokenCA, hashCache,
+    getState: () => currentAnalysis,
+  };
 
 })();
