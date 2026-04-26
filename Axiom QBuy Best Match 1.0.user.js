@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.22
+// @version      8.23
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -64,6 +64,33 @@
     }
     cooldownTimer = setTimeout(() => { prefetchCooldown = false; }, 400);
   });
+
+  window.addEventListener('axiomAPIResult', (e) => {
+    const d = e.detail;
+    if (!d?.rowCA || !d.pairAddress) return;
+    const existing = sessionBest.get(d.rowCA);
+    if (existing && d.matchPct <= existing.matchPct) return;
+    sessionBest.set(d.rowCA, {
+      rowCA:       d.rowCA,
+      ca:          d.ca,
+      pairAddress: d.pairAddress,
+      newPairCA:   d.rowCA,
+      memeHref:    null,
+      btnTemplate: lastNormalBtnTemplate || null,
+      ticker:      d.ticker,
+      name:        d.name,
+      imgSrc:      d.imgSrc,
+      age:         '',
+      mc:          '',
+      matchPct:    d.matchPct,
+      isGrad:      false,
+      platform:    'pump',
+      isMigrated:  false,
+      hasDex:      false,
+    });
+    console.log('✅ Best Match API result saved:', d.ticker, d.matchPct + '%');
+  });
+
 
   // === CA extraction ===
 
