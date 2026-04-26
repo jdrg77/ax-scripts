@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -298,25 +298,18 @@
     tryStart();
   }
 
-  function processRow(row) {
-    const name      = getRowName(row);
-    if (!name) return;
-    const ca        = getRowCA(row);
-    const refImgSrc = getRowImgSrc(row);
-    if (isPlaceholder(refImgSrc)) return;
-    enqueue({ name, refImgSrc, rowCA: ca || name }, true);
+  function scanRows() {
+    document.querySelectorAll('[class*="group/pulseRow"]').forEach(row => {
+      const name      = getRowName(row);
+      if (!name) return;
+      const ca        = getRowCA(row);
+      const refImgSrc = getRowImgSrc(row);
+      if (isPlaceholder(refImgSrc)) return;
+      enqueue({ name, refImgSrc, rowCA: ca || name });
+    });
   }
 
-  // Only process newly added rows — avoids scanning all existing rows on every mutation
-  new MutationObserver(mutations => {
-    for (const mut of mutations) {
-      for (const node of mut.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        if (node.matches?.('[class*="group/pulseRow"]')) { processRow(node); continue; }
-        node.querySelectorAll('[class*="group/pulseRow"]').forEach(processRow);
-      }
-    }
-  }).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
 
   // ============================================================
   // 5. Mini Buttons (2 per row)
@@ -931,6 +924,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.4 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.5 loaded');
 
 })();
