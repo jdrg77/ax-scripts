@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -90,7 +90,7 @@
   // 2. search-v5 API
   // ============================================================
 
-  async function searchTokenAPI(query, onlyBonded = false) {
+  async function searchTokenAPI(query, onlyBonded = false, onlyDexPaid = false) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST',
@@ -103,7 +103,7 @@
           isOg: false,
           includedQuoteTokens: ['SOL', 'USDC', 'USD1'],
           onlyBonded,
-          onlyDexPaid: false,
+          onlyDexPaid,
           v: Date.now(),
         }),
       });
@@ -175,20 +175,21 @@
     return scored;
   }
 
-  // Port of sortNormal from QBuy 17.221 — adapted for API results
-  function rankScored(scored, rowName, gradSet) {
+  // Port of sortNormal from QBuy 17.221 — special tokens only (grad + dex paid)
+  function rankScored(scored, rowName, gradSet, dexSet) {
     const norm       = s => (s || '').toLowerCase().trim();
     const rn         = norm(rowName);
     const isGrad     = s => gradSet.has(s.token.tokenAddress);
+    const isDex      = s => dexSet.has(s.token.tokenAddress);
     const nameMatch  = s => norm(s.token.tokenName)   === rn;
     const tickerMatch= s => norm(s.token.tokenTicker) === rn;
     const exactMatch = s => nameMatch(s) || tickerMatch(s);
     const byPct      = (a, b) => b.pct - a.pct;
 
-    // platform from API: grad (onlyBonded) → raydium; pump protocol → pump; bonk → bonk
     const getPlatform = s => {
       if (isGrad(s)) return 'raydium';
       if (s.token.protocol === 'bonk') return 'bonk';
+      if (isDex(s)) return 'pump-dex';
       return 'pump';
     };
 
@@ -235,16 +236,18 @@
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
 
-    const [normalResults, gradResults] = await Promise.all([
-      searchTokenAPI(name, false),
-      searchTokenAPI(name, true),
+    // Only special tokens: graduated (migrated) or dex paid — pump normal is never shown
+    const [gradResults, dexResults] = await Promise.all([
+      searchTokenAPI(name, true,  false),
+      searchTokenAPI(name, false, true),
     ]);
 
     const gradSet = new Set((gradResults || []).map(t => t.tokenAddress));
+    const dexSet  = new Set((dexResults  || []).map(t => t.tokenAddress));
 
-    // Merge + dedupe (grad results take precedence on duplicate)
+    // Merge + dedupe (grad takes precedence over dex on duplicate)
     const seen = new Set();
-    const unique = [...(gradResults || []), ...(normalResults || [])].filter(t => {
+    const unique = [...(gradResults || []), ...(dexResults || [])].filter(t => {
       if (seen.has(t.tokenAddress)) return false;
       seen.add(t.tokenAddress);
       return true;
@@ -252,7 +255,7 @@
     if (!unique.length) return;
 
     const scored  = await scoreResults(unique, refHash);
-    const ranked  = rankScored(scored, name, gradSet);
+    const ranked  = rankScored(scored, name, gradSet, dexSet);
     const top2    = ranked.slice(0, 2);
     if (!top2.length) return;
 
@@ -468,11 +471,13 @@
           el._label.style.display = '';
         }
 
-        const platBg     = best.platform === 'bonk'    ? 'rgba(255,140,0,0.85)'
-                         : best.platform === 'raydium' ? 'rgba(0,51,255,0.85)'
+        const platBg     = best.platform === 'bonk'     ? 'rgba(255,140,0,0.85)'
+                         : best.platform === 'raydium'  ? 'rgba(0,51,255,0.85)'
+                         : best.platform === 'pump-dex' ? 'rgba(120,255,160,0.85)'
                          : 'rgba(20,20,30,0.92)';
-        const platBorder = best.platform === 'bonk'    ? '#ff8c00'
-                         : best.platform === 'raydium' ? '#0033FF'
+        const platBorder = best.platform === 'bonk'     ? '#ff8c00'
+                         : best.platform === 'raydium'  ? '#0033FF'
+                         : best.platform === 'pump-dex' ? '#78ffa0'
                          : badgeColor(best.matchPct);
         el.style.background = platBg;
         el.style.border     = `1.5px solid ${platBorder}`;
@@ -919,6 +924,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.2 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.3 loaded');
 
 })();
