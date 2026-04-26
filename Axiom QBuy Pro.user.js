@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -298,12 +298,29 @@
     tryStart();
   }
 
+  function getNewPairsRows() {
+    const header = Array.from(document.querySelectorAll('*'))
+      .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
+    if (!header) return [];
+    const col = header.parentElement?.parentElement?.parentElement;
+    if (!col) return [];
+    const virtualList = Array.from(col.querySelectorAll('div')).find(div => {
+      const s = div.getAttribute('style') || '';
+      return s.includes('position: relative') &&
+             div.querySelectorAll('[style*="position: absolute"]').length > 3;
+    });
+    if (!virtualList) return [];
+    const rows = Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]'));
+    return rows.slice(1, 4); // filas 2, 3 y 4 — sin la #1
+  }
+
   function scanRows() {
-    document.querySelectorAll('[class*="group/pulseRow"]').forEach(row => {
-      const name      = getRowName(row);
+    getNewPairsRows().forEach(row => {
+      const pulseRow = row.querySelector('[class*="group/pulseRow"]') || row;
+      const name      = getRowName(pulseRow);
       if (!name) return;
-      const ca        = getRowCA(row);
-      const refImgSrc = getRowImgSrc(row);
+      const ca        = getRowCA(pulseRow);
+      const refImgSrc = getRowImgSrc(pulseRow);
       if (isPlaceholder(refImgSrc)) return;
       enqueue({ name, refImgSrc, rowCA: ca || name });
     });
@@ -937,6 +954,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.6 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.7 loaded');
 
 })();
