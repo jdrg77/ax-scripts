@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -92,7 +92,7 @@
     popup = document.createElement('div');
     popup.style.cssText = [
       'position:fixed', 'z-index:2147483646', 'display:none',
-      'background:#0d0f14', 'border:1px solid #23263a', 'border-radius:8px',
+      'background:#0b0d13', 'border:1px solid #1a1d28', 'border-radius:8px',
       'width:290px', 'box-shadow:0 8px 32px rgba(0,0,0,0.7)',
       'font-family:monospace', 'font-size:11px', 'color:#ccc',
       'pointer-events:none', 'overflow:hidden',
@@ -112,23 +112,21 @@
       return;
     }
 
-    const header = `<div style="display:flex;padding:5px 10px 5px;gap:4px;color:#444;border-bottom:1px solid #1c1f2b;font-size:10px">
-      <span style="width:54px">Amount</span>
-      <span style="width:62px;text-align:right">MC</span>
-      <span style="flex:1;padding-left:8px">Trader</span>
-      <span style="width:30px;text-align:right">Age</span>
+    const header = `<div style="display:flex;padding:4px 10px;gap:0;color:#3a3d50;border-bottom:1px solid #1a1d28;font-size:10px;letter-spacing:0.02em">
+      <span style="width:90px">Amount</span>
+      <span style="width:64px;text-align:right">MC</span>
+      <span style="flex:1;padding-left:10px">Trader</span>
+      <span style="width:28px;text-align:right">Age</span>
     </div>`;
 
     const rows = trades.slice(0, 18).map(t => {
       const isBuy = t.type === 'buy';
-      const col   = isBuy ? '#4ade80' : '#f87171';
-      const icon  = isBuy ? '▲' : '▼';
-      return `<div style="display:flex;align-items:center;padding:2px 10px;gap:4px;border-bottom:1px solid #13151c">
-        <span style="color:${col};width:8px;font-size:9px">${icon}</span>
-        <span style="color:${col};width:46px">${fmtSol(t.totalSol)}</span>
-        <span style="color:#666;width:62px;text-align:right">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
-        <span style="color:#aaa;flex:1;padding-left:8px">${fmtWallet(t.makerAddress)}</span>
-        <span style="color:#444;width:30px;text-align:right">${fmtAge(t.createdAt)}</span>
+      const col   = isBuy ? '#3dd68c' : '#f75f6e';
+      return `<div style="display:flex;align-items:center;padding:2px 10px;gap:0">
+        <span style="color:${col};width:90px;font-size:11px">≡ ${fmtSol(t.totalSol)}</span>
+        <span style="color:#4a4f6a;width:64px;text-align:right;font-size:11px">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
+        <span style="color:#7a8099;flex:1;padding-left:10px;font-size:11px">${fmtWallet(t.makerAddress)}</span>
+        <span style="color:#3a3d50;width:28px;text-align:right;font-size:11px">${fmtAge(t.createdAt)}</span>
       </div>`;
     }).join('');
 
