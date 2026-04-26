@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.21
+// @version      8.22
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -374,18 +374,13 @@
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
 
-      // Only block row 0 while waiting for grad scan if it has no saved entry
-      if (awaitingT2Confirm && rowIdx === 0 && !sessionBest.has(rowCA)) return;
+      if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
       if (!best) return;
 
       const rect = row.getBoundingClientRect();
-      if (rect.width < 10 || rect.bottom < 0 || rect.top > window.innerHeight) {
-        const el = miniPool.get(rowCA);
-        if (el?.isConnected) { el.style.display = 'none'; if (el._label) el._label.style.display = 'none'; }
-        return;
-      }
+      if (rect.width < 10) return;
 
       const el   = getOrCreateMiniBtn(rowCA, best);
       if (best.pairAddress) el.dataset.qbmPair = best.pairAddress;
@@ -463,6 +458,13 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
+    });
+
+    miniPool.forEach((el, ca) => {
+      if (!seenCAs.has(ca)) {
+        el.style.display = 'none';
+        if (el._label) el._label.style.display = 'none';
+      }
     });
   }
 
