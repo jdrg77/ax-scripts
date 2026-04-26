@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.11
+// @version      11.12
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -877,16 +877,18 @@ function navigateToMeme(row, fallbackCA) {
       const _cacheDivs = _cacheRow ? _cacheRow.querySelectorAll('div[class*="min-w-0"][class*="truncate"][class*="whitespace-nowrap"]') : [];
       newBtn._ticker = _cacheDivs[0]?.textContent.trim() || '';
       newBtn._name   = _cacheDivs[1]?.textContent.trim() || _cacheDivs[0]?.textContent.trim() || '';
-      let _ca = '';
+      let _ca = '', _pairAddress = '';
       if (_cacheRow) {
         for (const a of _cacheRow.querySelectorAll('a[href]')) {
           const h = a.href;
-          if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) { _ca = m[1]; break; } }
-          else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) { _ca = m[1]; break; } }
-          else if (h.includes('/meme/')) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) _ca = m[1]; }
+          if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) _ca = m[1]; }
+          else if (h.includes('bonk'))  { const m = h.match(/\/([A-Za-z0-9]{32,})/);      if (m) _ca = m[1]; }
+          else if (h.includes('/meme/')) { const m = h.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) _pairAddress = m[1]; }
         }
+        if (!_ca) _ca = _pairAddress;
       }
       newBtn._ca = _ca;
+      newBtn._pairAddress = _pairAddress || _ca;
       newBtn._platform = _cacheRow
         ? (_cacheRow.querySelector('img[src*="bonk"]') ? 'bonk'
           : _cacheRow.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]') ? 'raydium'

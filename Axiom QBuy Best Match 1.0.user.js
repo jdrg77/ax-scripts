@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.20
+// @version      8.21
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -256,8 +256,8 @@
       const _memeLink = winnerRow?.querySelector('a[href*="/meme/"]');
       const memeHref  = _memeLink ? (new URL(_memeLink.href).pathname + new URL(_memeLink.href).search) : null;
       const pairAddress = winner._isGrad
-        ? (winner.pairAddress || null)
-        : (memeHref?.match(/\/meme\/([A-Za-z0-9]{32,})/)?.[1] || null);
+        ? (winner.pairAddress || winner.ca || null)
+        : (winner._pairAddress || memeHref?.match(/\/meme\/([A-Za-z0-9]{32,})/)?.[1] || null);
       sessionBest.set(rowCA, {
         rowCA,
         ca:          getCAFromBtn(winner) || rowCA,
