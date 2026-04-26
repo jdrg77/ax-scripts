@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.12
+// @version      11.13
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -796,8 +796,21 @@ function navigateToMeme(row, fallbackCA) {
     setReference(clickedImg.src);
   }, true);
 
-  window.addEventListener('axiomPrefetchStart', () => {
+  window.addEventListener('axiomPrefetchStart', (e) => {
     console.log(`[T1-GRAD] axiomPrefetchStart — limpiando gradCandidates, __gradSeq actual=${window.__gradSeq ?? 'undefined'}`);
+    if (addedBtns.length === 0 && referenceSource) {
+      const abandonedName = lastPanel?.querySelector('input')?.value?.trim() || '';
+      if (abandonedName) {
+        window.dispatchEvent(new CustomEvent('axiomPrefetchFailed', {
+          detail: {
+            name:      abandonedName,
+            refImgSrc: referenceSource || null,
+            rowCA:     null,
+            graduated: !!localStorage.getItem('search-only-bonded'),
+          },
+        }));
+      }
+    }
     gradCandidates = [];
     removeGradProxyBtns();
   });

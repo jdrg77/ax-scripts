@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - API Prefetch Rescue
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -203,32 +203,15 @@
     }));
   }
 
-  // === Tracking ===
+  // === Trigger ===
 
-  let currentAnalysis = null;
-
-  window.addEventListener('axiomPrefetchStart', (e) => {
-    const newName = e.detail?.name;
-    if (!newName) return;
-
-    const snapImg  = e.detail?.refImgSrc || getTopRowImgSrc();
-    const snapCA   = e.detail?.rowCA     || getTopRowTokenCA() || localStorage.getItem('axiomNewPairCA') || '';
-    const snapGrad = e.detail?.graduated || false;
-
-    if (currentAnalysis && currentAnalysis.name !== newName) {
-      if (window.__axiomHasBestMatch?.(currentAnalysis.rowCA)) {
-        console.log('[Rescue] ⏭️ Ya resuelto por QBuy, skip:', currentAnalysis.name);
-      } else {
-        rescueViaAPI(currentAnalysis);
-      }
-    }
-
-    currentAnalysis = {
-      name:      newName,
-      refImgSrc: snapImg,
-      rowCA:     snapCA,
-      graduated: snapGrad,
-    };
+  window.addEventListener('axiomPrefetchFailed', (e) => {
+    const name      = e.detail?.name;
+    const refImgSrc = e.detail?.refImgSrc || getTopRowImgSrc();
+    const rowCA     = e.detail?.rowCA     || getTopRowTokenCA() || localStorage.getItem('axiomNewPairCA') || '';
+    const graduated = e.detail?.graduated || false;
+    if (!name) return;
+    rescueViaAPI({ name, refImgSrc, rowCA, graduated });
   });
 
   console.log('🚨 Axiom API Prefetch Rescue v1.3 loaded');
