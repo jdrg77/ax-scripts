@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - API Prefetch Rescue
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -15,9 +15,10 @@
 
   const HASH_SIZE = 32;
   const HASH_BITS = 8;
+  const CACHE_MAX = 300;
   const hashCache = new Map();
 
-  // === Hash (mismo algoritmo que QBuy 17.221) ===
+  // === DCT hash (mismo algoritmo que QBuy 17.221) ===
 
   function dct1d(f) {
     const N = f.length;
@@ -68,8 +69,12 @@
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function () {
-      try { const hash = computeHash(img); hashCache.set(src, hash); cb(hash); }
-      catch (e) { cb(null); }
+      try {
+        const hash = computeHash(img);
+        if (hashCache.size >= CACHE_MAX) hashCache.delete(hashCache.keys().next().value);
+        hashCache.set(src, hash);
+        cb(hash);
+      } catch (e) { cb(null); }
     };
     img.onerror = () => cb(null);
     img.src = src.includes('?') ? src : src + '?qb=1';
@@ -82,7 +87,7 @@
     return parseFloat(((m / h1.length) * 100).toFixed(1));
   }
 
-  // === Top row image ===
+  // === Top row image (fallback) ===
 
   function getTopRowImgSrc() {
     const rows = document.querySelectorAll('[class*="group/pulseRow"]');
@@ -93,7 +98,7 @@
 
   // === API ===
 
-  async function searchTokenAPI(query) {
+  async function searchTokenAPI(query, onlyBonded = false) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST',
@@ -105,7 +110,7 @@
           sort: 'mcap',
           isOg: false,
           includedQuoteTokens: ['SOL', 'USDC', 'USD1'],
-          onlyBonded: false,
+          onlyBonded,
           onlyDexPaid: false,
           v: Date.now(),
         }),
@@ -117,20 +122,25 @@
 
   // === Rescue ===
 
-  async function rescueViaAPI({ name, refImgSrc, rowCA }) {
-    console.log('🚨 API Rescue:', name, '| rowCA:', rowCA);
+  async function rescueViaAPI({ name, refImgSrc, rowCA, graduated }) {
+    console.log('[Rescue] 🚨 Iniciando rescue via API:', name, '| rowCA:', rowCA, '| graduated:', graduated);
 
     const [results, refHash] = await Promise.all([
-      searchTokenAPI(name),
+      searchTokenAPI(name, graduated || false),
       new Promise(resolve => getHash(refImgSrc, resolve)),
     ]);
 
-    if (!results?.length || !refHash) {
-      console.log('❌ API Rescue: sin resultados o sin refHash para', name);
+    if (!results || !results.length) {
+      console.log('[Rescue] ❌ Sin resultados de API para:', name);
+      return;
+    }
+    if (!refHash) {
+      console.log('[Rescue] ❌ Sin refHash para:', name, '| imgSrc:', refImgSrc);
       return;
     }
 
     let best = null, bestPct = -1;
+
     await Promise.race([
       new Promise(resolve => {
         let pending = results.length;
@@ -146,8 +156,12 @@
       new Promise(resolve => setTimeout(resolve, 8000)),
     ]);
 
-    if (!best) return;
-    console.log(`✅ API Rescue: ${best.tokenTicker} ${bestPct}% | pair: ${best.pairAddress}`);
+    if (!best) {
+      console.log('[Rescue] ❌ No se encontró best match para:', name);
+      return;
+    }
+
+    console.log(`[Rescue] ✅ ${best.tokenTicker} ${bestPct}% | pair: ${best.pairAddress}`);
 
     window.dispatchEvent(new CustomEvent('axiomAPIResult', {
       detail: {
@@ -155,7 +169,7 @@
         ca:          best.tokenAddress,
         pairAddress: best.pairAddress,
         ticker:      best.tokenTicker || '',
-        name:        best.tokenName  || '',
+        name:        best.tokenName   || '',
         imgSrc:      `https://axiomtrading.axiom-cdn.io/${best.tokenAddress}.webp`,
         matchPct:    bestPct,
       },
@@ -170,16 +184,25 @@
     const newName = e.detail?.name;
     if (!newName) return;
 
+    // refImgSrc, rowCA y graduated vienen del prefetch script en el detail,
+    // capturados en el momento exacto antes de que la row y localStorage cambien.
+    // getTopRowImgSrc() y localStorage son fallback por compatibilidad.
+    const snapImg  = e.detail?.refImgSrc || getTopRowImgSrc();
+    const snapCA   = e.detail?.rowCA     || localStorage.getItem('axiomNewPairCA') || '';
+    const snapGrad = e.detail?.graduated || false;
+
     if (currentAnalysis && currentAnalysis.name !== newName) {
       rescueViaAPI(currentAnalysis);
     }
 
     currentAnalysis = {
       name:      newName,
-      refImgSrc: getTopRowImgSrc(),
-      rowCA:     localStorage.getItem('axiomNewPairCA') || '',
+      refImgSrc: snapImg,
+      rowCA:     snapCA,
+      graduated: snapGrad,
     };
   });
 
-  console.log('🚨 Axiom API Prefetch Rescue v1.0 loaded');
+  console.log('🚨 Axiom API Prefetch Rescue v1.2 loaded');
+
 })();
