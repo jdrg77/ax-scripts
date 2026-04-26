@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,9 +17,9 @@
   const CACHE_TTL = 8000;
   const cache     = new Map();
 
-  let popup      = null;
-  let hideTimer  = null;
-  let currentCA  = null;
+  let popup        = null;
+  let hideTimer    = null;
+  let currentCA    = null;
   let refreshTimer = null;
 
   // ======= API =======
@@ -69,8 +69,8 @@
     if (!priceSol || !priceUsd) return '—';
     const solPrice = priceUsd / priceSol;
     const mc = liquiditySol * 2 * solPrice;
-    if (mc >= 1e6) return '$' + (mc / 1e6 % 1 === 0 ? (mc/1e6).toFixed(0) : (mc/1e6).toFixed(1)) + 'M';
-    if (mc >= 1e3) return '$' + (mc / 1e3 % 1 === 0 ? (mc/1e3).toFixed(0) : (mc/1e3).toFixed(1)) + 'K';
+    if (mc >= 1e6) return '$' + (mc/1e6 % 1 === 0 ? (mc/1e6).toFixed(0) : (mc/1e6).toFixed(1)) + 'M';
+    if (mc >= 1e3) return '$' + (mc/1e3 % 1 === 0 ? (mc/1e3).toFixed(0) : (mc/1e3).toFixed(1)) + 'K';
     return '$' + mc.toFixed(0);
   }
 
@@ -80,9 +80,19 @@
   }
 
   function fmtSol(n) {
-    if (n >= 1)    return n.toFixed(2);
+    if (n >= 10)   return n.toFixed(2);
+    if (n >= 1)    return n.toFixed(3);
     if (n >= 0.01) return n.toFixed(3);
     return n.toFixed(4);
+  }
+
+  // Barra igual a la tabla nativa: solo si >= 1 SOL, escala fija de 33 SOL
+  const BAR_MAX_REF = 33;
+
+  function calcBarWidth(amount) {
+    if (amount < 1) return 0;
+    const pct = Math.pow(amount / BAR_MAX_REF, 2 / 3) * 100;
+    return Math.min(100, Math.max(1, pct));
   }
 
   // ======= POPUP =======
@@ -91,11 +101,19 @@
     if (popup) return popup;
     popup = document.createElement('div');
     popup.style.cssText = [
-      'position:fixed', 'z-index:2147483646', 'display:none',
-      'background:#0b0d13', 'border:1px solid #1a1d28', 'border-radius:8px',
-      'width:290px', 'box-shadow:0 8px 32px rgba(0,0,0,0.7)',
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', 'font-size:11px', 'color:#ccc',
-      'pointer-events:none', 'overflow:hidden',
+      'position:fixed',
+      'z-index:2147483646',
+      'display:none',
+      'background:#0b0d13',
+      'border:1px solid #1e2131',
+      'border-radius:8px',
+      'width:292px',
+      'box-shadow:0 8px 32px rgba(0,0,0,0.8)',
+      'font-family:GeistMono,ui-monospace,"Cascadia Code","Source Code Pro",Menlo,Consolas,"DejaVu Sans Mono",monospace',
+      'font-size:12px',
+      'color:#c1c5dc',
+      'pointer-events:none',
+      'overflow:hidden',
     ].join(';');
     document.body.appendChild(popup);
     return popup;
@@ -104,39 +122,54 @@
   function renderTrades(trades) {
     const p = ensurePopup();
     if (!trades) {
-      p.innerHTML = '<div style="padding:14px;color:#555;text-align:center">Error cargando trades</div>';
+      p.innerHTML = '<div style="padding:14px;color:#777a8c;text-align:center;font-size:12px">Error cargando trades</div>';
       return;
     }
     if (!trades.length) {
-      p.innerHTML = '<div style="padding:14px;color:#555;text-align:center">Sin trades</div>';
+      p.innerHTML = '<div style="padding:14px;color:#777a8c;text-align:center;font-size:12px">Sin trades</div>';
       return;
     }
 
-    const header = `<div style="display:flex;padding:4px 10px;gap:0;color:#3a3d50;border-bottom:1px solid #1a1d28;font-size:10px;letter-spacing:0.02em">
-      <span style="width:90px">Amount</span>
-      <span style="width:64px;text-align:right">MC</span>
-      <span style="flex:1;padding-left:10px">Trader</span>
-      <span style="width:28px;text-align:right">Age</span>
-    </div>`;
+    const visible = trades.slice(0, 20);
 
-    const SOL_ICON = `<img src="https://axiom-assets.axiom-cdn.io/images/sol-fill.svg" style="width:10px;height:10px;margin-right:3px;vertical-align:middle;filter:none" />`;
-    const rows = trades.slice(0, 18).map(t => {
-      const isBuy = t.type === 'buy';
-      const col   = isBuy ? '#4ade80' : '#f87171';
-      return `<div style="display:flex;align-items:center;padding:2px 10px;gap:0">
-        <span style="color:${col};width:90px;font-size:11px;display:flex;align-items:center">${SOL_ICON}${fmtSol(t.totalSol)}</span>
-        <span style="color:#4a5068;width:64px;text-align:right;font-size:11px">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
-        <span style="color:#6b7280;flex:1;padding-left:10px;font-size:11px">${fmtWallet(t.makerAddress)}</span>
-        <span style="color:#374151;width:28px;text-align:right;font-size:11px">${fmtAge(t.createdAt)}</span>
-      </div>`;
+    const header = '<div style="display:flex;align-items:center;padding:4px 16px;border-bottom:1px solid #1e2131;color:#777a8c;font-size:12px;line-height:16px;min-height:24px;box-sizing:border-box">'
+      + '<span style="flex:1">Amount</span>'
+      + '<span style="flex:1">MC</span>'
+      + '<span style="flex:1">Trader</span>'
+      + '<span style="max-width:32px;flex:1;text-align:right">Age ↓</span>'
+      + '</div>';
+
+    const SOL_ICON = '<img src="https://axiom-assets.axiom-cdn.io/images/sol-fill.svg" style="width:10px;height:10px;margin-right:2px;vertical-align:middle;display:inline" />';
+
+    const rows = visible.map(t => {
+      const isBuy    = t.type === 'buy';
+      const amtColor = isBuy ? '#2fe3ac' : '#f20202';
+      const gradFrom = isBuy ? '#2FC2E3' : '#D139EC';
+      const gradTo   = isBuy ? '#2fe3ac' : '#f20202';
+
+      const barWidth = calcBarWidth(t.totalSol);
+      const barDiv   = barWidth > 0
+        ? '<div style="position:absolute;left:0;top:0;height:100%;pointer-events:none;background:linear-gradient(to right,' + gradFrom + '00,' + gradTo + ');opacity:0.15;width:' + barWidth.toFixed(3) + '%"></div>'
+        : '';
+
+      return '<div style="position:relative;display:flex;align-items:center;height:24px;padding:0 16px;box-sizing:border-box;font-size:12px">'
+        + barDiv
+        + '<div style="position:relative;z-index:1;display:flex;flex:1;align-items:center">'
+        + '<span style="flex:1;display:flex;align-items:center;color:' + amtColor + ';font-size:12px;line-height:16px">' + SOL_ICON + fmtSol(t.totalSol) + '</span>'
+        + '<span style="flex:1;color:#c1c5dc;font-size:12px;line-height:16px">' + fmtMC(t.liquiditySol, t.priceSol, t.priceUsd) + '</span>'
+        + '<span style="flex:1;color:#c1c5dc;font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + fmtWallet(t.makerAddress) + '</span>'
+        + '<span style="max-width:32px;flex:1;text-align:right;color:#777a8c;font-size:12px;line-height:16px">' + fmtAge(t.createdAt) + '</span>'
+        + '</div>'
+        + '</div>';
     }).join('');
 
-    p.innerHTML = header + rows;
+    // font-size:0 en el wrapper elimina el whitespace entre divs
+    p.innerHTML = header + '<div style="font-size:0">' + rows + '</div>';
   }
 
   function positionPopup(clientX, clientY) {
     const p = ensurePopup();
-    const pw = 290, ph = 350;
+    const pw = 292, ph = 380;
     let left = clientX + 16;
     let top  = clientY - 80;
     if (left + pw > window.innerWidth  - 8) left = clientX - pw - 16;
@@ -153,7 +186,7 @@
     currentCA = pairAddress;
     positionPopup(clientX, clientY);
     p.style.display = 'block';
-    p.innerHTML = '<div style="padding:14px;color:#444;text-align:center">Cargando…</div>';
+    p.innerHTML = '<div style="padding:14px;color:#777a8c;text-align:center;font-size:12px">Cargando…</div>';
 
     const load = () => {
       if (currentCA !== pairAddress) return;
@@ -198,12 +231,10 @@
   }
 
   function scan() {
-    // Best Match mini buttons — preferir data-qbm-pair (pair address) sobre data-qbm-mini (pump CA)
     document.querySelectorAll('[data-qbm-mini]').forEach(btn => {
       hook(btn, el => el.dataset.qbmPair || el.getAttribute('data-qbm-mini'));
     });
 
-    // QBuy fixed buttons
     document.querySelectorAll('button').forEach(btn => {
       if (btn.style?.position !== 'fixed' || btn.style?.zIndex !== '9999') return;
       if (!btn.querySelector?.('.qb-sim-badge') || btn._isGradProxy) return;
@@ -220,7 +251,6 @@
       });
     });
 
-    // Filas nativas del feed (Pulse/Discover/Scanner)
     document.querySelectorAll('[class*="group/pulseRow"]').forEach(row => {
       const ca = getPairFromRow(row);
       if (!ca) return;
@@ -231,5 +261,5 @@
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   setInterval(scan, 500);
 
-  console.log('🔍 Axiom Trades Popup v1.0 loaded');
+  console.log('🔍 Axiom Trades Popup v1.8 loaded');
 })();
