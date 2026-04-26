@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -161,6 +161,8 @@
   let   activeCount  = 0;
   let   lastStartMs  = 0;
 
+  const MIN_MATCH_PCT = 55;
+
   async function scoreResults(results, refHash) {
     if (!results?.length) return [];
     const scored = await Promise.race([
@@ -170,27 +172,88 @@
       }))),
       new Promise(resolve => setTimeout(() => resolve([]), 6000)),
     ]);
-    return scored.sort((a, b) => b.pct - a.pct);
+    return scored;
   }
 
-  async function analyzeRow({ name, refImgSrc, rowCA, platform }) {
+  // Port of sortNormal from QBuy 17.221 — adapted for API results
+  function rankScored(scored, rowName, gradSet) {
+    const norm       = s => (s || '').toLowerCase().trim();
+    const rn         = norm(rowName);
+    const isGrad     = s => gradSet.has(s.token.tokenAddress);
+    const nameMatch  = s => norm(s.token.tokenName)   === rn;
+    const tickerMatch= s => norm(s.token.tokenTicker) === rn;
+    const exactMatch = s => nameMatch(s) || tickerMatch(s);
+    const byPct      = (a, b) => b.pct - a.pct;
+
+    // platform from API: grad (onlyBonded) → raydium; pump protocol → pump; bonk → bonk
+    const getPlatform = s => {
+      if (isGrad(s)) return 'raydium';
+      if (s.token.protocol === 'bonk') return 'bonk';
+      return 'pump';
+    };
+
+    // Equivalent to sortRest — tiers by pct (no age data from API)
+    function sortRest(list) {
+      const tier1 = list.filter(s => s.pct >  85).sort(byPct);
+      const tier2 = list.filter(s => s.pct >  72 && s.pct <= 85).sort(byPct);
+      const tier3 = list.filter(s => s.pct >= 58.21 && s.pct <= 72).sort(byPct);
+      const tier4 = list.filter(s => s.pct >= MIN_MATCH_PCT && s.pct < 58.21).sort(byPct);
+      return [...tier1, ...tier2, ...tier3, ...tier4];
+    }
+
+    // special = graduated (≈ gold/green in original)
+    const special = scored.filter(isGrad);
+    // blues = exact name/ticker match from non-grad, max 3
+    const blues   = scored.filter(s => !isGrad(s) && exactMatch(s)).sort(byPct).slice(0, 3);
+    const others  = scored.filter(s => !isGrad(s) && !exactMatch(s));
+
+    let sortedSpecial;
+    const hasExact     = special.some(exactMatch);
+    const hasNameOnly  = !hasExact && special.some(nameMatch);
+
+    if (hasExact) {
+      const ex    = special.filter(exactMatch);
+      const ultra = ex.filter(s => s.pct > 85).sort(byPct);
+      const rest  = ex.filter(s => s.pct <= 85).sort(byPct);
+      const nonEx = special.filter(s => !exactMatch(s));
+      sortedSpecial = [...ultra, ...rest, ...sortRest(nonEx)];
+    } else if (hasNameOnly) {
+      const nm    = special.filter(nameMatch);
+      sortedSpecial = [...nm.sort(byPct), ...sortRest(special.filter(s => !nameMatch(s)))];
+    } else {
+      sortedSpecial = sortRest(special);
+    }
+
+    const ranked = [...sortedSpecial, ...blues, ...sortRest(others)];
+    // Attach platform and filter out below threshold
+    return ranked
+      .filter(s => s.pct >= MIN_MATCH_PCT)
+      .map(s => ({ ...s, resolvedPlatform: getPlatform(s) }));
+  }
+
+  async function analyzeRow({ name, refImgSrc, rowCA }) {
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
 
-    // Run both normal + grad in parallel
     const [normalResults, gradResults] = await Promise.all([
       searchTokenAPI(name, false),
       searchTokenAPI(name, true),
     ]);
 
-    // Merge + dedupe
-    const all = [...(normalResults || []), ...(gradResults || [])];
+    const gradSet = new Set((gradResults || []).map(t => t.tokenAddress));
+
+    // Merge + dedupe (grad results take precedence on duplicate)
     const seen = new Set();
-    const unique = all.filter(t => { if (seen.has(t.tokenAddress)) return false; seen.add(t.tokenAddress); return true; });
+    const unique = [...(gradResults || []), ...(normalResults || [])].filter(t => {
+      if (seen.has(t.tokenAddress)) return false;
+      seen.add(t.tokenAddress);
+      return true;
+    });
     if (!unique.length) return;
 
-    const scored = await scoreResults(unique, refHash);
-    const top2 = scored.slice(0, 2).filter(s => s.pct >= 55);
+    const scored  = await scoreResults(unique, refHash);
+    const ranked  = rankScored(scored, name, gradSet);
+    const top2    = ranked.slice(0, 2);
     if (!top2.length) return;
 
     const matches = top2.map(s => ({
@@ -202,11 +265,11 @@
       name:        s.token.tokenName   || '',
       imgSrc:      `https://axiomtrading.axiom-cdn.io/${s.token.tokenAddress}.webp`,
       matchPct:    s.pct,
-      platform:    platform || 'other',
+      platform:    s.resolvedPlatform,
     }));
 
     sessionBest.set(rowCA, matches);
-    console.log(`[Pro] ✅ ${name} → ${matches.map(m => m.ticker + ' ' + m.matchPct + '%').join(' | ')}`);
+    console.log(`[Pro] ✅ ${name} → ${matches.map(m => `${m.ticker} ${m.matchPct}% [${m.platform}]`).join(' | ')}`);
   }
 
   function tryStart() {
@@ -856,6 +919,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.1 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.2 loaded');
 
 })();
