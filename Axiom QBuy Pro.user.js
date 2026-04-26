@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -187,10 +187,10 @@
     const byPct      = (a, b) => b.pct - a.pct;
 
     const getPlatform = s => {
-      if (isGrad(s)) return 'raydium';
+      if (isGrad(s)) return 'pump-migrado';
       if (s.token.protocol === 'bonk') return 'bonk';
       if (isDex(s)) return 'pump-dex';
-      return 'pump';
+      return 'pump-nodex';
     };
 
     // Equivalent to sortRest — tiers by pct (no age data from API)
@@ -315,9 +315,8 @@
   // 5. Mini Buttons (2 per row)
   // ============================================================
 
-  const miniPool  = new Map(); // rowCA → [btn0, btn1]
-  let lastBtnSize = { w: 44, h: 44 };
-  const SCALE     = 0.7842;
+  const miniPool = new Map(); // rowCA → [btn0, btn1]
+  const BTN_W = 68.9, BTN_H = 30;
 
   function getSearchPanel() {
     return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
@@ -335,18 +334,57 @@
     return '#ff6b6b';
   }
 
+  function platStyle(platform) {
+    if (platform === 'pump-migrado') return { bg: 'rgba(255,215,0,0.85)',   border: 'rgb(255,215,0)',   shadow: 'rgba(255,215,0,0.6)'   };
+    if (platform === 'pump-dex')     return { bg: 'rgba(120,255,160,0.85)', border: 'rgb(120,255,160)', shadow: 'rgba(120,255,160,0.6)' };
+    if (platform === 'bonk')         return { bg: 'rgba(255,140,0,0.85)',   border: 'rgb(255,140,0)',   shadow: 'rgba(255,140,0,0.6)'   };
+    return                                  { bg: 'rgba(20,20,30,0.92)',    border: '#555',             shadow: 'rgba(0,0,0,0.4)'       };
+  }
+
+  function getRowAgeAndMC(row) {
+    const ageEl = row.querySelector('span[class*="pointer-events-none"]');
+    const age   = ageEl?.textContent?.trim() || '';
+    let mc = '';
+    for (const c of row.querySelectorAll('div[class*="gap-[4px]"]')) {
+      const spans = [...c.querySelectorAll('span')];
+      const lbl   = spans.find(s => s.textContent.trim() === 'MC');
+      if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
+    }
+    return { age, mc };
+  }
+
+  let _buyAmt = '';
+  function refreshBuyAmt() {
+    const panel = getSearchPanel();
+    if (!panel) return;
+    const btn = panel.querySelector('[class*="group/quickBuyButton"]');
+    if (!btn) return;
+    const m = btn.textContent.match(/([\d.]+\s*SOL)/i);
+    if (m) _buyAmt = m[1].trim();
+  }
+
   function createMiniBtn(rowCA, idx) {
     const el = document.createElement('button');
     el.setAttribute('data-qbm-mini', rowCA);
-    el.style.cssText = 'position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;' +
-      'transform:scale(' + SCALE + ');transform-origin:top-left;border-radius:8px;' +
-      'align-items:center;justify-content:center;';
+    el.style.cssText = `position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;` +
+      `flex-direction:row;gap:4px;align-items:center;justify-content:center;` +
+      `width:${BTN_W}px;height:${BTN_H}px;border-radius:999px;`;
+
+    const icon = document.createElement('i');
+    icon.className = 'ri-flashlight-fill';
+    icon.style.cssText = 'font-size:16px;position:relative;z-index:10;pointer-events:none;';
+    el.appendChild(icon);
+
+    const solSpan = document.createElement('span');
+    solSpan.className = 'qbm-sol';
+    solSpan.style.cssText = 'font-size:12px;font-weight:700;position:relative;z-index:10;pointer-events:none;';
+    el.appendChild(solSpan);
 
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
     coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;' +
       'left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;' +
-      'box-shadow:0 0 0 1px rgba(255,255,255,0.35),0 2px 8px rgba(0,0,0,0.4);';
+      'box-shadow:rgba(255,255,255,0.35) 0px 0px 0px 1px,rgba(0,0,0,0.4) 0px 2px 8px;';
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA)?.[idx];
@@ -357,17 +395,16 @@
     const pctBadge = document.createElement('span');
     pctBadge.className = 'qbm-pct';
     pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);' +
-      'font-size:10px;font-weight:700;font-family:monospace;color:#fff;background:rgba(0,0,0,0.85);' +
+      'font-size:10px;font-weight:700;font-family:monospace;background:rgba(0,0,0,0.85);' +
       'border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
 
-    const label = document.createElement('div');
-    label.className = 'qbm-label';
-    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;' +
-      'color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
-    document.body.appendChild(label);
-    el._label = label;
-    el._idx   = idx;
+    const infoBar = document.createElement('div');
+    infoBar.className = 'qbm-info';
+    infoBar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;' +
+      'display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;' +
+      'font-size:11px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
+    el.appendChild(infoBar);
 
     el.addEventListener('click', e => {
       e.stopPropagation(); e.preventDefault();
@@ -383,37 +420,20 @@
   function getOrCreateMiniBtn(rowCA, idx) {
     let pool = miniPool.get(rowCA);
     if (!pool) { pool = [null, null]; miniPool.set(rowCA, pool); }
-    if (!pool[idx]?.isConnected) {
-      pool[idx]?._label?.isConnected && pool[idx]._label.remove();
-      pool[idx] = createMiniBtn(rowCA, idx);
-    }
+    if (!pool[idx]?.isConnected) pool[idx] = createMiniBtn(rowCA, idx);
     return pool[idx];
   }
 
-  function updateBtnSize() {
-    const panel = getSearchPanel();
-    if (!panel) return;
-    const btn = panel.querySelector('[class*="group/quickBuyButton"]');
-    if (!btn) return;
-    const r = btn.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0) lastBtnSize = { w: r.width, h: r.height };
-  }
-
   function updateMiniButtons() {
-    updateBtnSize();
+    refreshBuyAmt();
 
     if (isPanelVisible()) {
-      miniPool.forEach(pool => pool.forEach(btn => {
-        if (btn?.isConnected) { btn.style.display = 'none'; if (btn._label) btn._label.style.display = 'none'; }
-      }));
+      miniPool.forEach(pool => pool.forEach(btn => { if (btn?.isConnected) btn.style.display = 'none'; }));
       return;
     }
 
-    const rows   = document.querySelectorAll('[class*="group/pulseRow"]');
-    const seen   = new Set();
-    const btnW   = lastBtnSize.w;
-    const btnH   = lastBtnSize.h;
-    const scaledW = btnW * SCALE;
+    const rows = document.querySelectorAll('[class*="group/pulseRow"]');
+    const seen = new Set();
 
     rows.forEach(row => {
       const ca  = getRowCA(row);
@@ -434,21 +454,21 @@
       let baseLeft;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        baseLeft = sr.left + sr.width / 2 - btnW / 2 + 40;
+        baseLeft = sr.left + sr.width / 2 - BTN_W / 2 + 40;
       } else {
-        baseLeft = rect.right - btnW - 43;
+        baseLeft = rect.right - BTN_W - 43;
       }
-      const posTop = rect.top + rect.height / 2 - btnH / 2 + 30;
+      const posTop = rect.top + rect.height / 2 - BTN_H / 2;
+
+      const { age, mc } = getRowAgeAndMC(row);
 
       matches.slice(0, 2).forEach((best, idx) => {
         const el = getOrCreateMiniBtn(ca || key, idx);
-        // btn0 rightmost, btn1 to the left
-        const posLeft = baseLeft - idx * (scaledW + 8);
+        // btn0 rightmost, btn1 to the left + 100px extra
+        const posLeft = baseLeft - idx * (BTN_W + 8) - (idx === 1 ? 100 : 0);
 
-        el.style.left   = posLeft + 'px';
-        el.style.top    = posTop  + 'px';
-        el.style.width  = btnW    + 'px';
-        el.style.height = btnH    + 'px';
+        el.style.left      = posLeft + 'px';
+        el.style.top       = posTop  + 'px';
         el.dataset.qbmPair = best.pairAddress || best.ca || '';
 
         const coinImg = el.querySelector('.qbm-coin-img');
@@ -459,37 +479,30 @@
           const txt = best.matchPct.toFixed(1) + '%';
           if (pctBadge.textContent !== txt) pctBadge.textContent = txt;
           const col = badgeColor(best.matchPct);
-          pctBadge.style.color       = col;
-          pctBadge.style.borderColor = col;
+          pctBadge.style.color = col; pctBadge.style.borderColor = col;
         }
 
-        if (el._label) {
-          const nameText = best.name || best.ticker || '';
-          if (el._label.textContent !== nameText) el._label.textContent = nameText;
-          el._label.style.left    = (posLeft + scaledW / 2) + 'px';
-          el._label.style.top     = (posTop - 18) + 'px';
-          el._label.style.display = '';
+        const solSpan = el.querySelector('.qbm-sol');
+        if (solSpan && solSpan.textContent !== _buyAmt) solSpan.textContent = _buyAmt;
+
+        const infoBar = el.querySelector('.qbm-info');
+        if (infoBar) {
+          const ageTxt = age ? `<span style="color:rgb(255,215,0);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${age}</span>` : '';
+          const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">MC ${mc}</span>` : '';
+          const html   = ageTxt + mcTxt;
+          if (infoBar.innerHTML !== html) infoBar.innerHTML = html;
         }
 
-        const platBg     = best.platform === 'bonk'     ? 'rgba(255,140,0,0.85)'
-                         : best.platform === 'raydium'  ? 'rgba(0,51,255,0.85)'
-                         : best.platform === 'pump-dex' ? 'rgba(120,255,160,0.85)'
-                         : 'rgba(20,20,30,0.92)';
-        const platBorder = best.platform === 'bonk'     ? '#ff8c00'
-                         : best.platform === 'raydium'  ? '#0033FF'
-                         : best.platform === 'pump-dex' ? '#78ffa0'
-                         : badgeColor(best.matchPct);
-        el.style.background = platBg;
-        el.style.border     = `1.5px solid ${platBorder}`;
-        el.style.boxShadow  = `0 0 8px 2px ${platBorder}40`;
+        const ps = platStyle(best.platform);
+        el.style.background = ps.bg;
+        el.style.border     = `1.5px solid ${ps.border}`;
+        el.style.boxShadow  = `${ps.shadow} 0px 0px 8px 2px`;
         el.style.display    = 'flex';
       });
     });
 
     miniPool.forEach((pool, ca) => {
-      if (!seen.has(ca)) pool.forEach(btn => {
-        if (btn?.isConnected) { btn.style.display = 'none'; if (btn._label) btn._label.style.display = 'none'; }
-      });
+      if (!seen.has(ca)) pool.forEach(btn => { if (btn?.isConnected) btn.style.display = 'none'; });
     });
   }
 
@@ -924,6 +937,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.5 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.6 loaded');
 
 })();
