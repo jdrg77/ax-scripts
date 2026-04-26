@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.24
+// @version      8.25
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,6 +17,7 @@
 
   // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad, age, mc, solText }
   const sessionBest = new Map();
+  window.__axiomHasBestMatch = ca => sessionBest.has(ca);
   // Mini button pool: rowCA → DOM element
   const miniPool    = new Map();
   let lastGlowBtns  = [];

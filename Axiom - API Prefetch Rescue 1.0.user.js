@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - API Prefetch Rescue
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -216,7 +216,11 @@
     const snapGrad = e.detail?.graduated || false;
 
     if (currentAnalysis && currentAnalysis.name !== newName) {
-      rescueViaAPI(currentAnalysis);
+      if (window.__axiomHasBestMatch?.(currentAnalysis.rowCA)) {
+        console.log('[Rescue] ⏭️ Ya resuelto por QBuy, skip:', currentAnalysis.name);
+      } else {
+        rescueViaAPI(currentAnalysis);
+      }
     }
 
     currentAnalysis = {
