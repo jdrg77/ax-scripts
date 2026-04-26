@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -190,7 +190,7 @@
     if (!unique.length) return;
 
     const scored = await scoreResults(unique, refHash);
-    const top2 = scored.slice(0, 2).filter(s => s.pct > 0);
+    const top2 = scored.slice(0, 2).filter(s => s.pct >= 55);
     if (!top2.length) return;
 
     const matches = top2.map(s => ({
@@ -856,6 +856,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.0 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.1 loaded');
 
 })();
