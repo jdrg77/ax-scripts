@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -372,12 +372,9 @@
 
   let _buyAmt = '';
   function refreshBuyAmt() {
-    const panel = getSearchPanel();
-    if (!panel) return;
-    const btn = panel.querySelector('[class*="group/quickBuyButton"]');
-    if (!btn) return;
-    const m = btn.textContent.match(/([\d.]+\s*SOL)/i);
-    if (m) _buyAmt = m[1].trim();
+    const amt = getSOLAmount();
+    const txt = amt + ' SOL';
+    if (txt !== _buyAmt) _buyAmt = txt;
   }
 
   function createMiniBtn(rowCA, idx) {
@@ -551,18 +548,26 @@
     try { return JSON.parse(localStorage.getItem('selectedSolWallets') || '[]'); } catch(e) { return []; }
   }
 
+  function getSOLAmount() {
+    const input = Array.from(document.querySelectorAll('input'))
+      .find(i => i.value && !isNaN(parseFloat(i.value)) && parseFloat(i.value) < 100 && i.placeholder === '0.0');
+    return input ? parseFloat(input.value) : 0.01;
+  }
+
   async function buyTokenDirect(ca) {
     const wallets = getWallets();
     if (!wallets.length) { console.log('[Pro] ❌ no wallets'); return false; }
 
-    let body = { walletAddresses: wallets, tokenAddress: ca };
+    const amount = getSOLAmount();
+    let body = { walletAddresses: wallets, tokenAddress: ca, solAmount: amount };
     const cached = sessionStorage.getItem('__buyBody__');
     if (cached) {
+      // Template has correct field names — override only wallet + CA, keep amount from template
       try { body = { ...JSON.parse(cached), walletAddresses: wallets, tokenAddress: ca }; }
       catch(e) {}
     }
 
-    console.log('[Pro] 🚀 direct buy:', ca.slice(0, 8), '| wallets:', wallets.length, '| hasTemplate:', !!cached);
+    console.log('[Pro] 🚀 direct buy:', ca.slice(0, 8), '| wallets:', wallets.length, '| amount:', amount, 'SOL | hasTemplate:', !!cached);
     try {
       const res = await fetch('https://api.axiom.trade/meme-open-single-position-v2', {
         method: 'POST', credentials: 'include',
@@ -1011,6 +1016,6 @@
   window.__qbPro = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
 
-  console.log('🚀 Axiom QBuy Pro v1.7 loaded');
+  console.log('🚀 Axiom QBuy Pro v1.9 loaded');
 
 })();
