@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.22
+// @version      8.23
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -383,7 +383,10 @@
       if (rect.width < 10) return;
 
       const el   = getOrCreateMiniBtn(rowCA, best);
-      if (best.pairAddress) el.dataset.qbmPair = best.pairAddress;
+      el.dataset.qbmPair = best.pairAddress
+        || best.memeHref?.match(/\/meme\/([A-Za-z0-9]{32,})/)?.[1]
+        || best.ca
+        || rowCA;
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
