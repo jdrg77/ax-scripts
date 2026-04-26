@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -69,14 +69,14 @@
     if (!priceSol || !priceUsd) return '—';
     const solPrice = priceUsd / priceSol;
     const mc = liquiditySol * 2 * solPrice;
-    if (mc >= 1e6) return '$' + (mc / 1e6).toFixed(1) + 'M';
-    if (mc >= 1e3) return '$' + (mc / 1e3).toFixed(1) + 'K';
+    if (mc >= 1e6) return '$' + (mc / 1e6 % 1 === 0 ? (mc/1e6).toFixed(0) : (mc/1e6).toFixed(1)) + 'M';
+    if (mc >= 1e3) return '$' + (mc / 1e3 % 1 === 0 ? (mc/1e3).toFixed(0) : (mc/1e3).toFixed(1)) + 'K';
     return '$' + mc.toFixed(0);
   }
 
   function fmtWallet(addr) {
-    if (!addr || addr.length < 6) return addr || '?';
-    return addr.slice(0, 3) + '…' + addr.slice(-3);
+    if (!addr || addr.length < 3) return addr || '?';
+    return addr.slice(-3);
   }
 
   function fmtSol(n) {
@@ -94,7 +94,7 @@
       'position:fixed', 'z-index:2147483646', 'display:none',
       'background:#0b0d13', 'border:1px solid #1a1d28', 'border-radius:8px',
       'width:290px', 'box-shadow:0 8px 32px rgba(0,0,0,0.7)',
-      'font-family:monospace', 'font-size:11px', 'color:#ccc',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', 'font-size:11px', 'color:#ccc',
       'pointer-events:none', 'overflow:hidden',
     ].join(';');
     document.body.appendChild(popup);
@@ -119,14 +119,15 @@
       <span style="width:28px;text-align:right">Age</span>
     </div>`;
 
+    const SOL_ICON = `<img src="https://axiom-assets.axiom-cdn.io/images/sol-fill.svg" style="width:10px;height:10px;margin-right:3px;vertical-align:middle;filter:none" />`;
     const rows = trades.slice(0, 18).map(t => {
       const isBuy = t.type === 'buy';
-      const col   = isBuy ? '#3dd68c' : '#f75f6e';
+      const col   = isBuy ? '#4ade80' : '#f87171';
       return `<div style="display:flex;align-items:center;padding:2px 10px;gap:0">
-        <span style="color:${col};width:90px;font-size:11px">≡ ${fmtSol(t.totalSol)}</span>
-        <span style="color:#4a4f6a;width:64px;text-align:right;font-size:11px">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
-        <span style="color:#7a8099;flex:1;padding-left:10px;font-size:11px">${fmtWallet(t.makerAddress)}</span>
-        <span style="color:#3a3d50;width:28px;text-align:right;font-size:11px">${fmtAge(t.createdAt)}</span>
+        <span style="color:${col};width:90px;font-size:11px;display:flex;align-items:center">${SOL_ICON}${fmtSol(t.totalSol)}</span>
+        <span style="color:#4a5068;width:64px;text-align:right;font-size:11px">${fmtMC(t.liquiditySol, t.priceSol, t.priceUsd)}</span>
+        <span style="color:#6b7280;flex:1;padding-left:10px;font-size:11px">${fmtWallet(t.makerAddress)}</span>
+        <span style="color:#374151;width:28px;text-align:right;font-size:11px">${fmtAge(t.createdAt)}</span>
       </div>`;
     }).join('');
 
