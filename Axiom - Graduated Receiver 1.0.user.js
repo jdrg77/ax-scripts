@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Graduated Receiver
 // @namespace    http://tampermonkey.net/
-// @version      1.85
+// @version      1.86
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -309,7 +309,7 @@
       if (id !== scanId) return;
       console.log('⏰ [8] safeTimer disparado (MutationObserver NO fires), botones en panel:', panel.querySelectorAll('[class*="group/quickBuyButton"]').length);
       doScan(id, refPixels, seq);
-    }, 400);
+    }, 600);
   }
 
   // ======= BUY EXECUTION =======
