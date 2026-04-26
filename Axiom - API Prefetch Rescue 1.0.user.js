@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - API Prefetch Rescue
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -131,17 +131,20 @@
     }
 
     let best = null, bestPct = -1;
-    await new Promise(resolve => {
-      let pending = results.length;
-      results.forEach(token => {
-        const imgSrc = `https://axiomtrading.axiom-cdn.io/${token.tokenAddress}.webp`;
-        getHash(imgSrc, hash => {
-          const pct = hashSimilarity(refHash, hash);
-          if (pct > bestPct) { bestPct = pct; best = token; }
-          if (--pending === 0) resolve();
+    await Promise.race([
+      new Promise(resolve => {
+        let pending = results.length;
+        results.forEach(token => {
+          const imgSrc = `https://axiomtrading.axiom-cdn.io/${token.tokenAddress}.webp`;
+          getHash(imgSrc, hash => {
+            const pct = hashSimilarity(refHash, hash);
+            if (pct > bestPct) { bestPct = pct; best = token; }
+            if (--pending === 0) resolve();
+          });
         });
-      });
-    });
+      }),
+      new Promise(resolve => setTimeout(resolve, 8000)),
+    ]);
 
     if (!best) return;
     console.log(`✅ API Rescue: ${best.tokenTicker} ${bestPct}% | pair: ${best.pairAddress}`);
