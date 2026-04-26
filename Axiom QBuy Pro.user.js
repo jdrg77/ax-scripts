@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Pro
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -427,7 +427,9 @@
       e.stopPropagation(); e.preventDefault();
       if (e.target.closest('img.qbm-coin-img')) return;
       const best = sessionBest.get(rowCA)?.[idx];
-      if (best) { localStorage.setItem('axiomTopPairCA', best.ca || rowCA); executeBest(best); }
+      if (!best) return;
+      localStorage.setItem('axiomTopPairCA', best.ca || rowCA);
+      buyTokenDirect(best.ca).then(ok => { if (!ok) executeBest(best); });
     });
 
     document.body.appendChild(el);
@@ -530,6 +532,61 @@
   // ============================================================
 
   window.axiomUserOpen = false;
+
+  // ── Direct buy via API ──────────────────────────────────────────
+
+  // Intercept normal buys to capture full body template (amount, slippage, etc.)
+  const _origFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const [url, options] = args;
+    const urlStr = typeof url === 'string' ? url : (url?.url || '');
+    if (urlStr.includes('meme-open-single') && options?.body) {
+      sessionStorage.setItem('__buyBody__', options.body);
+      console.log('[Pro] 📦 buy body captured:', options.body.slice(0, 200));
+    }
+    return _origFetch.apply(this, args);
+  };
+
+  function getWallets() {
+    try { return JSON.parse(localStorage.getItem('selectedSolWallets') || '[]'); } catch(e) { return []; }
+  }
+
+  async function buyTokenDirect(ca) {
+    const wallets = getWallets();
+    if (!wallets.length) { console.log('[Pro] ❌ no wallets'); return false; }
+
+    let body = { walletAddresses: wallets, tokenAddress: ca };
+    const cached = sessionStorage.getItem('__buyBody__');
+    if (cached) {
+      try { body = { ...JSON.parse(cached), walletAddresses: wallets, tokenAddress: ca }; }
+      catch(e) {}
+    }
+
+    console.log('[Pro] 🚀 direct buy:', ca.slice(0, 8), '| wallets:', wallets.length, '| hasTemplate:', !!cached);
+    try {
+      const res = await fetch('https://api.axiom.trade/meme-open-single-position-v2', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.log('[Pro] ❌ open-single failed:', res.status, await res.text()); return false; }
+      const txData = await res.json();
+      sessionStorage.setItem('__buyResponse__', JSON.stringify(txData).slice(0, 500));
+      console.log('[Pro] ✅ tx data:', JSON.stringify(txData).slice(0, 200));
+
+      // Send tx
+      const sendRes = await fetch('https://api.axiom.trade/wo/batched-send-tx-v3', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(txData),
+      });
+      const sendResult = await sendRes.json().catch(() => ({}));
+      console.log('[Pro] 📤 send result:', JSON.stringify(sendResult).slice(0, 200));
+      return true;
+    } catch(e) { console.log('[Pro] ❌ buyTokenDirect error:', e.message); return false; }
+  }
+
+  // ── End direct buy ──────────────────────────────────────────────
 
   function typeInPanel(panel, text) {
     const input = panel.querySelector('input');
