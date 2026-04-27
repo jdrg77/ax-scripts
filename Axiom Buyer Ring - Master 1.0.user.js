@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -18,9 +18,8 @@
   const SLOTS     = ['A', 'B', 'C'];
   const slotState = { A: { ca: null, ready: false }, B: { ca: null, ready: false }, C: { ca: null, ready: false } };
   let nextSlotIdx = 0;
-  let lastTopCAs  = [];
 
-  function getRowsAndBest() {
+  function getRowsWithBest() {
     const newPairsHeader = Array.from(document.querySelectorAll('*'))
       .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
     if (!newPairsHeader) return [];
@@ -45,67 +44,39 @@
       if (!rowCA) continue;
 
       const hasBest = window.__axiomHasBestMatch?.(rowCA) || false;
+      if (!hasBest) continue;
+
       const miniBtn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
       const bestPair = miniBtn?.dataset?.qbmPair || null;
       const buyCA   = bestPair || rowCA;
-      result.push({ rowIdx: i, rowCA, buyCA, hasBest });
+      result.push({ rowCA, buyCA });
     }
     return result;
   }
 
-  function pickTop3() {
-    const all        = getRowsAndBest();
-    const withBest   = all.filter(r => r.hasBest);
-    const withoutBest = all.filter(r => !r.hasBest);
-    return [...withBest, ...withoutBest].slice(0, 3).map(r => r.buyCA);
-  }
-
   function reconcileSlots() {
-    const targets = pickTop3();
-    if (!targets.length) return;
+    const bestRows = getRowsWithBest();
+    if (!bestRows.length) return; // No best matches — keep existing slots unchanged
 
-    const sameAsLast = targets.length === lastTopCAs.length &&
-                       targets.every((c, i) => c === lastTopCAs[i]);
-    if (sameAsLast) return;
-    lastTopCAs = targets;
+    const alreadyCovered = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
+    const newOnes = bestRows.filter(r => !alreadyCovered.has(r.buyCA));
 
-    // Free slots whose CA is no longer in top3
-    SLOTS.forEach(slot => {
-      if (slotState[slot].ca && !targets.includes(slotState[slot].ca)) {
-        slotState[slot].ca    = null;
-        slotState[slot].ready = false;
-      }
-    });
-
-    const covered   = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
-    const uncovered = targets.filter(ca => !covered.has(ca));
-
-    for (const ca of uncovered) {
+    for (const { buyCA } of newOnes) {
+      // Only assign to empty slots — never evict existing best-match slots
       let assigned = false;
-
-      // First pass: find empty slot
       for (let attempts = 0; attempts < SLOTS.length; attempts++) {
         const slot = SLOTS[nextSlotIdx];
         nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
         if (!slotState[slot].ca) {
-          slotState[slot].ca    = ca;
+          slotState[slot].ca    = buyCA;
           slotState[slot].ready = false;
-          channel.postMessage({ type: 'REARM', slot, ca });
-          console.log(`[MASTER] REARM ${slot} → ${ca.slice(0, 8)}`);
+          channel.postMessage({ type: 'REARM', slot, ca: buyCA });
+          console.log(`[MASTER] REARM ${slot} → ${buyCA.slice(0, 8)}`);
           assigned = true;
           break;
         }
       }
-
-      // Fallback: evict current slot (all slots occupied but target changed)
-      if (!assigned) {
-        const slot = SLOTS[nextSlotIdx];
-        nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
-        slotState[slot].ca    = ca;
-        slotState[slot].ready = false;
-        channel.postMessage({ type: 'REARM', slot, ca });
-        console.log(`[MASTER] REARM (evict) ${slot} → ${ca.slice(0, 8)}`);
-      }
+      if (!assigned) break; // All slots occupied with best-match CAs
     }
 
     renderUI();
@@ -173,5 +144,5 @@
 
   buildUI();
   setInterval(reconcileSlots, 300);
-  console.log('[MASTER] Buyer Ring Master v1.0 active');
+  console.log('[MASTER] Buyer Ring Master v1.1 active');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Slot
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -78,7 +78,6 @@
       const panel = getPanel();
       if (!panel) return;
 
-      // Clear first so old buttons don't trigger a false READY
       clearPanel();
       setTimeout(() => {
         if (armedCA !== ca) return; // Superseded by newer REARM
@@ -86,7 +85,7 @@
 
         const start = Date.now();
         const poll = () => {
-          if (armedCA !== ca) return; // Superseded
+          if (armedCA !== ca) return;
           const btns = panel.querySelectorAll('[class*="group/quickBuyButton"]');
           if (btns.length > 0) {
             channel.postMessage({ type: 'READY', slot: SLOT, ca });
@@ -102,11 +101,6 @@
   }
 
   function executeBuy(ca) {
-    // Verify the armed CA matches — prevents buying wrong token
-    if (ca !== armedCA) {
-      console.log(`[SLOT ${SLOT}] BUY mismatch: expected ${armedCA?.slice(0, 8)} got ${ca.slice(0, 8)}`);
-      return;
-    }
     const panel = getPanel();
     if (!panel) { console.log(`[SLOT ${SLOT}] no panel`); return; }
     const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
@@ -116,9 +110,13 @@
         const panel2 = getPanel();
         if (!panel2) return;
         const btns2 = [...panel2.querySelectorAll('[class*="group/quickBuyButton"]')];
-        if (btns2.length) { fireClick(btns2[0]); console.log(`[SLOT ${SLOT}] ✅ BUY (retry) ${ca.slice(0, 8)}`); }
-        else console.log(`[SLOT ${SLOT}] ❌ no buttons after retry`);
-      }, 100);
+        if (btns2.length) {
+          fireClick(btns2[0]);
+          console.log(`[SLOT ${SLOT}] ✅ BUY (retry) ${ca.slice(0, 8)}`);
+        } else {
+          console.log(`[SLOT ${SLOT}] ❌ no buttons after retry`);
+        }
+      }, 200);
       return;
     }
     fireClick(btns[0]);
@@ -136,5 +134,5 @@
     console.log(`[SLOT ${SLOT}] panel pre-opened, ready`);
   }), 1500);
 
-  console.log(`[SLOT ${SLOT}] Buyer Ring Slot v1.0 active`);
+  console.log(`[SLOT ${SLOT}] Buyer Ring Slot v1.1 active`);
 })();
