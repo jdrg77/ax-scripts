@@ -55,7 +55,6 @@
 
       if (seenQueue.length >= 3) {
         const evicted = seenQueue.shift();
-        seenSet.delete(evicted.rowCA);
         const evictedSlot = SLOTS.find(s => slotState[s].ca === evicted.buyCA);
         if (evictedSlot) { slotState[evictedSlot].ca = null; slotState[evictedSlot].ready = false; }
       }
