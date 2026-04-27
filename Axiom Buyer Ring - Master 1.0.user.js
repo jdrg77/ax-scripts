@@ -53,7 +53,12 @@
       const bestPair = miniBtn?.dataset?.qbmPair || null;
       const buyCA    = bestPair || rowCA;
 
-      if (seenQueue.length >= 3) continue;
+      if (seenQueue.length >= 3) {
+        const evicted = seenQueue.shift();
+        seenSet.delete(evicted.rowCA);
+        const evictedSlot = SLOTS.find(s => slotState[s].ca === evicted.buyCA);
+        if (evictedSlot) { slotState[evictedSlot].ca = null; slotState[evictedSlot].ready = false; }
+      }
 
       seenSet.add(rowCA);
       seenQueue.push({ rowCA, buyCA });
