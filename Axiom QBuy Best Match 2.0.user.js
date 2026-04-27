@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.10
+// @version      1.11
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -514,14 +514,6 @@
   }
 
   function updateMiniButtons() {
-    if (isPanelVisible()) {
-      miniPool.forEach(btn => {
-        if (btn?.isConnected) btn.style.display = 'none';
-        if (btn?._label) btn._label.style.display = 'none';
-      });
-      return;
-    }
-
     const rows   = document.querySelectorAll('[class*="group/pulseRow"]');
     const seen   = new Set();
     const solAmt = getSOLAmount() + ' SOL';
@@ -705,5 +697,5 @@
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match 2 v1.10 — QBuy17 5-tier ranking');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.11 — independent of panel/QBuy');
 })();
