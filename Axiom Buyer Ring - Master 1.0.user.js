@@ -76,7 +76,15 @@
           break;
         }
       }
-      if (!assigned) break; // All slots occupied with best-match CAs
+      if (!assigned) {
+        // All slots full — evict oldest (round-robin) to make room for new best match
+        const slot = SLOTS[nextSlotIdx];
+        nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
+        slotState[slot].ca    = buyCA;
+        slotState[slot].ready = false;
+        channel.postMessage({ type: 'REARM', slot, ca: buyCA });
+        console.log(`[MASTER] REARM (evict) ${slot} → ${buyCA.slice(0, 8)}`);
+      }
     }
 
     renderUI();
