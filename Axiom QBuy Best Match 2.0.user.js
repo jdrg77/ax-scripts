@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -502,6 +502,21 @@
   }
 
   setInterval(updateMiniButtons, 16);
+
+  window.__axiomGetTop3BM2 = () => {
+    const rows = getFirst4Rows();
+    const result = [];
+    for (const row of rows) {
+      if (result.length >= 3) break;
+      const pulseRow = row.querySelector('[class*="group/pulseRow"]') || row;
+      const ca = getRowCA(pulseRow);
+      if (!ca) continue;
+      const best = sessionBest.get(ca);
+      if (!best) continue;
+      result.push({ rowCA: ca, tokenCA: best.tokenCA });
+    }
+    return result;
+  };
 
   window.__qbBM = { sessionBest, started, queue, hashCache,
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };

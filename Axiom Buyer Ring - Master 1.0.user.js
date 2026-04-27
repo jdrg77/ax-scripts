@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -24,39 +24,15 @@
   window.__ringArmedRowCAs = new Set();
 
   function scanNewBestMatches() {
-    const newPairsHeader = Array.from(document.querySelectorAll('*'))
-      .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
-    if (!newPairsHeader) return;
-    const col = newPairsHeader.parentElement?.parentElement?.parentElement;
-    if (!col) return;
-    const virtualList = Array.from(col.querySelectorAll('div')).find(div => {
-      const s = div.getAttribute('style') || '';
-      return s.includes('position: relative') &&
-             div.querySelectorAll('[style*="position: absolute"]').length > 3;
-    });
-    if (!virtualList) return;
-    const rows = Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]'));
+    if (seenQueue.length >= 3) return;
 
-    for (let i = 0; i < Math.min(6, rows.length); i++) {
-      const row      = rows[i];
-      const memeLink = row.querySelector('a[href*="/meme/"]');
-      const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
-      const pumpMatch = pumpLink?.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
-      const memeMatch = memeLink?.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
-      const rowCA = pumpMatch?.[1] || memeMatch?.[1] || null;
+    const top3 = window.__axiomGetTop3BM2?.() || [];
+
+    for (const { rowCA, tokenCA } of top3) {
+      if (seenQueue.length >= 3) break;
       if (!rowCA || seenSet.has(rowCA)) continue;
-
-      const hasBest = window.__axiomHasBestMatch?.(rowCA) || false;
-      if (!hasBest) continue;
-
-      const miniBtn  = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
-      const bestPair = miniBtn?.dataset?.qbmPair || null;
-      const buyCA    = bestPair || rowCA;
-
-      if (seenQueue.length >= 3) continue; // Queue full — wait for a buy to free a slot
-
       seenSet.add(rowCA);
-      seenQueue.push({ rowCA, buyCA });
+      seenQueue.push({ rowCA, buyCA: tokenCA });
       window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
       reconcileSlots();
     }
