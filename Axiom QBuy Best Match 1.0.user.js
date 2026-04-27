@@ -17,7 +17,8 @@
 
   // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad, age, mc, solText }
   const sessionBest = new Map();
-  window.__axiomHasBestMatch = ca => sessionBest.has(ca);
+  window.__axiomHasBestMatch  = ca => sessionBest.has(ca);
+  window.__axiomGetBestTokenCA = ca => sessionBest.get(ca)?.ca || null;
   // Mini button pool: rowCA → DOM element
   const miniPool    = new Map();
   let lastGlowBtns  = [];
@@ -371,7 +372,7 @@
       if (!best) return;
       if (window.__ringArmedRowCAs?.has(rowCA)) {
         const ringChannel = new BroadcastChannel('axiom-buyer-ring');
-        ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.ca });
+        ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.pairAddress || best.ca });
         ringChannel.close();
       } else {
         executeBest(best);

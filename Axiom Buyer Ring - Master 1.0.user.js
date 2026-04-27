@@ -45,9 +45,8 @@
       const rowCA = pumpMatch?.[1] || memeMatch?.[1] || null;
       if (!rowCA) continue;
       if (!window.__axiomHasBestMatch?.(rowCA)) continue;
-      const miniBtn  = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
-      const bestPair = miniBtn?.dataset?.qbmPair || null;
-      result.push({ rowCA, buyCA: bestPair || rowCA });
+      const tokenCA = window.__axiomGetBestTokenCA?.(rowCA) || rowCA;
+      result.push({ rowCA, buyCA: tokenCA });
     }
     return result;
   }
