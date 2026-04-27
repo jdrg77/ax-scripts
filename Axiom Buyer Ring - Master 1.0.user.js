@@ -99,6 +99,16 @@
         renderUI();
       }
     }
+    if (msg.type === 'BUY_BY_CA' && msg.ca) {
+      const slot = SLOTS.find(s => slotState[s].ca === msg.ca && slotState[s].ready);
+      if (!slot) { console.log(`[MASTER] BUY_BY_CA: no ready slot for ${msg.ca.slice(0, 8)}`); return; }
+      channel.postMessage({ type: 'BUY', slot, ca: msg.ca });
+      console.log(`[MASTER] BUY_BY_CA → ${slot} ${msg.ca.slice(0, 8)}`);
+      slotState[slot].ca    = null;
+      slotState[slot].ready = false;
+      renderUI();
+      setTimeout(reconcileSlots, 100);
+    }
   };
 
   let ui;

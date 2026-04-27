@@ -369,7 +369,9 @@
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
       if (!best) return;
-      executeBest(best);
+      const ringChannel = new BroadcastChannel('axiom-buyer-ring');
+      ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.ca });
+      ringChannel.close();
     });
 
     document.body.appendChild(el);
