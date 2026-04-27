@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.11
+// @version      1.12
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -380,7 +380,7 @@
              div.querySelectorAll('[style*="position: absolute"]').length > 3;
     });
     if (!virtualList) return [];
-    return Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]')).slice(0, 4);
+    return Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]')).slice(1, 4);
   }
 
   function scanRows() {
@@ -697,5 +697,5 @@
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match 2 v1.11 — independent of panel/QBuy');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.12 — rows 2-4 only');
 })();
