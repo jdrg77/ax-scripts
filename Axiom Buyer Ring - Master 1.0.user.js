@@ -53,14 +53,10 @@
       const bestPair = miniBtn?.dataset?.qbmPair || null;
       const buyCA    = bestPair || rowCA;
 
+      if (seenQueue.length >= 3) continue; // Queue full — wait for a buy to free a slot
+
       seenSet.add(rowCA);
       seenQueue.push({ rowCA, buyCA });
-
-      if (seenQueue.length > 3) {
-        const evicted = seenQueue.shift();
-        seenSet.delete(evicted.rowCA);
-      }
-
       window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
       reconcileSlots();
     }
@@ -86,14 +82,7 @@
           break;
         }
       }
-      if (!assigned) {
-        const slot = SLOTS[nextSlotIdx];
-        nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
-        slotState[slot].ca    = buyCA;
-        slotState[slot].ready = false;
-        channel.postMessage({ type: 'REARM', slot, ca: buyCA });
-        console.log(`[MASTER] REARM (evict) ${slot} → ${buyCA.slice(0, 8)}`);
-      }
+      if (!assigned) break; // All slots occupied, queue is capped at 3 anyway
     }
 
     renderUI();
