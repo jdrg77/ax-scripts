@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Axiom QBuy Best Match 2
+// @name         Axiom QBuy Best Match 2 2
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -16,7 +16,6 @@
   // ============================================================
   // 1. DCT pHash
   // ============================================================
-
   const HASH_SIZE = 32, HASH_BITS = 8, CACHE_MAX = 500;
   const hashCache = new Map();
 
@@ -88,7 +87,6 @@
   // ============================================================
   // 2. search-v5 API
   // ============================================================
-
   async function searchTokenAPI(query, onlyBonded = false, onlyDexPaid = false) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
@@ -114,7 +112,6 @@
   // ============================================================
   // 3. Row utilities
   // ============================================================
-
   function getRowName(row) {
     const btn = row.querySelector('div[role="button"]');
     if (!btn) return '';
@@ -156,7 +153,6 @@
   // ============================================================
   // 4. Parallel Analyzer
   // ============================================================
-
   const MAX_CONC   = 3;
   const STAGGER_MS = 150;
   const started    = new Set();
@@ -271,7 +267,6 @@
       matchPct:    s.pct,
       platform:    s.resolvedPlatform,
     });
-    // Set data-qbm-pair immediately so Master reads tokenCA, not rowCA
     const btn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
     if (btn) btn.dataset.qbmPair = s.token.tokenAddress;
     console.log(`[BM] ✅ ${name} → ${s.token.tokenTicker} ${s.pct}% [${s.resolvedPlatform}]`);
@@ -330,9 +325,68 @@
   new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
 
   // ============================================================
-  // 5. Mini Buttons
+  // 5. Glow on original QB buttons (ported from v8.26)
   // ============================================================
+  let lastGlowBtns   = [];
+  let lastNormalSize = { w: 48, h: 48 };
 
+  function getQBButtons() {
+    return [...document.querySelectorAll('button')].filter(btn =>
+      btn.style?.position === 'fixed' &&
+      btn.style?.zIndex   === '9999'  &&
+      btn.style?.display  !== 'none'  &&
+      btn.querySelector?.('.qb-sim-badge')
+    );
+  }
+
+  function platColorFor(platform) {
+    if (platform === 'bonk')         return { color: '#ff8c00', glow: 'rgba(255,140,0,0.4)' };
+    if (platform === 'pump-migrado') return { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
+    if (platform === 'pump-dex')     return { color: '#78ffa0', glow: 'rgba(120,255,160,0.4)' };
+    return                                  { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
+  }
+
+  function applyGlow(btn, platform) {
+    const { color, glow } = platColorFor(platform);
+    btn.style.boxShadow = `0 0 18px 5px ${color}, 0 0 36px 10px ${glow}`;
+    btn.style.setProperty('outline', `2px solid ${color}`, 'important');
+    btn.setAttribute('data-qbm-glow', '1');
+  }
+
+  function clearGlows() {
+    lastGlowBtns.forEach(btn => {
+      if (!btn.isConnected || btn.getAttribute('data-qbm-glow') !== '1') return;
+      btn.style.removeProperty('box-shadow');
+      btn.style.removeProperty('outline');
+      btn.removeAttribute('data-qbm-glow');
+    });
+    lastGlowBtns = [];
+  }
+
+  function updateGlow() {
+    const qbBtns = getQBButtons();
+    if (qbBtns.length) {
+      const r = qbBtns[0].getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
+    }
+
+    clearGlows();
+
+    const topRow = document.querySelector('[class*="group/pulseRow"]');
+    if (!topRow) return;
+    const topCA = getRowCA(topRow);
+    if (!topCA) return;
+    const best = sessionBest.get(topCA);
+    if (!best) return;
+    const topQB = qbBtns[0];
+    if (!topQB) return;
+    applyGlow(topQB, best.platform);
+    lastGlowBtns = [topQB];
+  }
+
+  // ============================================================
+  // 6. Mini Buttons
+  // ============================================================
   const miniPool = new Map();
   const BTN_W = 68.9, BTN_H = 30;
 
@@ -364,7 +418,7 @@
     el.setAttribute('data-qbm-mini', rowCA);
     el.style.cssText = `position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;` +
       `flex-direction:row;gap:4px;align-items:center;justify-content:center;` +
-      `width:${BTN_W}px;height:${BTN_H}px;border-radius:999px;`;
+      `border-radius:999px;transform:scale(0.7842);transform-origin:top left;`;
 
     const icon = document.createElement('i');
     icon.className = 'ri-flashlight-fill';
@@ -394,6 +448,14 @@
       'font-size:10px;font-weight:700;font-family:monospace;background:rgba(0,0,0,0.85);' +
       'border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
+
+    const label = document.createElement('div');
+    label.className = 'qbm-label';
+    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;' +
+      'color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;' +
+      'pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
+    document.body.appendChild(label);
+    el._label = label;
 
     const infoBar = document.createElement('div');
     infoBar.className = 'qbm-info';
@@ -435,13 +497,18 @@
 
   function updateMiniButtons() {
     if (isPanelVisible()) {
-      miniPool.forEach(btn => { if (btn?.isConnected) btn.style.display = 'none'; });
+      miniPool.forEach(btn => {
+        if (btn?.isConnected) btn.style.display = 'none';
+        if (btn?._label) btn._label.style.display = 'none';
+      });
       return;
     }
 
     const rows  = document.querySelectorAll('[class*="group/pulseRow"]');
     const seen  = new Set();
     const solAmt = getSOLAmount() + ' SOL';
+    const btnW = lastNormalSize.w;
+    const btnH = lastNormalSize.h;
 
     rows.forEach(row => {
       const ca  = getRowCA(row);
@@ -462,15 +529,17 @@
       let posLeft;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft  = sr.left + sr.width / 2 - BTN_W / 2 + 40;
+        posLeft  = sr.left + sr.width / 2 - btnW / 2 + 75;
       } else {
-        posLeft = rect.right - BTN_W - 43;
+        posLeft = rect.right - btnW - 8;
       }
-      const posTop = rect.top + rect.height / 2 - BTN_H / 2;
+      const posTop = rect.top + rect.height / 2 - btnH / 2 + 30;
 
       const el = getOrCreateMiniBtn(ca || key);
       el.style.left      = posLeft + 'px';
       el.style.top       = posTop  + 'px';
+      el.style.width     = btnW + 'px';
+      el.style.height    = btnH + 'px';
       el.dataset.qbmPair = best.tokenCA || '';
 
       const coinImg = el.querySelector('.qbm-coin-img');
@@ -481,7 +550,8 @@
         const txt = best.matchPct.toFixed(1) + '%';
         if (pctBadge.textContent !== txt) pctBadge.textContent = txt;
         const col = badgeColor(best.matchPct);
-        pctBadge.style.color = col; pctBadge.style.borderColor = col;
+        pctBadge.style.color = col;
+        pctBadge.style.borderColor = col;
       }
 
       const solSpan = el.querySelector('.qbm-sol');
@@ -501,18 +571,28 @@
       el.style.border     = `1.5px solid ${ps.border}`;
       el.style.boxShadow  = `${ps.shadow} 0px 0px 8px 2px`;
       el.style.display    = 'flex';
+
+      const label = el._label;
+      if (label) {
+        const nameText = best.name || best.ticker || '';
+        if (label.textContent !== nameText) label.textContent = nameText;
+        label.style.left    = (posLeft + (btnW * 0.7842) / 2) + 'px';
+        label.style.top     = (posTop - 18) + 'px';
+        label.style.display = '';
+      }
     });
 
     miniPool.forEach((btn, ca) => {
-      if (!seen.has(ca) && btn?.isConnected) btn.style.display = 'none';
+      if (!seen.has(ca) && btn?.isConnected) {
+        btn.style.display = 'none';
+        if (btn._label) btn._label.style.display = 'none';
+      }
     });
   }
 
-  function getSearchPanel() {
-    return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
-      .find(el => el.querySelector('input') || el.querySelector('[class*="group/quickBuyButton"]')) || null;
-  }
-
+  // ============================================================
+  // 7. Buy execution
+  // ============================================================
   function typeInPanel(panel, text) {
     const input = panel.querySelector('input');
     if (!input) return false;
@@ -527,8 +607,20 @@
     if (!panel) return;
     const wrapper = panel.parentElement;
     const overlay = wrapper?.parentElement;
-    if (wrapper) { wrapper.style.removeProperty('z-index'); wrapper.style.removeProperty('pointer-events'); }
-    if (overlay) { overlay.style.removeProperty('z-index'); overlay.style.removeProperty('pointer-events'); }
+    if (wrapper) {
+      wrapper.style.removeProperty('z-index');
+      wrapper.style.removeProperty('pointer-events');
+      wrapper.style.removeProperty('transition');
+      wrapper.style.removeProperty('animation');
+    }
+    if (overlay) {
+      overlay.style.removeProperty('z-index');
+      overlay.style.removeProperty('pointer-events');
+      overlay.style.removeProperty('background');
+      overlay.style.removeProperty('backdrop-filter');
+      overlay.style.removeProperty('transition');
+      overlay.style.removeProperty('animation');
+    }
   }
 
   function fireClickOnEl(el) {
@@ -569,7 +661,10 @@
     }
   }
 
-  setInterval(updateMiniButtons, 16);
+  // ============================================================
+  // 8. Main loop + exports
+  // ============================================================
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 16);
 
   window.__axiomGetTop3BM2 = () => {
     const rows = getFirst4Rows();
@@ -586,8 +681,10 @@
     return result;
   };
 
-  window.__qbBM = { sessionBest, started, queue, hashCache,
-    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
+  window.__qbBM = {
+    sessionBest, started, queue, hashCache,
+    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }),
+  };
 
-  console.log('⭐ Axiom QBuy Best Match v9.0 loaded');
+  console.log('⭐ Axiom QBuy Best Match v1.6 loaded');
 })();
