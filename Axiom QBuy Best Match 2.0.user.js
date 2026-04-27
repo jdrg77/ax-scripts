@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2 2
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -348,57 +348,9 @@
   new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
 
   // ============================================================
-  // 5. Glow on original QB buttons
+  // 5. Size reference (fixed, independent of QBuy)
   // ============================================================
-  let lastGlowBtns   = [];
-  let lastNormalSize = { w: 48, h: 48 };
-  function getQBButtons() {
-    return [...document.querySelectorAll('button')].filter(btn =>
-      btn.style?.position === 'fixed' &&
-      btn.style?.zIndex   === '9999'  &&
-      btn.style?.display  !== 'none'  &&
-      btn.querySelector?.('.qb-sim-badge')
-    );
-  }
-  function platColorFor(platform) {
-    if (platform === 'bonk')         return { color: '#ff8c00', glow: 'rgba(255,140,0,0.4)' };
-    if (platform === 'pump-migrado') return { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
-    if (platform === 'pump-dex')     return { color: '#78ffa0', glow: 'rgba(120,255,160,0.4)' };
-    return                                  { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
-  }
-  function applyGlow(btn, platform) {
-    const { color, glow } = platColorFor(platform);
-    btn.style.boxShadow = `0 0 18px 5px ${color}, 0 0 36px 10px ${glow}`;
-    btn.style.setProperty('outline', `2px solid ${color}`, 'important');
-    btn.setAttribute('data-qbm-glow', '1');
-  }
-  function clearGlows() {
-    lastGlowBtns.forEach(btn => {
-      if (!btn.isConnected || btn.getAttribute('data-qbm-glow') !== '1') return;
-      btn.style.removeProperty('box-shadow');
-      btn.style.removeProperty('outline');
-      btn.removeAttribute('data-qbm-glow');
-    });
-    lastGlowBtns = [];
-  }
-  function updateGlow() {
-    const qbBtns = getQBButtons();
-    if (qbBtns.length) {
-      const r = qbBtns[0].getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
-    }
-    clearGlows();
-    const topRow = document.querySelector('[class*="group/pulseRow"]');
-    if (!topRow) return;
-    const topCA = getRowCA(topRow);
-    if (!topCA) return;
-    const best = sessionBest.get(topCA);
-    if (!best) return;
-    const topQB = qbBtns[0];
-    if (!topQB) return;
-    applyGlow(topQB, best.platform);
-    lastGlowBtns = [topQB];
-  }
+  const lastNormalSize = { w: 48, h: 48 };
 
   // ============================================================
   // 6. Mini Buttons
@@ -675,7 +627,7 @@
   // ============================================================
   // 8. Main loop + exports
   // ============================================================
-  setInterval(() => { updateGlow(); updateMiniButtons(); }, 16);
+  setInterval(updateMiniButtons, 16);
 
   window.__axiomGetTop3BM2 = () => {
     const rows = getFirst4Rows();
