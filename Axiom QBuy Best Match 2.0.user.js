@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -404,9 +404,13 @@
       if (e.target.closest('img.qbm-coin-img')) return;
       const best = sessionBest.get(rowCA);
       if (!best) return;
-      const ringChannel = new BroadcastChannel('axiom-buyer-ring');
-      ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.tokenCA });
-      ringChannel.close();
+      if (window.__ringArmedRowCAs?.has(rowCA)) {
+        const ringChannel = new BroadcastChannel('axiom-buyer-ring');
+        ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.tokenCA });
+        ringChannel.close();
+      } else {
+        executeBest(best);
+      }
     });
 
     document.body.appendChild(el);
@@ -499,6 +503,67 @@
     miniPool.forEach((btn, ca) => {
       if (!seen.has(ca) && btn?.isConnected) btn.style.display = 'none';
     });
+  }
+
+  function getSearchPanel() {
+    return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
+      .find(el => el.querySelector('input') || el.querySelector('[class*="group/quickBuyButton"]')) || null;
+  }
+
+  function typeInPanel(panel, text) {
+    const input = panel.querySelector('input');
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
+  function bringPanelToFront() {
+    const panel = getSearchPanel();
+    if (!panel) return;
+    const wrapper = panel.parentElement;
+    const overlay = wrapper?.parentElement;
+    if (wrapper) { wrapper.style.removeProperty('z-index'); wrapper.style.removeProperty('pointer-events'); }
+    if (overlay) { overlay.style.removeProperty('z-index'); overlay.style.removeProperty('pointer-events'); }
+  }
+
+  function fireClickOnEl(el) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    );
+  }
+
+  function executeBest(best) {
+    window.axiomUserOpen = true;
+    const doExecute = () => {
+      bringPanelToFront();
+      const panel = getSearchPanel();
+      if (!panel) { window.axiomUserOpen = false; return; }
+      const query = best.tokenCA || best.ca;
+      if (!query) { window.axiomUserOpen = false; return; }
+      const prevBtns = new Set(panel.querySelectorAll('[class*="group/quickBuyButton"]'));
+      typeInPanel(panel, query);
+      const start = Date.now();
+      const poll = () => {
+        const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+        const fresh = btns.filter(b => !prevBtns.has(b));
+        if (fresh.length > 0) { fireClickOnEl(fresh[0]); setTimeout(() => { window.axiomUserOpen = false; }, 400); return; }
+        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
+        setTimeout(poll, 50);
+      };
+      setTimeout(poll, 50);
+    };
+    if (!getSearchPanel()) {
+      const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
+      if (!searchBtn) { window.axiomUserOpen = false; return; }
+      searchBtn.click();
+      setTimeout(doExecute, 150);
+    } else {
+      doExecute();
+    }
   }
 
   setInterval(updateMiniButtons, 16);
