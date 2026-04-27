@@ -55,10 +55,8 @@
   }
 
   function reconcileSlots() {
-    if (SLOTS.every(s => slotState[s].ca)) return; // All slots armed — wait for a buy to free one
-
     const bestRows = getRowsWithBest();
-    if (!bestRows.length) return;
+    if (!bestRows.length) return; // No best matches — keep existing slots unchanged
 
     const alreadyCovered = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
     const newOnes = bestRows.filter(r => !alreadyCovered.has(r.buyCA));
