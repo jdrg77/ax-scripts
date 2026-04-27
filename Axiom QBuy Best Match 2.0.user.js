@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2 2
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -14,11 +14,48 @@
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
   // ============================================================
+  // 0. SOL price cache + format helpers (NEW in v1.7)
+  // ============================================================
+  let solPriceUsd = 85.96; // fallback hardcoded
+  function refreshSolPrice() {
+    try {
+      if (typeof window.__solPriceUsd === 'number' && window.__solPriceUsd > 0) {
+        solPriceUsd = window.__solPriceUsd;
+      }
+    } catch (e) {}
+  }
+  setInterval(refreshSolPrice, 30000);
+  refreshSolPrice();
+
+  function formatAge(createdAt) {
+    if (!createdAt) return '';
+    const ms = Date.now() - new Date(createdAt).getTime();
+    if (!isFinite(ms) || ms < 0) return '';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h';
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + 'd';
+    const mo = Math.floor(d / 30);
+    if (mo < 12) return mo + 'mo';
+    return Math.floor(mo / 12) + 'y';
+  }
+  function formatMc(n) {
+    if (!n || !isFinite(n) || n <= 0) return '';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  // ============================================================
   // 1. DCT pHash
   // ============================================================
   const HASH_SIZE = 32, HASH_BITS = 8, CACHE_MAX = 500;
   const hashCache = new Map();
-
   function dct1d(f) {
     const N = f.length, F = new Float32Array(N), pi2N = Math.PI / (2 * N);
     for (let u = 0; u < N; u++) {
@@ -28,7 +65,6 @@
     }
     return F;
   }
-
   function computeHash(img) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = HASH_SIZE;
@@ -59,7 +95,6 @@
       for (let y = 0; y < HASH_BITS; y++) hash += dct[x * HASH_SIZE + y] > mean ? '1' : '0';
     return hash;
   }
-
   function getHash(src, cb) {
     if (!src || src.startsWith('blob:') || src.startsWith('data:')) return cb(null);
     if (hashCache.has(src)) return cb(hashCache.get(src));
@@ -76,7 +111,6 @@
     img.onerror = () => cb(null);
     img.src = src.includes('?') ? src : src + '?qb=1';
   }
-
   function hashSimilarity(h1, h2) {
     if (!h1 || !h2 || h1.length !== h2.length) return 0;
     let m = 0;
@@ -120,7 +154,6 @@
                || btn.querySelectorAll('span')[0];
     return span?.textContent.trim() || '';
   }
-
   function getRowAgeAndMC(row) {
     const ageEl = row.querySelector('span[class*="pointer-events-none"]');
     const age   = ageEl?.textContent?.trim() || '';
@@ -132,7 +165,6 @@
     }
     return { age, mc };
   }
-
   function getRowCA(row) {
     const pump = row.querySelector('a[href*="pump.fun/coin/"]');
     if (pump) { const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
@@ -140,12 +172,10 @@
     if (meme) { const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
     return '';
   }
-
   function getRowImgSrc(row) {
     return Array.from(row.querySelectorAll('img[class*="object-cover"]'))
       .find(img => img.src && !img.src.startsWith('data:'))?.src || null;
   }
-
   function isPlaceholder(src) {
     return !src || src.includes('/pfps/') || src.includes('axiom-assets');
   }
@@ -157,12 +187,10 @@
   const STAGGER_MS = 150;
   const started    = new Set();
   const queue      = [];
-  const sessionBest = new Map(); // rowCA → best match
+  const sessionBest = new Map();
   let   activeCount  = 0;
   let   lastStartMs  = 0;
-
   const MIN_MATCH_PCT = 55;
-
   window.__axiomHasBestMatch = ca => sessionBest.has(ca);
 
   async function scoreResults(results, refHash) {
@@ -185,14 +213,12 @@
     const tickerMatch = s => norm(s.token.tokenTicker) === rn;
     const exactMatch  = s => nameMatch(s) || tickerMatch(s);
     const byPct       = (a, b) => b.pct - a.pct;
-
     const getPlatform = s => {
       if (isGrad(s)) return 'pump-migrado';
       if (s.token.protocol === 'bonk') return 'bonk';
       if (isDex(s)) return 'pump-dex';
       return 'pump-nodex';
     };
-
     function sortRest(list) {
       const tier1 = list.filter(s => s.pct >  85).sort(byPct);
       const tier2 = list.filter(s => s.pct >  72 && s.pct <= 85).sort(byPct);
@@ -200,15 +226,12 @@
       const tier4 = list.filter(s => s.pct >= MIN_MATCH_PCT && s.pct < 58.21).sort(byPct);
       return [...tier1, ...tier2, ...tier3, ...tier4];
     }
-
     const special = scored.filter(isGrad);
     const blues   = scored.filter(s => !isGrad(s) && exactMatch(s)).sort(byPct).slice(0, 3);
     const others  = scored.filter(s => !isGrad(s) && !exactMatch(s));
-
     let sortedSpecial;
     const hasExact    = special.some(exactMatch);
     const hasNameOnly = !hasExact && special.some(nameMatch);
-
     if (hasExact) {
       const ex    = special.filter(exactMatch);
       const ultra = ex.filter(s => s.pct > 85).sort(byPct);
@@ -221,7 +244,6 @@
     } else {
       sortedSpecial = sortRest(special);
     }
-
     return [...sortedSpecial, ...blues, ...sortRest(others)]
       .filter(s => s.pct >= MIN_MATCH_PCT)
       .map(s => ({ ...s, resolvedPlatform: getPlatform(s) }));
@@ -230,15 +252,12 @@
   async function analyzeRow({ name, refImgSrc, rowCA }) {
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
-
     const [gradResults, dexResults] = await Promise.all([
       searchTokenAPI(name, true,  false),
       searchTokenAPI(name, false, true),
     ]);
-
     const gradSet = new Set((gradResults || []).map(t => t.tokenAddress));
     const dexSet  = new Set((dexResults  || []).map(t => t.tokenAddress));
-
     const seen = new Set();
     const unique = [...(gradResults || []), ...(dexResults || [])].filter(t => {
       if (seen.has(t.tokenAddress)) return false;
@@ -246,30 +265,38 @@
       return true;
     });
     if (!unique.length) return;
-
     const scored = await scoreResults(unique, refHash);
     const ranked = rankScored(scored, name, gradSet, dexSet);
     if (!ranked.length) return;
-
     const s = ranked[0];
     const existing = sessionBest.get(rowCA);
     if (existing && s.pct <= existing.matchPct) return;
 
+    const t = s.token;
+    const matchedAge = formatAge(t.createdAt);
+    const priceSol = (t.liquidityToken && t.liquidityToken > 0)
+      ? (t.liquiditySol / t.liquidityToken) : 0;
+    const matchedMcUsd = priceSol * (t.supply || 0) * solPriceUsd;
+    const matchedMc = formatMc(matchedMcUsd);
+
     sessionBest.set(rowCA, {
       rowCA,
-      ca:          s.token.tokenAddress,
-      tokenCA:     s.token.tokenAddress,
-      pairAddress: s.token.pairAddress || s.token.tokenAddress,
-      memeHref:    `/meme/${s.token.pairAddress || s.token.tokenAddress}?chain=sol`,
-      ticker:      s.token.tokenTicker || '',
-      name:        s.token.tokenName   || '',
-      imgSrc:      `https://axiomtrading.axiom-cdn.io/${s.token.tokenAddress}.webp`,
+      ca:          t.tokenAddress,
+      tokenCA:     t.tokenAddress,
+      pairAddress: t.pairAddress || t.tokenAddress,
+      memeHref:    `/meme/${t.pairAddress || t.tokenAddress}?chain=sol`,
+      ticker:      t.tokenTicker || '',
+      name:        t.tokenName   || '',
+      imgSrc:      `https://axiomtrading.axiom-cdn.io/${t.tokenAddress}.webp`,
       matchPct:    s.pct,
       platform:    s.resolvedPlatform,
+      matchedAge,
+      matchedMc,
+      matchedMcUsd,
     });
     const btn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
-    if (btn) btn.dataset.qbmPair = s.token.tokenAddress;
-    console.log(`[BM] ✅ ${name} → ${s.token.tokenTicker} ${s.pct}% [${s.resolvedPlatform}]`);
+    if (btn) btn.dataset.qbmPair = t.tokenAddress;
+    console.log(`[BM] ✅ ${name} → ${t.tokenTicker} ${s.pct}% [${s.resolvedPlatform}] age=${matchedAge} mc=${matchedMc}`);
   }
 
   function tryStart() {
@@ -283,7 +310,6 @@
     analyzeRow(task).finally(() => { activeCount--; tryStart(); });
     tryStart();
   }
-
   function enqueue(task) {
     const key = task.rowCA || task.name;
     if (!key) return;
@@ -294,7 +320,6 @@
     queue.push(task);
     tryStart();
   }
-
   function getFirst4Rows() {
     const header = Array.from(document.querySelectorAll('*'))
       .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
@@ -309,7 +334,6 @@
     if (!virtualList) return [];
     return Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]')).slice(0, 4);
   }
-
   function scanRows() {
     getFirst4Rows().forEach(row => {
       const pulseRow  = row.querySelector('[class*="group/pulseRow"]') || row;
@@ -321,15 +345,13 @@
       enqueue({ name, refImgSrc, rowCA: ca || name });
     });
   }
-
   new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
 
   // ============================================================
-  // 5. Glow on original QB buttons (ported from v8.26)
+  // 5. Glow on original QB buttons
   // ============================================================
   let lastGlowBtns   = [];
   let lastNormalSize = { w: 48, h: 48 };
-
   function getQBButtons() {
     return [...document.querySelectorAll('button')].filter(btn =>
       btn.style?.position === 'fixed' &&
@@ -338,21 +360,18 @@
       btn.querySelector?.('.qb-sim-badge')
     );
   }
-
   function platColorFor(platform) {
     if (platform === 'bonk')         return { color: '#ff8c00', glow: 'rgba(255,140,0,0.4)' };
     if (platform === 'pump-migrado') return { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
     if (platform === 'pump-dex')     return { color: '#78ffa0', glow: 'rgba(120,255,160,0.4)' };
     return                                  { color: '#ffd700', glow: 'rgba(255,215,0,0.4)' };
   }
-
   function applyGlow(btn, platform) {
     const { color, glow } = platColorFor(platform);
     btn.style.boxShadow = `0 0 18px 5px ${color}, 0 0 36px 10px ${glow}`;
     btn.style.setProperty('outline', `2px solid ${color}`, 'important');
     btn.setAttribute('data-qbm-glow', '1');
   }
-
   function clearGlows() {
     lastGlowBtns.forEach(btn => {
       if (!btn.isConnected || btn.getAttribute('data-qbm-glow') !== '1') return;
@@ -362,16 +381,13 @@
     });
     lastGlowBtns = [];
   }
-
   function updateGlow() {
     const qbBtns = getQBButtons();
     if (qbBtns.length) {
       const r = qbBtns[0].getBoundingClientRect();
       if (r.width > 0 && r.height > 0) lastNormalSize = { w: r.width, h: r.height };
     }
-
     clearGlows();
-
     const topRow = document.querySelector('[class*="group/pulseRow"]');
     if (!topRow) return;
     const topCA = getRowCA(topRow);
@@ -394,18 +410,15 @@
     return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
       .find(el => el.querySelector('input') || el.querySelector('[class*="group/quickBuyButton"]')) || null;
   }
-
   function isPanelVisible() {
     const p = getSearchPanel();
     return p ? p.parentElement?.style.zIndex !== '-9999' : false;
   }
-
   function badgeColor(pct) {
     if (pct >= 75) return '#78ffa0';
     if (pct >= 50) return '#ffd700';
     return '#ff6b6b';
   }
-
   function platStyle(platform) {
     if (platform === 'pump-migrado') return { bg: 'rgba(255,215,0,0.85)',   border: 'rgb(255,215,0)',   shadow: 'rgba(255,215,0,0.6)'   };
     if (platform === 'pump-dex')     return { bg: 'rgba(120,255,160,0.85)', border: 'rgb(120,255,160)', shadow: 'rgba(120,255,160,0.6)' };
@@ -504,11 +517,11 @@
       return;
     }
 
-    const rows  = document.querySelectorAll('[class*="group/pulseRow"]');
-    const seen  = new Set();
+    const rows   = document.querySelectorAll('[class*="group/pulseRow"]');
+    const seen   = new Set();
     const solAmt = getSOLAmount() + ' SOL';
-    const btnW = lastNormalSize.w;
-    const btnH = lastNormalSize.h;
+    const btnW   = lastNormalSize.w;
+    const btnH   = lastNormalSize.h;
 
     rows.forEach(row => {
       const ca  = getRowCA(row);
@@ -557,11 +570,12 @@
       const solSpan = el.querySelector('.qbm-sol');
       if (solSpan && solSpan.textContent !== solAmt) solSpan.textContent = solAmt;
 
-      const { age, mc } = getRowAgeAndMC(row);
+      const age = best.matchedAge || '';
+      const mc  = best.matchedMc  || '';
       const infoBar = el.querySelector('.qbm-info');
       if (infoBar) {
         const ageTxt = age ? `<span style="color:rgb(255,215,0);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${age}</span>` : '';
-        const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">MC ${mc}</span>` : '';
+        const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${mc}</span>` : '';
         const html   = ageTxt + mcTxt;
         if (infoBar.innerHTML !== html) infoBar.innerHTML = html;
       }
@@ -601,7 +615,6 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
     return true;
   }
-
   function bringPanelToFront() {
     const panel = getSearchPanel();
     if (!panel) return;
@@ -622,7 +635,6 @@
       overlay.style.removeProperty('animation');
     }
   }
-
   function fireClickOnEl(el) {
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -630,7 +642,6 @@
       el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
     );
   }
-
   function executeBest(best) {
     window.axiomUserOpen = true;
     const doExecute = () => {
@@ -683,8 +694,9 @@
 
   window.__qbBM = {
     sessionBest, started, queue, hashCache,
-    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }),
+    setSolPrice: (p) => { window.__solPriceUsd = p; solPriceUsd = p; console.log('[BM] SOL price set to', p); },
+    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match v1.6 loaded');
+  console.log('⭐ Axiom QBuy Best Match v1.7 — matched token age + MC');
 })();
