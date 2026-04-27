@@ -19,57 +19,57 @@
   const slotState = { A: { ca: null, ready: false }, B: { ca: null, ready: false }, C: { ca: null, ready: false } };
   let nextSlotIdx = 0;
 
+  const seenQueue = []; // FIFO of last 3 best matches: [{ rowCA, buyCA }]
+  const seenSet   = new Set();
   window.__ringArmedRowCAs = new Set();
 
-  function getTop3Best() {
+  function scanNewBestMatches() {
     const newPairsHeader = Array.from(document.querySelectorAll('*'))
       .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
-    if (!newPairsHeader) return [];
+    if (!newPairsHeader) return;
     const col = newPairsHeader.parentElement?.parentElement?.parentElement;
-    if (!col) return [];
+    if (!col) return;
     const virtualList = Array.from(col.querySelectorAll('div')).find(div => {
       const s = div.getAttribute('style') || '';
       return s.includes('position: relative') &&
              div.querySelectorAll('[style*="position: absolute"]').length > 3;
     });
-    if (!virtualList) return [];
+    if (!virtualList) return;
     const rows = Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]'));
 
-    const result = [];
-    for (let i = 0; i < Math.min(6, rows.length) && result.length < 3; i++) {
+    for (let i = 0; i < Math.min(6, rows.length); i++) {
       const row      = rows[i];
       const memeLink = row.querySelector('a[href*="/meme/"]');
       const pumpLink = row.querySelector('a[href*="pump.fun/coin/"]');
       const pumpMatch = pumpLink?.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
       const memeMatch = memeLink?.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
       const rowCA = pumpMatch?.[1] || memeMatch?.[1] || null;
-      if (!rowCA) continue;
-      if (!window.__axiomHasBestMatch?.(rowCA)) continue;
+      if (!rowCA || seenSet.has(rowCA)) continue;
+
+      const hasBest = window.__axiomHasBestMatch?.(rowCA) || false;
+      if (!hasBest) continue;
+
       const miniBtn  = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
       const bestPair = miniBtn?.dataset?.qbmPair || null;
-      result.push({ rowCA, buyCA: bestPair || rowCA });
+      const buyCA    = bestPair || rowCA;
+
+      if (seenQueue.length >= 3) continue; // Queue full — wait for a buy to free a slot
+
+      seenSet.add(rowCA);
+      seenQueue.push({ rowCA, buyCA });
+      window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
+      reconcileSlots();
     }
-    return result;
   }
 
   function reconcileSlots() {
-    const top3 = getTop3Best();
-    const top3CAs = new Set(top3.map(r => r.buyCA));
+    if (!seenQueue.length) return;
 
-    // Clear slots whose CA is no longer in top 3
-    SLOTS.forEach(slot => {
-      if (slotState[slot].ca && !top3CAs.has(slotState[slot].ca)) {
-        slotState[slot].ca    = null;
-        slotState[slot].ready = false;
-      }
-    });
+    const alreadyCovered = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
+    const newOnes = seenQueue.filter(r => !alreadyCovered.has(r.buyCA));
 
-    window.__ringArmedRowCAs = new Set(top3.map(r => r.rowCA));
-
-    // Assign new CAs to empty slots
-    const covered = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
-    for (const { buyCA } of top3) {
-      if (covered.has(buyCA)) continue;
+    for (const { buyCA } of newOnes) {
+      let assigned = false;
       for (let attempts = 0; attempts < SLOTS.length; attempts++) {
         const slot = SLOTS[nextSlotIdx];
         nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
@@ -78,10 +78,11 @@
           slotState[slot].ready = false;
           channel.postMessage({ type: 'REARM', slot, ca: buyCA });
           console.log(`[MASTER] REARM ${slot} → ${buyCA.slice(0, 8)}`);
-          covered.add(buyCA);
+          assigned = true;
           break;
         }
       }
+      if (!assigned) break; // All slots occupied, queue is capped at 3 anyway
     }
 
     renderUI();
@@ -158,6 +159,6 @@
   }
 
   buildUI();
-  setInterval(reconcileSlots, 300);
+  setInterval(scanNewBestMatches, 300);
   console.log('[MASTER] Buyer Ring Master v1.1 active');
 })();

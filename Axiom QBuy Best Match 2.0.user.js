@@ -403,13 +403,9 @@
       if (e.target.closest('img.qbm-coin-img')) return;
       const best = sessionBest.get(rowCA);
       if (!best) return;
-      if (window.__ringArmedRowCAs?.has(rowCA)) {
-        const ringChannel = new BroadcastChannel('axiom-buyer-ring');
-        ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.ca });
-        ringChannel.close();
-      } else {
-        executeBest(best);
-      }
+      const ringChannel = new BroadcastChannel('axiom-buyer-ring');
+      ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.ca });
+      ringChannel.close();
     });
 
     document.body.appendChild(el);
@@ -502,59 +498,6 @@
     miniPool.forEach((btn, ca) => {
       if (!seen.has(ca) && btn?.isConnected) btn.style.display = 'none';
     });
-  }
-
-  function typeInPanel(panel, text) {
-    const input = panel.querySelector('input');
-    if (!input) return;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(input, text);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-
-  function bringPanelToFront() {
-    const panel = getSearchPanel();
-    if (!panel) return;
-    const wrapper = panel.parentElement, overlay = wrapper?.parentElement;
-    if (wrapper) { wrapper.style.removeProperty('z-index'); wrapper.style.removeProperty('pointer-events'); wrapper.style.removeProperty('transition'); wrapper.style.removeProperty('animation'); }
-    if (overlay) { overlay.style.removeProperty('z-index'); overlay.style.removeProperty('pointer-events'); overlay.style.removeProperty('background'); overlay.style.removeProperty('backdrop-filter'); overlay.style.removeProperty('transition'); overlay.style.removeProperty('animation'); }
-  }
-
-  function fireClick(el) {
-    const r = el.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-      el.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    );
-  }
-
-  function executeBest(best) {
-    window.axiomUserOpen = true;
-    const doExecute = () => {
-      bringPanelToFront();
-      const panel = getSearchPanel();
-      if (!panel) { window.axiomUserOpen = false; return; }
-      const query = best.ca || best.name || best.ticker;
-      if (!query) { window.axiomUserOpen = false; return; }
-      const prevBtns = new Set(panel.querySelectorAll('[class*="group/quickBuyButton"]'));
-      typeInPanel(panel, query);
-      const start = Date.now();
-      const poll = () => {
-        const fresh = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')].filter(b => !prevBtns.has(b));
-        if (fresh.length) { fireClick(fresh[0]); setTimeout(() => { window.axiomUserOpen = false; }, 400); return; }
-        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
-        setTimeout(poll, 50);
-      };
-      setTimeout(poll, 50);
-    };
-    if (!getSearchPanel()) {
-      const btn = document.querySelector('[class*="ri-search"]')?.closest('button');
-      if (!btn) { window.axiomUserOpen = false; return; }
-      btn.click();
-      setTimeout(doExecute, 150);
-    } else {
-      doExecute();
-    }
   }
 
   setInterval(updateMiniButtons, 16);
