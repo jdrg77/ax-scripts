@@ -368,7 +368,9 @@
     el.addEventListener('click', e => {
       e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
       const best = sessionBest.get(rowCA);
-      if (best) executeBest(best);
+      if (!best) return;
+      gradChannel.postMessage({ type: 'EXECUTE_BUY_CA', ca: best.ca });
+      executeBest(best);
     });
 
     document.body.appendChild(el);
