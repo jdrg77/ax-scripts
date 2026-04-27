@@ -179,7 +179,7 @@
   // 4. Parallel Analyzer
   // ============================================================
   const MAX_CONC   = 3;
-  const STAGGER_MS = 150;
+  const STAGGER_MS = 58;
   const started    = new Set();
   const queue      = [];
   const sessionBest = new Map();
