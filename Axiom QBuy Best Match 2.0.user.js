@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.10
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -175,6 +175,13 @@
     return !src || src.includes('/pfps/') || src.includes('axiom-assets');
   }
 
+  function getRowPlatform(row) {
+    if (row.querySelector('img[src*="bonk"]')) return 'bonk';
+    if (row.querySelector('img[src*="pump-grad.svg"][alt="Raydium V4"]')) return 'raydium';
+    if (row.querySelector('img[src*="pump"]')) return 'pump';
+    return 'other';
+  }
+
   // ============================================================
   // 4. Parallel Analyzer
   // ============================================================
@@ -193,59 +200,99 @@
     if (!results?.length) return [];
     return await Promise.race([
       Promise.all(results.map(token => new Promise(resolve => {
-        const imgSrc = `https://axiomtrading.axiom-cdn.io/${token.tokenAddress}.webp`;
-        getHash(imgSrc, hash => resolve({ token, pct: hashSimilarity(refHash, hash) }));
+        const imgSrc    = `https://axiomtrading.axiom-cdn.io/${token.tokenAddress}.webp`;
+        const ageHours  = token.createdAt
+          ? (Date.now() - new Date(token.createdAt).getTime()) / 3600000
+          : 9999;
+        const priceSol  = (token.liquidityToken && token.liquidityToken > 0)
+          ? (token.liquiditySol / token.liquidityToken) : 0;
+        const marketCap = priceSol * (token.supply || 0) * solPriceUsd;
+        getHash(imgSrc, hash => resolve({ token, pct: hashSimilarity(refHash, hash), ageHours, marketCap }));
       }))),
       new Promise(resolve => setTimeout(() => resolve([]), 6000)),
     ]);
   }
 
-  function rankScored(scored, rowName, gradSet, dexSet) {
-    const norm        = s => (s || '').toLowerCase().trim();
-    const rn          = norm(rowName);
-    const isGrad      = s => gradSet.has(s.token.tokenAddress);
-    const isDex       = s => dexSet.has(s.token.tokenAddress);
-    const nameMatch   = s => norm(s.token.tokenName)   === rn;
-    const tickerMatch = s => norm(s.token.tokenTicker) === rn;
-    const exactMatch  = s => nameMatch(s) || tickerMatch(s);
-    const byPct       = (a, b) => b.pct - a.pct;
+  function rankScored(scored, rowName, gradSet, dexSet, rowPlatform) {
+    const norm            = s => (s || '').toLowerCase().trim();
+    const rn              = norm(rowName);
+    const isGrad          = s => gradSet.has(s.token.tokenAddress);
+    const isDex           = s => dexSet.has(s.token.tokenAddress);
+    const nameMatch       = s => norm(s.token.tokenName)   === rn;
+    const tickerMatch     = s => norm(s.token.tokenTicker) === rn;
+    const nameTickerMatch = s => nameMatch(s) && tickerMatch(s);
+    const nameOnlyMatch   = s => nameMatch(s) && !tickerMatch(s);
+
+    const sortByRecent    = (a, b) => a.ageHours - b.ageHours;
+    const sortByOldest    = (a, b) => b.ageHours - a.ageHours;
+    const sortByMatchDesc = (a, b) => b.pct - a.pct;
+    const sortByAgeMC     = (a, b) => a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap;
+
     const getPlatform = s => {
       if (isGrad(s)) return 'pump-migrado';
       if (s.token.protocol === 'bonk') return 'bonk';
       if (isDex(s)) return 'pump-dex';
       return 'pump-nodex';
     };
+    const platMatches = s => {
+      const p = getPlatform(s);
+      if (rowPlatform === 'bonk')    return p === 'bonk';
+      if (rowPlatform === 'raydium') return p === 'pump-migrado';
+      if (rowPlatform === 'pump')    return p === 'pump-dex' || p === 'pump-nodex' || p === 'pump-migrado';
+      return false;
+    };
+    const platFirst = (arr, sortFn) => {
+      if (!rowPlatform || rowPlatform === 'other') return [...arr].sort(sortFn);
+      return [
+        ...[...arr].filter(platMatches).sort(sortFn),
+        ...[...arr].filter(s => !platMatches(s)).sort(sortFn),
+      ];
+    };
+
+    const special = scored.filter(s => isGrad(s) || isDex(s));
+    const blues   = scored
+      .filter(s => !isGrad(s) && !isDex(s) && (nameMatch(s) || tickerMatch(s)))
+      .sort(sortByOldest)
+      .slice(0, 3);
+
     function sortRest(list) {
-      const tier1 = list.filter(s => s.pct >  85).sort(byPct);
-      const tier2 = list.filter(s => s.pct >  72 && s.pct <= 85).sort(byPct);
-      const tier3 = list.filter(s => s.pct >= 58.21 && s.pct <= 72).sort(byPct);
-      const tier4 = list.filter(s => s.pct >= MIN_MATCH_PCT && s.pct < 58.21).sort(byPct);
-      return [...tier1, ...tier2, ...tier3, ...tier4];
+      const ageDays = s => s.ageHours / 24;
+      const tier1  = list.filter(s => ageDays(s) < 7  && s.pct > 72);
+      const t1High = platFirst(tier1.filter(s => s.pct > 92), sortByRecent);
+      const t1Low  = platFirst(tier1.filter(s => s.pct <= 92), sortByMatchDesc);
+      const tier2  = platFirst(list.filter(s => ageDays(s) >= 7 && s.pct > 80), sortByRecent);
+      const tier3  = platFirst(list.filter(s => ageDays(s) >= 7 && s.pct >= 75 && s.pct <= 80), sortByRecent);
+      const tier4  = platFirst(list.filter(s => s.pct >= 58.21 && s.pct < 75), sortByAgeMC);
+      const tier5  = platFirst(list.filter(s => s.pct < 58.21), sortByAgeMC);
+      return [...t1High, ...t1Low, ...tier2, ...tier3, ...tier4, ...tier5];
     }
-    const special = scored.filter(isGrad);
-    const blues   = scored.filter(s => !isGrad(s) && exactMatch(s)).sort(byPct).slice(0, 3);
-    const others  = scored.filter(s => !isGrad(s) && !exactMatch(s));
+
     let sortedSpecial;
-    const hasExact    = special.some(exactMatch);
-    const hasNameOnly = !hasExact && special.some(nameMatch);
-    if (hasExact) {
-      const ex    = special.filter(exactMatch);
-      const ultra = ex.filter(s => s.pct > 85).sort(byPct);
-      const rest  = ex.filter(s => s.pct <= 85).sort(byPct);
-      const nonEx = special.filter(s => !exactMatch(s));
-      sortedSpecial = [...ultra, ...rest, ...sortRest(nonEx)];
+    const hasNameTicker = special.some(nameTickerMatch);
+    const hasNameOnly   = !hasNameTicker && special.some(nameOnlyMatch);
+
+    if (hasNameTicker) {
+      const nt     = special.filter(nameTickerMatch);
+      const ultra  = platFirst(nt.filter(s => s.pct > 85), sortByMatchDesc);
+      const rest   = platFirst(nt.filter(s => s.pct <= 85), sortByRecent);
+      const others = special.filter(s => !nameTickerMatch(s));
+      sortedSpecial = [...ultra, ...rest, ...sortRest(others)];
     } else if (hasNameOnly) {
-      const nm = special.filter(nameMatch);
-      sortedSpecial = [...nm.sort(byPct), ...sortRest(special.filter(s => !nameMatch(s)))];
+      const no     = special.filter(nameOnlyMatch);
+      const recent = platFirst(no.filter(s => s.ageHours < 24), sortByRecent);
+      const old    = platFirst(no.filter(s => s.ageHours >= 24), sortByMatchDesc);
+      const others = special.filter(s => !nameOnlyMatch(s));
+      sortedSpecial = [...recent, ...old, ...sortRest(others)];
     } else {
       sortedSpecial = sortRest(special);
     }
-    return [...sortedSpecial, ...blues, ...sortRest(others)]
+
+    return [...sortedSpecial, ...blues]
       .filter(s => s.pct >= MIN_MATCH_PCT)
       .map(s => ({ ...s, resolvedPlatform: getPlatform(s) }));
   }
 
-  async function analyzeRow({ name, refImgSrc, rowCA }) {
+  async function analyzeRow({ name, refImgSrc, rowCA, rowPlatform }) {
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
 
@@ -266,7 +313,7 @@
     if (!unique.length) return;
 
     const scored = await scoreResults(unique, refHash);
-    const ranked = rankScored(scored, name, gradSet, dexSet);
+    const ranked = rankScored(scored, name, gradSet, dexSet, rowPlatform);
     if (!ranked.length) return;
 
     const s = ranked[0];
@@ -274,10 +321,9 @@
     if (existing && s.pct <= existing.matchPct) return;
 
     const t = s.token;
-    const matchedAge = formatAge(t.createdAt);
-    const priceSol   = (t.liquidityToken && t.liquidityToken > 0) ? (t.liquiditySol / t.liquidityToken) : 0;
-    const matchedMcUsd = priceSol * (t.supply || 0) * solPriceUsd;
-    const matchedMc  = formatMc(matchedMcUsd);
+    const matchedAge   = formatAge(t.createdAt);
+    const matchedMcUsd = s.marketCap;
+    const matchedMc    = formatMc(s.marketCap);
 
     sessionBest.set(rowCA, {
       rowCA,
@@ -342,10 +388,11 @@
       const pulseRow  = row.querySelector('[class*="group/pulseRow"]') || row;
       const name      = getRowName(pulseRow);
       if (!name) return;
-      const ca        = getRowCA(pulseRow);
-      const refImgSrc = getRowImgSrc(pulseRow);
+      const ca          = getRowCA(pulseRow);
+      const refImgSrc   = getRowImgSrc(pulseRow);
       if (isPlaceholder(refImgSrc)) return;
-      enqueue({ name, refImgSrc, rowCA: ca || name });
+      const rowPlatform = getRowPlatform(pulseRow);
+      enqueue({ name, refImgSrc, rowCA: ca || name, rowPlatform });
     });
   }
 
@@ -658,5 +705,5 @@
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match 2 v1.9 — independent, constant scan');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.10 — QBuy17 5-tier ranking');
 })();
