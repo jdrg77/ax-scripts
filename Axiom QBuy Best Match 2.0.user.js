@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -262,6 +262,7 @@
     sessionBest.set(rowCA, {
       rowCA,
       ca:          s.token.tokenAddress,
+      tokenCA:     s.token.tokenAddress,
       pairAddress: s.token.pairAddress || s.token.tokenAddress,
       memeHref:    `/meme/${s.token.pairAddress || s.token.tokenAddress}?chain=sol`,
       ticker:      s.token.tokenTicker || '',
@@ -404,7 +405,7 @@
       const best = sessionBest.get(rowCA);
       if (!best) return;
       const ringChannel = new BroadcastChannel('axiom-buyer-ring');
-      ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.ca });
+      ringChannel.postMessage({ type: 'BUY_BY_CA', ca: best.tokenCA });
       ringChannel.close();
     });
 
@@ -463,7 +464,7 @@
       const el = getOrCreateMiniBtn(ca || key);
       el.style.left      = posLeft + 'px';
       el.style.top       = posTop  + 'px';
-      el.dataset.qbmPair = best.pairAddress || best.ca || '';
+      el.dataset.qbmPair = best.tokenCA || '';
 
       const coinImg = el.querySelector('.qbm-coin-img');
       if (coinImg && best.imgSrc && coinImg.src !== best.imgSrc) coinImg.src = best.imgSrc;
