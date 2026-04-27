@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -271,6 +271,9 @@
       matchPct:    s.pct,
       platform:    s.resolvedPlatform,
     });
+    // Set data-qbm-pair immediately so Master reads tokenCA, not rowCA
+    const btn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
+    if (btn) btn.dataset.qbmPair = s.token.tokenAddress;
     console.log(`[BM] ✅ ${name} → ${s.token.tokenTicker} ${s.pct}% [${s.resolvedPlatform}]`);
   }
 

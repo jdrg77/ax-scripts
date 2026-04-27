@@ -104,8 +104,11 @@
       console.log(`[MASTER] BUY_BY_CA → ${slot} ${msg.ca.slice(0, 8)}`);
       slotState[slot].ca    = null;
       slotState[slot].ready = false;
+      const idx = seenQueue.findIndex(r => r.buyCA === msg.ca);
+      if (idx !== -1) { seenSet.delete(seenQueue[idx].rowCA); seenQueue.splice(idx, 1); }
+      window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
       renderUI();
-      setTimeout(reconcileSlots, 100);
+      setTimeout(scanNewBestMatches, 100);
     }
   };
 
@@ -139,8 +142,11 @@
         console.log(`[MASTER] BUY ${slot} → ${ca.slice(0, 8)}`);
         slotState[slot].ca    = null;
         slotState[slot].ready = false;
+        const idx = seenQueue.findIndex(r => r.buyCA === ca);
+        if (idx !== -1) { seenSet.delete(seenQueue[idx].rowCA); seenQueue.splice(idx, 1); }
+        window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
         renderUI();
-        setTimeout(reconcileSlots, 100);
+        setTimeout(scanNewBestMatches, 100);
       };
       ui.appendChild(btn);
     });
