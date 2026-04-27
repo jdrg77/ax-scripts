@@ -19,21 +19,24 @@
   const slotState = { A: { ca: null, ready: false }, B: { ca: null, ready: false }, C: { ca: null, ready: false } };
   let nextSlotIdx = 0;
 
-  function getRowsWithBest() {
+  const seenQueue = []; // FIFO of last 3 best matches: [{ rowCA, buyCA }]
+  const seenSet   = new Set();
+  window.__ringArmedRowCAs = new Set();
+
+  function scanNewBestMatches() {
     const newPairsHeader = Array.from(document.querySelectorAll('*'))
       .find(el => el.children.length < 5 && el.textContent.trim() === 'New Pairs');
-    if (!newPairsHeader) return [];
+    if (!newPairsHeader) return;
     const col = newPairsHeader.parentElement?.parentElement?.parentElement;
-    if (!col) return [];
+    if (!col) return;
     const virtualList = Array.from(col.querySelectorAll('div')).find(div => {
       const s = div.getAttribute('style') || '';
       return s.includes('position: relative') &&
              div.querySelectorAll('[style*="position: absolute"]').length > 3;
     });
-    if (!virtualList) return [];
+    if (!virtualList) return;
     const rows = Array.from(virtualList.querySelectorAll(':scope > [style*="position: absolute"]'));
 
-    const result = [];
     for (let i = 0; i < Math.min(6, rows.length); i++) {
       const row      = rows[i];
       const memeLink = row.querySelector('a[href*="/meme/"]');
@@ -41,28 +44,35 @@
       const pumpMatch = pumpLink?.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
       const memeMatch = memeLink?.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
       const rowCA = pumpMatch?.[1] || memeMatch?.[1] || null;
-      if (!rowCA) continue;
+      if (!rowCA || seenSet.has(rowCA)) continue;
 
       const hasBest = window.__axiomHasBestMatch?.(rowCA) || false;
       if (!hasBest) continue;
 
-      const miniBtn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
+      const miniBtn  = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
       const bestPair = miniBtn?.dataset?.qbmPair || null;
-      const buyCA   = bestPair || rowCA;
-      result.push({ rowCA, buyCA });
+      const buyCA    = bestPair || rowCA;
+
+      seenSet.add(rowCA);
+      seenQueue.push({ rowCA, buyCA });
+
+      if (seenQueue.length > 3) {
+        const evicted = seenQueue.shift();
+        seenSet.delete(evicted.rowCA);
+      }
+
+      window.__ringArmedRowCAs = new Set(seenQueue.map(r => r.rowCA));
+      reconcileSlots();
     }
-    return result;
   }
 
   function reconcileSlots() {
-    const bestRows = getRowsWithBest();
-    if (!bestRows.length) return; // No best matches — keep existing slots unchanged
+    if (!seenQueue.length) return;
 
     const alreadyCovered = new Set(SLOTS.map(s => slotState[s].ca).filter(Boolean));
-    const newOnes = bestRows.filter(r => !alreadyCovered.has(r.buyCA));
+    const newOnes = seenQueue.filter(r => !alreadyCovered.has(r.buyCA));
 
     for (const { buyCA } of newOnes) {
-      // Only assign to empty slots — never evict existing best-match slots
       let assigned = false;
       for (let attempts = 0; attempts < SLOTS.length; attempts++) {
         const slot = SLOTS[nextSlotIdx];
@@ -77,7 +87,6 @@
         }
       }
       if (!assigned) {
-        // All slots full — evict oldest (round-robin) to make room for new best match
         const slot = SLOTS[nextSlotIdx];
         nextSlotIdx = (nextSlotIdx + 1) % SLOTS.length;
         slotState[slot].ca    = buyCA;
@@ -161,6 +170,6 @@
   }
 
   buildUI();
-  setInterval(reconcileSlots, 300);
+  setInterval(scanNewBestMatches, 300);
   console.log('[MASTER] Buyer Ring Master v1.1 active');
 })();
