@@ -124,6 +124,18 @@
     return span?.textContent.trim() || '';
   }
 
+  function getRowAgeAndMC(row) {
+    const ageEl = row.querySelector('span[class*="pointer-events-none"]');
+    const age   = ageEl?.textContent?.trim() || '';
+    let mc = '';
+    for (const c of row.querySelectorAll('div[class*="gap-[4px]"]')) {
+      const spans = [...c.querySelectorAll('span')];
+      const lbl   = spans.find(s => s.textContent.trim() === 'MC');
+      if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
+    }
+    return { age, mc };
+  }
+
   function getRowCA(row) {
     const meme = row.querySelector('a[href*="/meme/"]');
     if (meme) { const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
@@ -467,8 +479,14 @@
       const solSpan = el.querySelector('.qbm-sol');
       if (solSpan && solSpan.textContent !== solAmt) solSpan.textContent = solAmt;
 
+      const { age, mc } = getRowAgeAndMC(row);
       const infoBar = el.querySelector('.qbm-info');
-      if (infoBar) infoBar.innerHTML = '';
+      if (infoBar) {
+        const ageTxt = age ? `<span style="color:rgb(255,215,0);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${age}</span>` : '';
+        const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">MC ${mc}</span>` : '';
+        const html   = ageTxt + mcTxt;
+        if (infoBar.innerHTML !== html) infoBar.innerHTML = html;
+      }
 
       const ps = platStyle(best.platform);
       el.style.background = ps.bg;
