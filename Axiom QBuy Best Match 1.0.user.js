@@ -370,7 +370,6 @@
       const best = sessionBest.get(rowCA);
       if (!best) return;
       gradChannel.postMessage({ type: 'EXECUTE_BUY_CA', ca: best.ca });
-      executeBest(best);
     });
 
     document.body.appendChild(el);
