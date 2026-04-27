@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -14,9 +14,45 @@
   if (new URLSearchParams(location.search).get('tab') === 'grad') return;
 
   // ============================================================
+  // 0. SOL price cache + format helpers
+  // ============================================================
+  let solPriceUsd = 85.96;
+  function refreshSolPrice() {
+    try {
+      if (typeof window.__solPriceUsd === 'number' && window.__solPriceUsd > 0)
+        solPriceUsd = window.__solPriceUsd;
+    } catch (e) {}
+  }
+  setInterval(refreshSolPrice, 30000);
+  refreshSolPrice();
+
+  function formatAge(createdAt) {
+    if (!createdAt) return '';
+    const ms = Date.now() - new Date(createdAt).getTime();
+    if (!isFinite(ms) || ms < 0) return '';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h';
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + 'd';
+    const mo = Math.floor(d / 30);
+    if (mo < 12) return mo + 'mo';
+    return Math.floor(mo / 12) + 'y';
+  }
+  function formatMc(n) {
+    if (!n || !isFinite(n) || n <= 0) return '';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  // ============================================================
   // 1. DCT pHash
   // ============================================================
-
   const HASH_SIZE = 32, HASH_BITS = 8, CACHE_MAX = 500;
   const hashCache = new Map();
 
@@ -88,7 +124,6 @@
   // ============================================================
   // 2. search-v5 API
   // ============================================================
-
   async function searchTokenAPI(query, onlyBonded = false, onlyDexPaid = false) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
@@ -114,7 +149,6 @@
   // ============================================================
   // 3. Row utilities
   // ============================================================
-
   function getRowName(row) {
     const btn = row.querySelector('div[role="button"]');
     if (!btn) return '';
@@ -122,18 +156,6 @@
                || btn.querySelector('span.text-\\[16px\\]')
                || btn.querySelectorAll('span')[0];
     return span?.textContent.trim() || '';
-  }
-
-  function getRowAgeAndMC(row) {
-    const ageEl = row.querySelector('span[class*="pointer-events-none"]');
-    const age   = ageEl?.textContent?.trim() || '';
-    let mc = '';
-    for (const c of row.querySelectorAll('div[class*="gap-[4px]"]')) {
-      const spans = [...c.querySelectorAll('span')];
-      const lbl   = spans.find(s => s.textContent.trim() === 'MC');
-      if (lbl) { mc = spans.find(s => s !== lbl && s.textContent.trim())?.textContent.trim() || ''; break; }
-    }
-    return { age, mc };
   }
 
   function getRowCA(row) {
@@ -156,15 +178,13 @@
   // ============================================================
   // 4. Parallel Analyzer
   // ============================================================
-
   const MAX_CONC   = 3;
   const STAGGER_MS = 150;
   const started    = new Set();
   const queue      = [];
-  const sessionBest = new Map(); // rowCA → best match
-  let   activeCount  = 0;
-  let   lastStartMs  = 0;
-
+  const sessionBest = new Map();
+  let   activeCount = 0;
+  let   lastStartMs = 0;
   const MIN_MATCH_PCT = 55;
 
   window.__axiomHasBestMatch = ca => sessionBest.has(ca);
@@ -189,14 +209,12 @@
     const tickerMatch = s => norm(s.token.tokenTicker) === rn;
     const exactMatch  = s => nameMatch(s) || tickerMatch(s);
     const byPct       = (a, b) => b.pct - a.pct;
-
     const getPlatform = s => {
       if (isGrad(s)) return 'pump-migrado';
       if (s.token.protocol === 'bonk') return 'bonk';
       if (isDex(s)) return 'pump-dex';
       return 'pump-nodex';
     };
-
     function sortRest(list) {
       const tier1 = list.filter(s => s.pct >  85).sort(byPct);
       const tier2 = list.filter(s => s.pct >  72 && s.pct <= 85).sort(byPct);
@@ -204,15 +222,12 @@
       const tier4 = list.filter(s => s.pct >= MIN_MATCH_PCT && s.pct < 58.21).sort(byPct);
       return [...tier1, ...tier2, ...tier3, ...tier4];
     }
-
     const special = scored.filter(isGrad);
     const blues   = scored.filter(s => !isGrad(s) && exactMatch(s)).sort(byPct).slice(0, 3);
     const others  = scored.filter(s => !isGrad(s) && !exactMatch(s));
-
     let sortedSpecial;
     const hasExact    = special.some(exactMatch);
     const hasNameOnly = !hasExact && special.some(nameMatch);
-
     if (hasExact) {
       const ex    = special.filter(exactMatch);
       const ultra = ex.filter(s => s.pct > 85).sort(byPct);
@@ -225,7 +240,6 @@
     } else {
       sortedSpecial = sortRest(special);
     }
-
     return [...sortedSpecial, ...blues, ...sortRest(others)]
       .filter(s => s.pct >= MIN_MATCH_PCT)
       .map(s => ({ ...s, resolvedPlatform: getPlatform(s) }));
@@ -259,22 +273,30 @@
     const existing = sessionBest.get(rowCA);
     if (existing && s.pct <= existing.matchPct) return;
 
+    const t = s.token;
+    const matchedAge = formatAge(t.createdAt);
+    const priceSol   = (t.liquidityToken && t.liquidityToken > 0) ? (t.liquiditySol / t.liquidityToken) : 0;
+    const matchedMcUsd = priceSol * (t.supply || 0) * solPriceUsd;
+    const matchedMc  = formatMc(matchedMcUsd);
+
     sessionBest.set(rowCA, {
       rowCA,
-      ca:          s.token.tokenAddress,
-      tokenCA:     s.token.tokenAddress,
-      pairAddress: s.token.pairAddress || s.token.tokenAddress,
-      memeHref:    `/meme/${s.token.pairAddress || s.token.tokenAddress}?chain=sol`,
-      ticker:      s.token.tokenTicker || '',
-      name:        s.token.tokenName   || '',
-      imgSrc:      `https://axiomtrading.axiom-cdn.io/${s.token.tokenAddress}.webp`,
+      ca:          t.tokenAddress,
+      tokenCA:     t.tokenAddress,
+      pairAddress: t.pairAddress || t.tokenAddress,
+      memeHref:    `/meme/${t.pairAddress || t.tokenAddress}?chain=sol`,
+      ticker:      t.tokenTicker || '',
+      name:        t.tokenName   || '',
+      imgSrc:      `https://axiomtrading.axiom-cdn.io/${t.tokenAddress}.webp`,
       matchPct:    s.pct,
       platform:    s.resolvedPlatform,
+      matchedAge,
+      matchedMc,
+      matchedMcUsd,
     });
-    // Set data-qbm-pair immediately so Master reads tokenCA, not rowCA
     const btn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
-    if (btn) btn.dataset.qbmPair = s.token.tokenAddress;
-    console.log(`[BM] ✅ ${name} → ${s.token.tokenTicker} ${s.pct}% [${s.resolvedPlatform}]`);
+    if (btn) btn.dataset.qbmPair = t.tokenAddress;
+    console.log(`[BM] ✅ ${name} → ${t.tokenTicker} ${s.pct}% [${s.resolvedPlatform}] age=${matchedAge} mc=${matchedMc}`);
   }
 
   function tryStart() {
@@ -327,14 +349,17 @@
     });
   }
 
+  // Scan on mutations AND on a fixed interval — ensures row 0 is never missed
   new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
+  setInterval(scanRows, 500);
+  setTimeout(scanRows, 800); // initial scan once DOM settles
 
   // ============================================================
   // 5. Mini Buttons
   // ============================================================
-
   const miniPool = new Map();
   const BTN_W = 68.9, BTN_H = 30;
+  const lastNormalSize = { w: 48, h: 48 };
 
   function getSearchPanel() {
     return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
@@ -364,7 +389,7 @@
     el.setAttribute('data-qbm-mini', rowCA);
     el.style.cssText = `position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;` +
       `flex-direction:row;gap:4px;align-items:center;justify-content:center;` +
-      `width:${BTN_W}px;height:${BTN_H}px;border-radius:999px;`;
+      `border-radius:999px;transform:scale(0.7842);transform-origin:top left;`;
 
     const icon = document.createElement('i');
     icon.className = 'ri-flashlight-fill';
@@ -394,6 +419,14 @@
       'font-size:10px;font-weight:700;font-family:monospace;background:rgba(0,0,0,0.85);' +
       'border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
     el.appendChild(pctBadge);
+
+    const label = document.createElement('div');
+    label.className = 'qbm-label';
+    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;' +
+      'color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;' +
+      'pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
+    document.body.appendChild(label);
+    el._label = label;
 
     const infoBar = document.createElement('div');
     infoBar.className = 'qbm-info';
@@ -435,13 +468,18 @@
 
   function updateMiniButtons() {
     if (isPanelVisible()) {
-      miniPool.forEach(btn => { if (btn?.isConnected) btn.style.display = 'none'; });
+      miniPool.forEach(btn => {
+        if (btn?.isConnected) btn.style.display = 'none';
+        if (btn?._label) btn._label.style.display = 'none';
+      });
       return;
     }
 
-    const rows  = document.querySelectorAll('[class*="group/pulseRow"]');
-    const seen  = new Set();
+    const rows   = document.querySelectorAll('[class*="group/pulseRow"]');
+    const seen   = new Set();
     const solAmt = getSOLAmount() + ' SOL';
+    const btnW   = lastNormalSize.w;
+    const btnH   = lastNormalSize.h;
 
     rows.forEach(row => {
       const ca  = getRowCA(row);
@@ -462,15 +500,17 @@
       let posLeft;
       if (solDiv) {
         const sr = solDiv.getBoundingClientRect();
-        posLeft  = sr.left + sr.width / 2 - BTN_W / 2 + 40;
+        posLeft  = sr.left + sr.width / 2 - btnW / 2 + 75;
       } else {
-        posLeft = rect.right - BTN_W - 43;
+        posLeft = rect.right - btnW - 8;
       }
-      const posTop = rect.top + rect.height / 2 - BTN_H / 2;
+      const posTop = rect.top + rect.height / 2 - btnH / 2 + 30;
 
       const el = getOrCreateMiniBtn(ca || key);
       el.style.left      = posLeft + 'px';
       el.style.top       = posTop  + 'px';
+      el.style.width     = btnW + 'px';
+      el.style.height    = btnH + 'px';
       el.dataset.qbmPair = best.tokenCA || '';
 
       const coinImg = el.querySelector('.qbm-coin-img');
@@ -481,17 +521,19 @@
         const txt = best.matchPct.toFixed(1) + '%';
         if (pctBadge.textContent !== txt) pctBadge.textContent = txt;
         const col = badgeColor(best.matchPct);
-        pctBadge.style.color = col; pctBadge.style.borderColor = col;
+        pctBadge.style.color = col;
+        pctBadge.style.borderColor = col;
       }
 
       const solSpan = el.querySelector('.qbm-sol');
       if (solSpan && solSpan.textContent !== solAmt) solSpan.textContent = solAmt;
 
-      const { age, mc } = getRowAgeAndMC(row);
+      const age = best.matchedAge || '';
+      const mc  = best.matchedMc  || '';
       const infoBar = el.querySelector('.qbm-info');
       if (infoBar) {
         const ageTxt = age ? `<span style="color:rgb(255,215,0);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${age}</span>` : '';
-        const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">MC ${mc}</span>` : '';
+        const mcTxt  = mc  ? `<span style="color:rgb(91,184,255);background:rgba(0,0,0,0.7);border-radius:4px;padding:1px 5px;">${mc}</span>` : '';
         const html   = ageTxt + mcTxt;
         if (infoBar.innerHTML !== html) infoBar.innerHTML = html;
       }
@@ -501,18 +543,28 @@
       el.style.border     = `1.5px solid ${ps.border}`;
       el.style.boxShadow  = `${ps.shadow} 0px 0px 8px 2px`;
       el.style.display    = 'flex';
+
+      const label = el._label;
+      if (label) {
+        const nameText = best.name || best.ticker || '';
+        if (label.textContent !== nameText) label.textContent = nameText;
+        label.style.left    = (posLeft + (btnW * 0.7842) / 2) + 'px';
+        label.style.top     = (posTop - 18) + 'px';
+        label.style.display = '';
+      }
     });
 
     miniPool.forEach((btn, ca) => {
-      if (!seen.has(ca) && btn?.isConnected) btn.style.display = 'none';
+      if (!seen.has(ca) && btn?.isConnected) {
+        btn.style.display = 'none';
+        if (btn._label) btn._label.style.display = 'none';
+      }
     });
   }
 
-  function getSearchPanel() {
-    return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
-      .find(el => el.querySelector('input') || el.querySelector('[class*="group/quickBuyButton"]')) || null;
-  }
-
+  // ============================================================
+  // 6. Buy execution (independent — no axiomUserOpen)
+  // ============================================================
   function typeInPanel(panel, text) {
     const input = panel.querySelector('input');
     if (!input) return false;
@@ -527,8 +579,20 @@
     if (!panel) return;
     const wrapper = panel.parentElement;
     const overlay = wrapper?.parentElement;
-    if (wrapper) { wrapper.style.removeProperty('z-index'); wrapper.style.removeProperty('pointer-events'); }
-    if (overlay) { overlay.style.removeProperty('z-index'); overlay.style.removeProperty('pointer-events'); }
+    if (wrapper) {
+      wrapper.style.removeProperty('z-index');
+      wrapper.style.removeProperty('pointer-events');
+      wrapper.style.removeProperty('transition');
+      wrapper.style.removeProperty('animation');
+    }
+    if (overlay) {
+      overlay.style.removeProperty('z-index');
+      overlay.style.removeProperty('pointer-events');
+      overlay.style.removeProperty('background');
+      overlay.style.removeProperty('backdrop-filter');
+      overlay.style.removeProperty('transition');
+      overlay.style.removeProperty('animation');
+    }
   }
 
   function fireClickOnEl(el) {
@@ -540,28 +604,27 @@
   }
 
   function executeBest(best) {
-    window.axiomUserOpen = true;
     const doExecute = () => {
       bringPanelToFront();
       const panel = getSearchPanel();
-      if (!panel) { window.axiomUserOpen = false; return; }
+      if (!panel) return;
       const query = best.tokenCA || best.ca;
-      if (!query) { window.axiomUserOpen = false; return; }
+      if (!query) return;
       const prevBtns = new Set(panel.querySelectorAll('[class*="group/quickBuyButton"]'));
       typeInPanel(panel, query);
       const start = Date.now();
       const poll = () => {
-        const btns = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
+        const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
         const fresh = btns.filter(b => !prevBtns.has(b));
-        if (fresh.length > 0) { fireClickOnEl(fresh[0]); setTimeout(() => { window.axiomUserOpen = false; }, 400); return; }
-        if (Date.now() - start > 1500) { window.axiomUserOpen = false; return; }
+        if (fresh.length > 0) { fireClickOnEl(fresh[0]); return; }
+        if (Date.now() - start > 1500) return;
         setTimeout(poll, 50);
       };
       setTimeout(poll, 50);
     };
     if (!getSearchPanel()) {
       const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
-      if (!searchBtn) { window.axiomUserOpen = false; return; }
+      if (!searchBtn) return;
       searchBtn.click();
       setTimeout(doExecute, 150);
     } else {
@@ -569,6 +632,9 @@
     }
   }
 
+  // ============================================================
+  // 7. Main loop + exports
+  // ============================================================
   setInterval(updateMiniButtons, 16);
 
   window.__axiomGetTop3BM2 = () => {
@@ -586,8 +652,11 @@
     return result;
   };
 
-  window.__qbBM = { sessionBest, started, queue, hashCache,
-    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size }) };
+  window.__qbBM = {
+    sessionBest, started, queue, hashCache,
+    setSolPrice: p => { window.__solPriceUsd = p; solPriceUsd = p; },
+    getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
+  };
 
-  console.log('⭐ Axiom QBuy Best Match v9.0 loaded');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.9 — independent, constant scan');
 })();
