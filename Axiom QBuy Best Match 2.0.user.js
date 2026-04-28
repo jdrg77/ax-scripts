@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.15
+// @version      1.16
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -124,7 +124,7 @@
   // ============================================================
   // 2. search-v5 API
   // ============================================================
-  async function searchTokenAPI(query, onlyBonded = false) {
+  async function searchTokenAPI(query) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST',
@@ -136,7 +136,7 @@
           sort: 'mcap',
           isOg: false,
           includedQuoteTokens: ['SOL', 'USDC', 'USD1'],
-          onlyBonded,
+          onlyBonded: false,
           onlyDexPaid: false,
           maxResults: 20,
           v: Date.now(),
@@ -146,6 +146,20 @@
       return await res.json();
     } catch (e) { return null; }
   }
+
+  const PUMP_MIGRATED_PROTOCOLS = new Set(['Pump AMM', 'Raydium V4']);
+  const BONK_PROTOCOLS          = new Set(['LaunchLab', 'Raydium CPMM']);
+
+  function isAcceptedToken(t) {
+    if (PUMP_MIGRATED_PROTOCOLS.has(t.protocol)) return true;
+    if (t.protocol === 'Raydium CPMM')           return true;
+    if (t.protocol === 'Pump V1')                return !!t.dexPaid;
+    if (t.protocol === 'LaunchLab')              return !!t.dexPaid;
+    return false;
+  }
+
+  function isMigrated(t)        { return PUMP_MIGRATED_PROTOCOLS.has(t.protocol) || t.protocol === 'Raydium CPMM'; }
+  function isPumpDexNoMig(t)    { return t.protocol === 'Pump V1' && !!t.dexPaid; }
 
   // ============================================================
   // 3. Row utilities
@@ -231,9 +245,9 @@
     const sortByAgeMC     = (a, b) => a.ageHours !== b.ageHours ? a.ageHours - b.ageHours : b.marketCap - a.marketCap;
 
     const getPlatform = s => {
-      if (isGrad(s)) return 'pump-migrado';
-      if (s.token.protocol === 'bonk') return 'bonk';
-      if (isDex(s)) return 'pump-dex';
+      if (isGrad(s))                              return 'pump-migrado';
+      if (BONK_PROTOCOLS.has(s.token.protocol))   return 'bonk';
+      if (isDex(s))                               return 'pump-dex';
       return 'pump-nodex';
     };
     const platMatches = s => {
@@ -298,21 +312,14 @@
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
 
-    const [allResults, gradResults] = await Promise.all([
-      searchTokenAPI(name, false),
-      searchTokenAPI(name, true),
-    ]);
+    const raw = await searchTokenAPI(name);
+    if (!raw || !raw.length) return;
 
-    const gradSet = new Set((gradResults || []).map(t => t.tokenAddress));
-    const dexSet  = new Set();
-
-    const seen = new Set();
-    const unique = [...(gradResults || []), ...(allResults || [])].filter(t => {
-      if (seen.has(t.tokenAddress)) return false;
-      seen.add(t.tokenAddress);
-      return true;
-    });
+    const unique = raw.filter(isAcceptedToken);
     if (!unique.length) return;
+
+    const gradSet = new Set(unique.filter(isMigrated).map(t => t.tokenAddress));
+    const dexSet  = new Set(unique.filter(isPumpDexNoMig).map(t => t.tokenAddress));
 
     const scored = await scoreResults(unique, refHash);
     const ranked = rankScored(scored, name, gradSet, dexSet, rowPlatform);
