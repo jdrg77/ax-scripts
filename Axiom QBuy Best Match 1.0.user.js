@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.31
+// @version      8.32
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -433,7 +433,7 @@
       if (rect.width < 10) return;
 
       const el   = getOrCreateMiniBtn(rowCA, best);
-      if (best.ca) el.dataset.qbmPair = best.ca;
+      el.dataset.qbmPair = best.ca || best.pairAddress || '';
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
