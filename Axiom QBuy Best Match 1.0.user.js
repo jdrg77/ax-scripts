@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.32
+// @version      8.33
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -302,7 +302,7 @@
         : (winner._pairAddress || memeHref?.match(/\/meme\/([A-Za-z0-9]{32,})/)?.[1] || null);
       sessionBest.set(rowCA, {
         rowCA,
-        ca:          getCAFromBtn(winner) || rowCA,
+        ca:          getCAFromBtn(winner) || null,
         pairAddress,
         newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
         memeHref,
