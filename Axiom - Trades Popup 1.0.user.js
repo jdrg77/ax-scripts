@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.10
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -272,8 +272,15 @@
     });
   }
 
+  document.addEventListener('click', () => {
+    currentCA = null;
+    clearInterval(refreshTimer);
+    clearTimeout(hideTimer);
+    if (popup) popup.style.display = 'none';
+  }, true);
+
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   setInterval(scan, 500);
 
-  console.log('🔍 Axiom Trades Popup v1.9 loaded');
+  console.log('🔍 Axiom Trades Popup v1.10 loaded');
 })();
