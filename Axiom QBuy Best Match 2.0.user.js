@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.16
+// @version      1.17
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -414,8 +414,9 @@
   // 5. Mini Buttons
   // ============================================================
   const miniPool = new Map();
-  const BTN_W = 68.9, BTN_H = 30;
-  const lastNormalSize = { w: 48, h: 48 };
+  const BTN_W = 68, BTN_H = 23;
+  const AVATAR = 44, AVATAR_OFFSET = 48;
+  const lastNormalSize = { w: 68, h: 23 };
 
   function getSearchPanel() {
     return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
@@ -443,24 +444,27 @@
   function createMiniBtn(rowCA) {
     const el = document.createElement('button');
     el.setAttribute('data-qbm-mini', rowCA);
-    el.style.cssText = `position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;` +
-      `flex-direction:row;gap:4px;align-items:center;justify-content:center;` +
-      `border-radius:999px;transform:scale(0.7842);transform-origin:top left;`;
+    el.style.cssText = 'position:fixed;z-index:99999;display:none;overflow:visible;cursor:pointer;' +
+      'flex-direction:row;gap:3px;align-items:center;justify-content:center;' +
+      'border-radius:999px;padding:0 8px;box-sizing:border-box;';
 
     const icon = document.createElement('i');
     icon.className = 'ri-flashlight-fill';
-    icon.style.cssText = 'font-size:16px;position:relative;z-index:10;pointer-events:none;';
+    icon.style.cssText = 'font-size:12px;position:relative;z-index:10;pointer-events:none;';
     el.appendChild(icon);
 
     const solSpan = document.createElement('span');
     solSpan.className = 'qbm-sol';
-    solSpan.style.cssText = 'font-size:12px;font-weight:700;position:relative;z-index:10;pointer-events:none;';
+    solSpan.style.cssText = 'font-size:9px;font-weight:700;position:relative;z-index:10;pointer-events:none;';
     el.appendChild(solSpan);
 
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
-    coinImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;position:absolute;' +
-      'left:-66px;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;' +
+    coinImg.style.cssText = 'width:' + AVATAR + 'px;height:' + AVATAR + 'px;' +
+      'min-width:' + AVATAR + 'px;min-height:' + AVATAR + 'px;aspect-ratio:1/1;' +
+      'border-radius:50%;object-fit:cover;position:absolute;' +
+      'left:-' + AVATAR_OFFSET + 'px;top:50%;transform:translateY(-50%);' +
+      'pointer-events:auto;cursor:pointer;flex-shrink:0;' +
       'box-shadow:rgba(255,255,255,0.35) 0px 0px 0px 1px,rgba(0,0,0,0.4) 0px 2px 8px;';
     coinImg.addEventListener('click', e => {
       e.stopPropagation(); e.preventDefault();
@@ -471,24 +475,27 @@
 
     const pctBadge = document.createElement('span');
     pctBadge.className = 'qbm-pct';
-    pctBadge.style.cssText = 'position:absolute;left:-36px;top:calc(50% - 25px);transform:translate(-50%,-50%);' +
-      'font-size:10px;font-weight:700;font-family:monospace;background:rgba(0,0,0,0.85);' +
-      'border-radius:8px;padding:1px 5px;pointer-events:none;white-space:nowrap;border:1.5px solid currentColor;z-index:10001;';
+    pctBadge.style.cssText = 'position:absolute;left:-26px;top:calc(50% - 22px);' +
+      'transform:translate(-50%,-50%);font-size:7px;font-weight:700;font-family:monospace;' +
+      'background:rgba(0,0,0,0.85);border-radius:5px;padding:0 3px;pointer-events:none;' +
+      'white-space:nowrap;border:1px solid currentColor;z-index:10001;line-height:1.4;';
     el.appendChild(pctBadge);
 
     const label = document.createElement('div');
     label.className = 'qbm-label';
-    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;font-family:monospace;' +
-      'color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;padding:1px 4px;' +
-      'pointer-events:none;white-space:nowrap;z-index:100000;transform:translateX(-50%);';
+    label.style.cssText = 'position:fixed;display:none;font-size:10px;font-weight:600;' +
+      'font-family:monospace;color:#ccc;background:rgba(0,0,0,0.65);border-radius:4px;' +
+      'padding:1px 4px;pointer-events:none;white-space:nowrap;z-index:100000;' +
+      'transform:translate(-50%,-100%);';
     document.body.appendChild(label);
     el._label = label;
 
     const infoBar = document.createElement('div');
     infoBar.className = 'qbm-info';
-    infoBar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:2px;' +
-      'display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;' +
-      'font-size:11px;font-weight:700;font-family:monospace;pointer-events:none;white-space:nowrap;z-index:10001;';
+    infoBar.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);' +
+      'margin-top:2px;display:flex;flex-direction:row;align-items:center;justify-content:center;' +
+      'gap:3px;font-size:9px;font-weight:700;font-family:monospace;pointer-events:none;' +
+      'white-space:nowrap;z-index:10001;';
     el.appendChild(infoBar);
 
     el.addEventListener('click', e => {
