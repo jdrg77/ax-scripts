@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.14
+// @version      1.15
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -124,7 +124,7 @@
   // ============================================================
   // 2. search-v5 API
   // ============================================================
-  async function searchTokenAPI(query, onlyBonded = false, onlyDexPaid = false) {
+  async function searchTokenAPI(query, onlyBonded = false) {
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST',
@@ -137,7 +137,8 @@
           isOg: false,
           includedQuoteTokens: ['SOL', 'USDC', 'USD1'],
           onlyBonded,
-          onlyDexPaid,
+          onlyDexPaid: false,
+          maxResults: 20,
           v: Date.now(),
         }),
       });
@@ -297,16 +298,16 @@
     const refHash = await new Promise(resolve => getHash(refImgSrc, resolve));
     if (!refHash) return;
 
-    const [gradResults, dexResults] = await Promise.all([
-      searchTokenAPI(name, true,  false),
-      searchTokenAPI(name, false, true),
+    const [allResults, gradResults] = await Promise.all([
+      searchTokenAPI(name, false),
+      searchTokenAPI(name, true),
     ]);
 
     const gradSet = new Set((gradResults || []).map(t => t.tokenAddress));
-    const dexSet  = new Set((dexResults  || []).map(t => t.tokenAddress));
+    const dexSet  = new Set();
 
     const seen = new Set();
-    const unique = [...(gradResults || []), ...(dexResults || [])].filter(t => {
+    const unique = [...(gradResults || []), ...(allResults || [])].filter(t => {
       if (seen.has(t.tokenAddress)) return false;
       seen.add(t.tokenAddress);
       return true;
