@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.28
+// @version      8.29
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -508,13 +508,15 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
-      window.__qbmBM1CAs.add(rowCA);
+      if (best.ca) window.__qbmBM1CAs.add(best.ca);
     });
 
     miniPool.forEach((el, ca) => {
       if (!seenCAs.has(ca)) {
         el.style.display = 'none';
         if (el._label) el._label.style.display = 'none';
+        const b = sessionBest.get(ca);
+        if (b?.ca) window.__qbmBM1CAs.delete(b.ca);
         window.__qbmBM1CAs.delete(ca);
       }
     });
