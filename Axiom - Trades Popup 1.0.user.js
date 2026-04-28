@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Trades Popup
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -167,24 +167,33 @@
     p.innerHTML = header + '<div style="font-size:0">' + rows + '</div>';
   }
 
-  function positionPopup(clientX, clientY) {
-    const p = ensurePopup();
-    const pw = 292, ph = 380;
-    let left = clientX + 16;
-    let top  = clientY - 80;
-    if (left + pw > window.innerWidth  - 8) left = clientX - pw - 16;
-    if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
+  function getFinalStretchLeft() {
+    const hdr = [...document.querySelectorAll('*')]
+      .find(el => el.children.length === 0 && el.textContent.trim() === 'Final Stretch');
+    if (!hdr) return 602;
+    let col = hdr;
+    while (col.parentElement && col.getBoundingClientRect().width < 400) col = col.parentElement;
+    return col.getBoundingClientRect().left;
+  }
+
+  function positionPopup(triggerEl) {
+    const p  = ensurePopup();
+    const ph = 520;
+    const left = getFinalStretchLeft();
+    const r    = triggerEl.getBoundingClientRect();
+    let top    = r.top + r.height / 2 - ph / 2;
+    if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
     if (top < 8) top = 8;
     p.style.left = left + 'px';
     p.style.top  = top  + 'px';
   }
 
-  function showFor(pairAddress, clientX, clientY) {
+  function showFor(pairAddress, triggerEl) {
     clearTimeout(hideTimer);
     clearInterval(refreshTimer);
     const p = ensurePopup();
     currentCA = pairAddress;
-    positionPopup(clientX, clientY);
+    positionPopup(triggerEl);
     p.style.display = 'block';
     p.innerHTML = '<div style="padding:14px;color:#777a8c;text-align:center;font-size:12px">Cargando…</div>';
 
@@ -213,12 +222,9 @@
   function hook(el, getCA) {
     if (el.__tpHooked) return;
     el.__tpHooked = true;
-    el.addEventListener('mouseenter', e => {
+    el.addEventListener('mouseenter', () => {
       const ca = getCA(el);
-      if (ca) showFor(ca, e.clientX, e.clientY);
-    });
-    el.addEventListener('mousemove', e => {
-      if (currentCA) positionPopup(e.clientX, e.clientY);
+      if (ca) showFor(ca, el);
     });
     el.addEventListener('mouseleave', hide);
   }
@@ -230,9 +236,17 @@
     return m ? m[1] : null;
   }
 
+  function getMiniPairAddress(el) {
+    const rowCA = el.getAttribute('data-qbm-mini') || el.closest('[data-qbm-mini]')?.getAttribute('data-qbm-mini');
+    return window.__qbBM?.sessionBest?.get(rowCA)?.pairAddress || rowCA;
+  }
+
   function scan() {
     document.querySelectorAll('[data-qbm-mini]').forEach(btn => {
-      hook(btn, el => el.dataset.qbmPair || el.getAttribute('data-qbm-mini'));
+      hook(btn, getMiniPairAddress);
+      btn.querySelectorAll('.qbm-coin-img').forEach(img => {
+        hook(img, getMiniPairAddress);
+      });
     });
 
     document.querySelectorAll('button').forEach(btn => {
@@ -261,5 +275,5 @@
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   setInterval(scan, 500);
 
-  console.log('🔍 Axiom Trades Popup v1.8 loaded');
+  console.log('🔍 Axiom Trades Popup v1.9 loaded');
 })();
