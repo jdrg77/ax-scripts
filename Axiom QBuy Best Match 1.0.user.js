@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.33
+// @version      8.34
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -102,14 +102,14 @@
   // === CA extraction ===
 
   function getCAFromRow(row) {
-    const meme = row.querySelector('a[href*="/meme/"]');
-    if (meme) {
-      const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
-      if (m) return m[1];
-    }
     const pump = row.querySelector('a[href*="pump.fun/coin/"]');
     if (pump) {
       const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
+      if (m) return m[1];
+    }
+    const meme = row.querySelector('a[href*="/meme/"]');
+    if (meme) {
+      const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
       if (m) return m[1];
     }
     return null;
