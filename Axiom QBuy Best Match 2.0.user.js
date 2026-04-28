@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.13
+// @version      1.14
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -527,7 +527,7 @@
       if (!key || seen.has(key)) return;
       seen.add(key);
 
-      if (window.__qbmBM1CAs?.has(key)) return;
+      if (row.hasAttribute('data-bm1-active')) return;
       const best = sessionBest.get(ca || key);
       if (!best) return;
 
@@ -699,5 +699,5 @@
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match 2 v1.13 — rows 2-4, skips BM1 CAs');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.14 — rows 2-4, skips data-bm1-active rows');
 })();

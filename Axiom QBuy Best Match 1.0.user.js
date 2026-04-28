@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.28
+// @version      8.31
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,7 +17,6 @@
 
   // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad, age, mc, solText }
   const sessionBest = new Map();
-  window.__qbmBM1CAs = new Set();
   const _prevHasBestMatch = window.__axiomHasBestMatch;
   window.__axiomHasBestMatch = ca => sessionBest.has(ca) || !!_prevHasBestMatch?.(ca);
   // Mini button pool: rowCA → DOM element
@@ -416,8 +415,9 @@
       return;
     }
 
-    const rows    = document.querySelectorAll('[class*="group/pulseRow"]');
-    const seenCAs = new Set();
+    const rows       = document.querySelectorAll('[class*="group/pulseRow"]');
+    const seenCAs    = new Set();
+    const coveredRows = new Set();
 
     rows.forEach((row, rowIdx) => {
       const rowCA = getCAFromRow(row);
@@ -508,14 +508,18 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
-      window.__qbmBM1CAs.add(rowCA);
+      row.setAttribute('data-bm1-active', '1');
+      coveredRows.add(row);
+    });
+
+    document.querySelectorAll('[data-bm1-active]').forEach(r => {
+      if (!coveredRows.has(r)) r.removeAttribute('data-bm1-active');
     });
 
     miniPool.forEach((el, ca) => {
       if (!seenCAs.has(ca)) {
         el.style.display = 'none';
         if (el._label) el._label.style.display = 'none';
-        window.__qbmBM1CAs.delete(ca);
       }
     });
   }
