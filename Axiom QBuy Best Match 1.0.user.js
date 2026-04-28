@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.29
+// @version      8.30
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -103,16 +103,10 @@
   // === CA extraction ===
 
   function getCAFromRow(row) {
-    const meme = row.querySelector('a[href*="/meme/"]');
-    if (meme) {
-      const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/);
-      if (m) return m[1];
-    }
     const pump = row.querySelector('a[href*="pump.fun/coin/"]');
-    if (pump) {
-      const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/);
-      if (m) return m[1];
-    }
+    if (pump) { const m = pump.href.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+    const meme = row.querySelector('a[href*="/meme/"]');
+    if (meme) { const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
     return null;
   }
 
@@ -508,15 +502,13 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
-      if (best.ca) window.__qbmBM1CAs.add(best.ca);
+      window.__qbmBM1CAs.add(rowCA);
     });
 
     miniPool.forEach((el, ca) => {
       if (!seenCAs.has(ca)) {
         el.style.display = 'none';
         if (el._label) el._label.style.display = 'none';
-        const b = sessionBest.get(ca);
-        if (b?.ca) window.__qbmBM1CAs.delete(b.ca);
         window.__qbmBM1CAs.delete(ca);
       }
     });
