@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.18
+// @version      1.19
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -604,8 +604,8 @@
       if (label) {
         const nameText = best.name || best.ticker || '';
         if (label.textContent !== nameText) label.textContent = nameText;
-        label.style.left    = (posLeft + (btnW * 0.7842) / 2) + 'px';
-        label.style.top     = (posTop - 6) + 'px';
+        label.style.left    = (posLeft + (btnW * 0.7842) / 2 - 4) + 'px';
+        label.style.top     = (posTop - 5) + 'px';
         label.style.display = '';
       }
     });
