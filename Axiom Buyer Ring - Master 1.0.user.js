@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -51,7 +51,8 @@
 
       const miniBtn  = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
       const bestPair = miniBtn?.dataset?.qbmPair || null;
-      const buyCA    = bestPair || rowCA;
+      const buyCA    = bestPair;
+      if (!buyCA) continue;
 
       if (seenQueue.length >= 3) {
         const evicted = seenQueue.shift();
@@ -170,5 +171,5 @@
 
   buildUI();
   setInterval(scanNewBestMatches, 300);
-  console.log('[MASTER] Buyer Ring Master v1.2 active');
+  console.log('[MASTER] Buyer Ring Master v1.3 active');
 })();
