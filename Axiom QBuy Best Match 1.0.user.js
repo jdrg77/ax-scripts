@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.35
+// @version      8.36
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -336,6 +336,24 @@
     el.style.cursor          = 'pointer';
     el.style.transform       = 'scale(0.7842)';
     el.style.transformOrigin = 'top-left';
+
+    if (!template) {
+      el.style.borderRadius   = '999px';
+      el.style.padding        = '0 8px';
+      el.style.boxSizing      = 'border-box';
+      el.style.flexDirection  = 'row';
+      el.style.gap            = '3px';
+      el.style.alignItems     = 'center';
+      el.style.justifyContent = 'center';
+      const icon = document.createElement('i');
+      icon.className = 'ri-flashlight-fill';
+      icon.style.cssText = 'font-size:12px;position:relative;z-index:10;pointer-events:none;color:#000;';
+      el.appendChild(icon);
+      const amtSpan = document.createElement('span');
+      amtSpan.className = 'qbm-amount';
+      amtSpan.style.cssText = 'font-size:9px;font-weight:700;position:relative;z-index:10;pointer-events:none;color:#000;';
+      el.appendChild(amtSpan);
+    }
 
     const coinImg = document.createElement('img');
     coinImg.className = 'qbm-coin-img';
