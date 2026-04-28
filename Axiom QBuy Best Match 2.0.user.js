@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.12
+// @version      1.13
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -194,7 +194,8 @@
   let   lastStartMs = 0;
   const MIN_MATCH_PCT = 55;
 
-  window.__axiomHasBestMatch = ca => sessionBest.has(ca);
+  const _prevHasBestMatch = window.__axiomHasBestMatch;
+  window.__axiomHasBestMatch = ca => sessionBest.has(ca) || !!_prevHasBestMatch?.(ca);
 
   async function scoreResults(results, refHash) {
     if (!results?.length) return [];
@@ -526,6 +527,7 @@
       if (!key || seen.has(key)) return;
       seen.add(key);
 
+      if (window.__qbmBM1CAs?.has(key)) return;
       const best = sessionBest.get(ca || key);
       if (!best) return;
 
@@ -697,5 +699,5 @@
     getState: () => ({ active: activeCount, queued: queue.length, analyzed: started.size, results: sessionBest.size, solPriceUsd }),
   };
 
-  console.log('⭐ Axiom QBuy Best Match 2 v1.12 — rows 2-4 only');
+  console.log('⭐ Axiom QBuy Best Match 2 v1.13 — rows 2-4, skips BM1 CAs');
 })();

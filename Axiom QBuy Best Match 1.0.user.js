@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.26
+// @version      8.27
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,7 +17,9 @@
 
   // Session Map: rowCA → { rowCA, ca, ticker, name, imgSrc, matchPct, isGrad, age, mc, solText }
   const sessionBest = new Map();
-  window.__axiomHasBestMatch = ca => sessionBest.has(ca);
+  window.__qbmBM1CAs = new Set();
+  const _prevHasBestMatch = window.__axiomHasBestMatch;
+  window.__axiomHasBestMatch = ca => sessionBest.has(ca) || !!_prevHasBestMatch?.(ca);
   // Mini button pool: rowCA → DOM element
   const miniPool    = new Map();
   let lastGlowBtns  = [];
@@ -141,7 +143,15 @@
 
   function getCAFromBtn(btn) {
     if (btn._isGrad) return btn.ca || null;
-    return btn._ca || null;
+    const row = btn._original?.closest('[class*="max-h-[64px]"]');
+    if (row) {
+      for (const a of row.querySelectorAll('a[href]')) {
+        const h = a.href || '';
+        if (h.includes('pump.fun')) { const m = h.match(/\/coin\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
+        if (h.includes('bonk'))     { const m = h.match(/\/([A-Za-z0-9]{32,})/);       if (m) return m[1]; }
+      }
+    }
+    return null;
   }
 
   function getTopCA() {
@@ -414,6 +424,7 @@
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
 
+      if (rowIdx !== 0) return;
       if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
@@ -423,7 +434,7 @@
       if (rect.width < 10) return;
 
       const el   = getOrCreateMiniBtn(rowCA, best);
-      if (best.pairAddress) el.dataset.qbmPair = best.pairAddress;
+      if (best.ca) el.dataset.qbmPair = best.ca;
       const btnW = lastNormalSize.w;
       const btnH = lastNormalSize.h;
 
@@ -498,12 +509,14 @@
       el.style.boxShadow = `0 0 8px 2px ${platGlow}`;
 
       el.style.display = 'flex';
+      window.__qbmBM1CAs.add(rowCA);
     });
 
     miniPool.forEach((el, ca) => {
       if (!seenCAs.has(ca)) {
         el.style.display = 'none';
         if (el._label) el._label.style.display = 'none';
+        window.__qbmBM1CAs.delete(ca);
       }
     });
   }
