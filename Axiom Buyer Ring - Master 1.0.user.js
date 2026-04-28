@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -55,7 +55,9 @@
       if (!buyCA) continue;
 
       if (seenQueue.length >= 3) {
-        seenQueue.shift(); // keep queue bounded; do NOT free slot — slots only clear on buy
+        const evicted = seenQueue.shift();
+        const evictedSlot = SLOTS.find(s => slotState[s].ca === evicted.buyCA);
+        if (evictedSlot) { slotState[evictedSlot].ca = null; slotState[evictedSlot].ready = false; }
       }
 
       seenSet.add(rowCA);
