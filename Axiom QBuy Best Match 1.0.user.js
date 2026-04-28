@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.27
+// @version      8.28
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -424,7 +424,6 @@
       if (!rowCA || seenCAs.has(rowCA)) return;
       seenCAs.add(rowCA);
 
-      if (rowIdx !== 0) return;
       if (awaitingT2Confirm && rowIdx === 0) return;
 
       const best = sessionBest.get(rowCA);
