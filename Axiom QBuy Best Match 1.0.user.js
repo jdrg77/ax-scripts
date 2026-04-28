@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.34
+// @version      8.35
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,8 @@
 
 (function () {
   'use strict';
-  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
+  const _p = new URLSearchParams(location.search);
+  if (_p.get('tab') === 'grad' || _p.get('role') === 'buyer') return;
 
   const gradChannel = new BroadcastChannel('axiom-tabs');
 

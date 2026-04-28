@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.20
+// @version      1.21
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,8 @@
 
 (function () {
   'use strict';
-  if (new URLSearchParams(location.search).get('tab') === 'grad') return;
+  const _p = new URLSearchParams(location.search);
+  if (_p.get('tab') === 'grad' || _p.get('role') === 'buyer') return;
 
   // ============================================================
   // 0. SOL price cache + format helpers
