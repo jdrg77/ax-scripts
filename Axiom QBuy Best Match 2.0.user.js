@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.19
+// @version      1.20
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -201,7 +201,7 @@
   // 4. Parallel Analyzer
   // ============================================================
   const MAX_CONC   = 3;
-  const STAGGER_MS = 58;
+  const STAGGER_MS = 0;
   const started    = new Set();
   const queue      = [];
   const sessionBest = new Map();
