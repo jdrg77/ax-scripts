@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Slot
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -20,6 +20,30 @@
   let armedCA   = null;
 
   document.title = `🛒 Buyer ${SLOT}`;
+
+  // Hide everything except the search panel — reduces CPU dramatically
+  const _style = document.createElement('style');
+  _style.textContent = `
+    [class*="group/pulseRow"], [class*="virtualList"],
+    [class*="pulse-column"], [class*="PulseColumn"],
+    [class*="col-"], [class*="NewPairs"], [class*="FinalStretch"],
+    [class*="Migrated"] { display: none !important; }
+  `;
+  document.head.appendChild(_style);
+
+  // Also hide via DOM once loaded — catch containers not covered by class names
+  function hideFeeds() {
+    ['New Pairs', 'Final Stretch', 'Migrated'].forEach(name => {
+      const hdr = [...document.querySelectorAll('h2,h3,h4,span,div')]
+        .find(el => el.children.length === 0 && el.textContent.trim() === name);
+      if (!hdr) return;
+      let col = hdr;
+      while (col.parentElement && col.getBoundingClientRect().width < 400) col = col.parentElement;
+      col.style.setProperty('display', 'none', 'important');
+    });
+  }
+  setTimeout(hideFeeds, 1000);
+  setTimeout(hideFeeds, 3000);
 
   function getPanel() {
     return [...document.querySelectorAll('[class*="bg-backgroundTertiary"][class*="pointer-events-auto"]')]
@@ -132,7 +156,7 @@
 
   setTimeout(() => ensurePanelOpen(() => {
     console.log(`[SLOT ${SLOT}] panel pre-opened, ready`);
-  }), 1500);
+  }), 800);
 
-  console.log(`[SLOT ${SLOT}] Buyer Ring Slot v1.1 active`);
+  console.log(`[SLOT ${SLOT}] Buyer Ring Slot v1.2 active`);
 })();
