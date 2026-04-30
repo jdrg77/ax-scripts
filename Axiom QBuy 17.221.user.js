@@ -960,7 +960,7 @@ function navigateToMeme(row, fallbackCA) {
           return;
         }
         fireClick(originalBtn);
-        if (newBtn._ca) window.open(`https://axiom.trade/meme/${newBtn._ca}?chain=sol`, '_blank');
+        navigateToMeme(originalBtn.closest('[class*="max-h-[64px]"]'), newBtn._pairAddress || newBtn._ca);
       });
 
       updateBadge(newBtn, onBadgeDone);

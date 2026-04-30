@@ -590,7 +590,8 @@
         const fresh = btns.filter(b => !prevBtns.has(b));
         if (fresh.length > 0) {
           fireClickOnEl(fresh[0]);
-          window.open(`https://axiom.trade/meme/${query}?chain=sol`, '_blank');
+          const _href = best.memeHref || (best.ca ? `/meme/${best.ca}?chain=sol` : null);
+          if (_href) { history.pushState({}, '', _href); window.dispatchEvent(new PopStateEvent('popstate')); }
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
         }

@@ -673,7 +673,7 @@
       const poll = () => {
         const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
         const fresh = btns.filter(b => !prevBtns.has(b));
-        if (fresh.length > 0) { fireClickOnEl(fresh[0]); window.open(`https://axiom.trade/meme/${query}?chain=sol`, '_blank'); return; }
+        if (fresh.length > 0) { fireClickOnEl(fresh[0]); if (best.memeHref) { history.pushState({}, '', best.memeHref); window.dispatchEvent(new PopStateEvent('popstate')); } return; }
         if (Date.now() - start > 1500) return;
         setTimeout(poll, 50);
       };

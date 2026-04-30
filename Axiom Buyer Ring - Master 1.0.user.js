@@ -106,7 +106,9 @@
       const slot = SLOTS.find(s => slotState[s].ca === msg.ca && slotState[s].ready);
       if (!slot) { console.log(`[MASTER] BUY_BY_CA: no ready slot for ${msg.ca.slice(0, 8)}`); return; }
       channel.postMessage({ type: 'BUY', slot, ca: msg.ca });
-      window.open(`https://axiom.trade/meme/${msg.ca}?chain=sol`, '_blank');
+      const _sb2 = window.__qbBM?.sessionBest; let _mh2 = null;
+      if (_sb2) { for (const [, v] of _sb2) { if (v.tokenCA === msg.ca || v.ca === msg.ca) { _mh2 = v.memeHref; break; } } }
+      if (_mh2) window.open('https://axiom.trade' + _mh2, '_blank');
       console.log(`[MASTER] BUY_BY_CA → ${slot} ${msg.ca.slice(0, 8)}`);
       slotState[slot].ca    = null;
       slotState[slot].ready = false;
@@ -145,7 +147,9 @@
         if (!s.ready) return;
         const ca = s.ca;
         channel.postMessage({ type: 'BUY', slot, ca });
-        window.open(`https://axiom.trade/meme/${ca}?chain=sol`, '_blank');
+        const _sb1 = window.__qbBM?.sessionBest; let _mh1 = null;
+        if (_sb1) { for (const [, v] of _sb1) { if (v.tokenCA === ca || v.ca === ca) { _mh1 = v.memeHref; break; } } }
+        if (_mh1) window.open('https://axiom.trade' + _mh1, '_blank');
         console.log(`[MASTER] BUY ${slot} → ${ca.slice(0, 8)}`);
         slotState[slot].ca    = null;
         slotState[slot].ready = false;
