@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.36
+// @version      8.37
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -590,6 +590,7 @@
         const fresh = btns.filter(b => !prevBtns.has(b));
         if (fresh.length > 0) {
           fireClickOnEl(fresh[0]);
+          window.open(`https://axiom.trade/meme/${query}?chain=sol`, '_blank');
           setTimeout(() => { window.axiomUserOpen = false; }, 400);
           return;
         }
@@ -599,7 +600,7 @@
       setTimeout(poll, 50);
     };
 
-    if (!getSearchPanel()) {
+    if (!getSearchPanel() || !isPanelVisible()) {
       const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
       if (!searchBtn) { window.axiomUserOpen = false; return; }
       searchBtn.click();

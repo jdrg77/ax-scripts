@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.14
+// @version      11.15
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -960,6 +960,7 @@ function navigateToMeme(row, fallbackCA) {
           return;
         }
         fireClick(originalBtn);
+        if (newBtn._ca) window.open(`https://axiom.trade/meme/${newBtn._ca}?chain=sol`, '_blank');
       });
 
       updateBadge(newBtn, onBadgeDone);

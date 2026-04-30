@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -673,13 +673,13 @@
       const poll = () => {
         const btns  = [...panel.querySelectorAll('[class*="group/quickBuyButton"]')];
         const fresh = btns.filter(b => !prevBtns.has(b));
-        if (fresh.length > 0) { fireClickOnEl(fresh[0]); return; }
+        if (fresh.length > 0) { fireClickOnEl(fresh[0]); window.open(`https://axiom.trade/meme/${query}?chain=sol`, '_blank'); return; }
         if (Date.now() - start > 1500) return;
         setTimeout(poll, 50);
       };
       setTimeout(poll, 50);
     };
-    if (!getSearchPanel()) {
+    if (!getSearchPanel() || !isPanelVisible()) {
       const searchBtn = document.querySelector('[class*="ri-search"]')?.closest('button');
       if (!searchBtn) return;
       searchBtn.click();

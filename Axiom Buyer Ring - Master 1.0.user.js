@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -106,6 +106,7 @@
       const slot = SLOTS.find(s => slotState[s].ca === msg.ca && slotState[s].ready);
       if (!slot) { console.log(`[MASTER] BUY_BY_CA: no ready slot for ${msg.ca.slice(0, 8)}`); return; }
       channel.postMessage({ type: 'BUY', slot, ca: msg.ca });
+      window.open(`https://axiom.trade/meme/${msg.ca}?chain=sol`, '_blank');
       console.log(`[MASTER] BUY_BY_CA → ${slot} ${msg.ca.slice(0, 8)}`);
       slotState[slot].ca    = null;
       slotState[slot].ready = false;
@@ -144,6 +145,7 @@
         if (!s.ready) return;
         const ca = s.ca;
         channel.postMessage({ type: 'BUY', slot, ca });
+        window.open(`https://axiom.trade/meme/${ca}?chain=sol`, '_blank');
         console.log(`[MASTER] BUY ${slot} → ${ca.slice(0, 8)}`);
         slotState[slot].ca    = null;
         slotState[slot].ready = false;
@@ -171,5 +173,5 @@
 
   buildUI();
   setInterval(scanNewBestMatches, 300);
-  console.log('[MASTER] Buyer Ring Master v1.3 active');
+  console.log('[MASTER] Buyer Ring Master v1.6 active');
 })();
