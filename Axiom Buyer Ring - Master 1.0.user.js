@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom Buyer Ring - Master
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -177,5 +177,5 @@
 
   buildUI();
   setInterval(scanNewBestMatches, 300);
-  console.log('[MASTER] Buyer Ring Master v1.6 active');
+  console.log('[MASTER] Buyer Ring Master v1.7 active');
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.15
+// @version      11.16
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
