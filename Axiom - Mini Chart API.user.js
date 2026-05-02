@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.12
+// @version      1.13
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -51,6 +51,10 @@
   ].join(';');
   document.body.appendChild(tradesPanel);
 
+  const _styleRisky=document.createElement('style');
+  _styleRisky.textContent='button[data-axiom-risky]{background:#b91c1c!important}';
+  document.head.appendChild(_styleRisky);
+
   const s={canvas,diffLabel,mcLabel,tradesPanel,bars:[],lastToken:null,pairAddress:null,tokenAddress:null,
            diffValue:null,recentBuys:[],W_PX,H_PX,tPos:null,tFetch:null,tFast:null,tDiff:null,_observer:null};
   window.__axiomMiniChart=s;
@@ -58,6 +62,20 @@
   const TG_SRV=['https://api2.axiom.trade','https://api3.axiom.trade','https://api6.axiom.trade'];
   const SOL_ICON='<img src="https://axiom-assets.axiom-cdn.io/images/sol-fill.svg" style="width:10px;height:10px;margin-right:2px;vertical-align:middle;display:inline"/>';
   const BAR_MAX_REF=33;
+
+  function getFirstNewPairRow(){
+    const header=Array.from(document.querySelectorAll('*'))
+      .find(el=>el.children.length===0&&el.textContent.trim()==='New Pairs');
+    if(!header) return null;
+    const col=header.parentElement?.parentElement?.parentElement;
+    if(!col) return null;
+    const vl=Array.from(col.querySelectorAll('div')).find(div=>{
+      const st=div.getAttribute('style')||'';
+      return st.includes('position: relative')&&div.querySelectorAll('[style*="position: absolute"]').length>3;
+    });
+    if(!vl) return null;
+    return Array.from(vl.querySelectorAll(':scope > [style*="position: absolute"]'))[0]||null;
+  }
 
   function getTopQBuyBtn(){
     const btns=[...document.querySelectorAll('button')]
@@ -271,6 +289,11 @@
         tradesPanel.style.display='none';
         return;
       }
+
+      const topRow=getFirstNewPairRow();
+      const hasRiUser=topRow?!!topRow.querySelector('[class*="ri-user-line"]'):false;
+      if(hasRiUser) buy1.setAttribute('data-axiom-risky','1');
+      else buy1.removeAttribute('data-axiom-risky');
 
       const cy=r.top+r.height/2;
 
