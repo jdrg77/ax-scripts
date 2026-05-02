@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -59,6 +59,15 @@
     const meme = row.querySelector('a[href*="/meme/"]');
     if (meme) { const m = meme.href.match(/\/meme\/([A-Za-z0-9]{32,})/); if (m) return m[1]; }
     return null;
+  }
+
+  // ---- Fallback: first visible QBuy button ----
+  function getCAFromQBuyBtn() {
+    const btns = [...document.querySelectorAll('button')]
+      .filter(b => b.style.position === 'fixed' && b._pairAddress && b.style.display !== 'none');
+    if (!btns.length) return null;
+    btns.sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+    return btns[0]._pairAddress || btns[0]._ca || null;
   }
 
   // ---- Find the Fee "F" label in the row (for positioning) ----
@@ -146,7 +155,7 @@
     busy = true;
     try {
       const row = getFirstNewPairRow();
-      const ca  = getCAFromRow(row);
+      const ca  = getCAFromRow(row) || getCAFromQBuyBtn();
       if (!ca) return;
       if (ca !== s.lastCA) {
         s.lastCA = ca;
