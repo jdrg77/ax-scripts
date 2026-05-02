@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Fee Volume Score
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -17,9 +17,9 @@
 
   // fee / volumeK >= 0.05 -> default color, < 0.05 -> red
   const THRESHOLD = 0.05;
-  // MC > $10K and fee < 0.17 SOL -> red glow (takes priority)
-  const MC_GLOW_THRESHOLD    = 10000;
-  const MC_GLOW_FEE_MAX      = 0.17;
+  // MC glow: fee < (mc / 1000) * 0.01, only when MC > $3K
+  const MC_GLOW_MIN_MC       = 3000;
+  const MC_GLOW_FEE_PER_K    = 0.01;
 
   // Parse Axiom subscript notation, e.g. "0.0₂2" -> 0.0022
   function parseSubscriptNumber(str) {
@@ -99,10 +99,11 @@
     const volK = getVolumeK(row);
     const mc   = getMC(row);
 
-    // MC glow takes priority: MC > $10K and fee < 0.17
-    if (mc !== null && mc > MC_GLOW_THRESHOLD && fee !== null && fee < MC_GLOW_FEE_MAX) {
+    // MC glow takes priority: fee < 0.01 per $1K of MC, only when MC > $3K
+    const mcMinFee = mc !== null ? (mc / 1000) * MC_GLOW_FEE_PER_K : null;
+    if (mc !== null && mc > MC_GLOW_MIN_MC && fee !== null && fee < mcMinFee) {
       el.style.setProperty('color', '#ef4444', 'important');
-      el.style.setProperty('text-shadow', '0 0 8px rgba(239,68,68,0.95), 0 0 16px rgba(239,68,68,0.5)', 'important');
+      el.style.setProperty('text-shadow', '0 0 4px #ff0000, 0 0 10px rgba(239,68,68,1), 0 0 20px rgba(239,68,68,0.8), 0 0 35px rgba(239,68,68,0.4)', 'important');
       return;
     }
 
