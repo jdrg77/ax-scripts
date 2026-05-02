@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.29
+// @version      11.30
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -994,9 +994,19 @@ function navigateToMeme(row, fallbackCA) {
   const _TG_SRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const _tgCache = new Map();
 
+  const _TG_LIMIT = 100;
+
+  function _tgFmtMc(n) {
+    if (!n || !isFinite(n) || n <= 0) return '';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + n.toFixed(0);
+  }
+
   async function _fetchTrades(pairAddress) {
     const c = _tgCache.get(pairAddress);
-    if (c && Date.now() - c.ts < 450) return c.trades;
+    if (c && Date.now() - c.ts < 450) return c;
     const srv = _TG_SRV[Math.floor(Math.random() * _TG_SRV.length)];
     try {
       const r = await fetch(`${srv}/transactions-feed-v3`, {
@@ -1006,27 +1016,30 @@ function navigateToMeme(row, fallbackCA) {
       });
       if (!r.ok) return null;
       const data = await r.json();
-      const trades = (Array.isArray(data) ? data : []).map(row => ({
+      const raw = Array.isArray(data) ? data : [];
+      const trades = raw.map(row => ({
         type: row[2], createdAt: new Date(row[3]), totalSol: row[10] || 0,
       }));
-      _tgCache.set(pairAddress, { ts: Date.now(), trades });
-      return trades;
+      // MC ≈ latest priceUsd * 1B supply (pump.fun)
+      const approxMc = raw.length > 0 ? ((raw[0][9] || 0) * 1e9) : 0;
+      const entry = { ts: Date.now(), trades, approxMc };
+      _tgCache.set(pairAddress, entry);
+      return entry;
     } catch { return null; }
   }
 
-  const _TG_LIMIT = 100;
-
-  function _applyTradeGlow(btn, trades) {
+  function _applyTradeGlow(btn, result) {
     btn.querySelector('.__tgLbl')?.remove();
 
     if (!btn.isConnected || btn.style.display === 'none') return;
-    if (!trades) { btn.style.filter = ''; return; }
+    if (!result) { btn.style.filter = ''; return; }
 
+    const { trades, approxMc } = result;
     const now = Date.now();
     const recent = trades.filter(t => now - t.createdAt.getTime() < 5 * 60000);
     if (!recent.length) { btn.style.filter = ''; return; }
 
-    // 100+ tx in last 5 min → API limit hit, can't trust diff → alert glow + count
+    // 100+ tx in last 5 min → alert glow + MC label
     if (recent.length >= _TG_LIMIT) {
       btn.style.filter = 'drop-shadow(0 0 10px rgba(139,0,0,1)) drop-shadow(0 0 20px rgba(180,0,0,0.85)) drop-shadow(0 0 4px rgba(255,60,60,0.6))';
       const lbl = document.createElement('div');
@@ -1034,7 +1047,7 @@ function navigateToMeme(row, fallbackCA) {
       lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
         'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
         'color:#ff4444;text-shadow:0 0 4px currentColor;';
-      lbl.textContent = recent.length + '+';
+      lbl.textContent = _tgFmtMc(approxMc) || (recent.length + '+');
       btn.appendChild(lbl);
       return;
     }
@@ -1068,8 +1081,8 @@ function navigateToMeme(row, fallbackCA) {
     try {
       for (const btn of vis.slice(0, 2)) {
         if (!btn.isConnected || btn.style.display === 'none') continue;
-        const trades = await _fetchTrades(btn._pairAddress);
-        _applyTradeGlow(btn, trades);
+        const result = await _fetchTrades(btn._pairAddress);
+        _applyTradeGlow(btn, result);
       }
     } finally { _tgPolling = false; }
   }
