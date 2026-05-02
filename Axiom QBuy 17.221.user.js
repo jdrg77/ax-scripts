@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.30
+// @version      11.31
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -994,7 +994,7 @@ function navigateToMeme(row, fallbackCA) {
   const _TG_SRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const _tgCache = new Map();
 
-  const _TG_LIMIT = 100;
+  const _TG_LIMIT = 25;
 
   function _tgFmtMc(n) {
     if (!n || !isFinite(n) || n <= 0) return '';
@@ -1039,8 +1039,31 @@ function navigateToMeme(row, fallbackCA) {
     const recent = trades.filter(t => now - t.createdAt.getTime() < 5 * 60000);
     if (!recent.length) { btn.style.filter = ''; return; }
 
-    // 100+ tx in last 5 min → alert glow + MC label
+    // 25+ tx in last 5 min
     if (recent.length >= _TG_LIMIT) {
+      const buys25  = recent.filter(t => t.type === 'buy').reduce((s, t) => s + t.totalSol, 0);
+      const sells25 = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
+      const diff25  = buys25 - sells25;
+
+      if (approxMc > 0 && approxMc < 7000) {
+        // MC < $7K → show diff + MC appended, no alert glow
+        const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
+        btn.style.filter = has3m
+          ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
+          : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
+        if (Math.abs(diff25) >= 0.5) {
+          const lbl = document.createElement('div');
+          lbl.className = '__tgLbl';
+          lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
+            'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
+            `color:${diff25 > 0 ? '#22c55e' : '#ef4444'};text-shadow:0 0 4px currentColor;`;
+          lbl.textContent = (diff25 > 0 ? '+' : '') + diff25.toFixed(2) + ' ' + _tgFmtMc(approxMc);
+          btn.appendChild(lbl);
+        }
+        return;
+      }
+
+      // MC >= $7K (or unknown) → alert glow + MC label
       btn.style.filter = 'drop-shadow(0 0 10px rgba(139,0,0,1)) drop-shadow(0 0 20px rgba(180,0,0,0.85)) drop-shadow(0 0 4px rgba(255,60,60,0.6))';
       const lbl = document.createElement('div');
       lbl.className = '__tgLbl';
