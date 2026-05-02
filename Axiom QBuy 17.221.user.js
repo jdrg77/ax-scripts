@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.16
+// @version      11.17
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -989,6 +989,70 @@ function navigateToMeme(row, fallbackCA) {
   observer.observe(document.body, { childList: true, subtree: true });
 
   setInterval(() => { checkTopPulseReference(); }, 500);
+
+  // ---- Quick Buy Top Buttons ----
+  let _qtb1 = null, _qtb2 = null;
+
+  function _getTopQBBtn() {
+    const vis = addedBtns.filter(b => b.isConnected && b.style.display !== 'none');
+    if (!vis.length) return null;
+    return vis.reduce((min, b) => parseFloat(b.style.top) < parseFloat(min.style.top) ? b : min);
+  }
+
+  function _buyTopCoin() {
+    const top = _getTopQBBtn();
+    if (top) top.click();
+  }
+
+  function _getPauseHandlerDom() {
+    const sc = document.querySelector('.absolute.inset-0.overflow-y-auto');
+    if (!sc) return null;
+    const fk = Object.keys(sc).find(k => k.startsWith('__reactFiber'));
+    return fk ? sc[fk]?.return?.stateNode : null;
+  }
+
+  function _buildQTBs() {
+    const base = 'position:fixed;z-index:99998;background:#111827;border:1.5px solid #374151;' +
+      'border-radius:6px;color:#e5e7eb;font:bold 11px monospace;cursor:pointer;padding:5px 12px;' +
+      'white-space:nowrap;display:none;';
+    _qtb1 = document.createElement('button');
+    _qtb1.textContent = '⚡ Buy #1';
+    _qtb1.style.cssText = base;
+    _qtb1.onclick = _buyTopCoin;
+    document.body.appendChild(_qtb1);
+
+    _qtb2 = document.createElement('button');
+    _qtb2.textContent = '⏸ Buy #1';
+    _qtb2.style.cssText = base;
+    _qtb2.addEventListener('mousemove', e => {
+      const hd = _getPauseHandlerDom();
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+    });
+    _qtb2.addEventListener('mouseenter', e => {
+      const hd = _getPauseHandlerDom();
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+    });
+    _qtb2.onclick = _buyTopCoin;
+    document.body.appendChild(_qtb2);
+  }
+
+  function _updateQTBPositions() {
+    if (!_qtb1 || !_qtb2) return;
+    const top = _getTopQBBtn();
+    if (!top) { _qtb1.style.display = 'none'; _qtb2.style.display = 'none'; return; }
+    const y = parseFloat(top.style.top) - 50;
+    const x = parseFloat(top.style.left);
+    const w1 = _qtb1.offsetWidth || 80;
+    _qtb1.style.display = '';
+    _qtb1.style.top = y + 'px';
+    _qtb1.style.left = x + 'px';
+    _qtb2.style.display = '';
+    _qtb2.style.top = y + 'px';
+    _qtb2.style.left = (x + w1 + 6) + 'px';
+  }
+
+  _buildQTBs();
+  setInterval(_updateQTBPositions, 16);
 
   console.log('🚀 Axiom QBuy v10.3 — Raydium V4 blue background + glow');
 })();
