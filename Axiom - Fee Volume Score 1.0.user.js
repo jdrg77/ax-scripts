@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Fee Volume Score
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -111,6 +111,12 @@
 
     if (fee === null || volK === null || volK === 0) {
       el.style.color = '';
+      return;
+    }
+
+    // Exception: vol ≤ 1K + MC > $4K + fee ≤ 0.08 → plain red
+    if (volK <= 1 && mc !== null && mc > 4000 && fee <= 0.08) {
+      el.style.setProperty('color', '#ef4444', 'important');
       return;
     }
 
