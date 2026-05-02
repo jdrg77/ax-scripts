@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.11
+// @version      1.12
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -100,6 +100,15 @@
   function calcBarWidth(amount){
     if(amount<1) return 0;
     return Math.min(100,Math.max(1,Math.pow(amount/BAR_MAX_REF,2/3)*100));
+  }
+  function parseMCLabel(str){
+    const m=str.match(/\$([\d.]+)(K|M|B)?/);
+    if(!m) return null;
+    let v=parseFloat(m[1]);
+    if(m[2]==='K') v*=1000;
+    if(m[2]==='M') v*=1000000;
+    if(m[2]==='B') v*=1000000000;
+    return isFinite(v)?v:null;
   }
 
   function renderTradesPanel(){
@@ -272,9 +281,12 @@
 
       // Diff label right of ⚡ Buy #1
       let canvasLeft=r.right+8;
-      if(s.diffValue!==null && s.diffValue!==undefined){
-        const txt=(s.diffValue>=0?'+':'')+s.diffValue.toFixed(2);
+      if(s.diffValue!==null && s.diffValue!==undefined && s.diffValue>=0){
+        const txt='+'+s.diffValue.toFixed(2);
         if(diffLabel.textContent!==txt) diffLabel.textContent=txt;
+        const diffRed=s.diffValue>=0.7;
+        diffLabel.style.color=diffRed?'#ef4444':'rgb(255,255,255)';
+        diffLabel.style.textShadow=diffRed?'0 0 4px rgba(239,68,68,0.8)':'0 0 4px rgba(255,255,255,0.8)';
         diffLabel.style.left=(r.right+8)+'px';
         diffLabel.style.top=cy+'px';
         diffLabel.style.transform='translateY(-50%)';
@@ -284,6 +296,8 @@
 
         if(mcTxt){
           if(mcLabel.textContent!==mcTxt) mcLabel.textContent=mcTxt;
+          const mcVal=parseMCLabel(mcTxt);
+          mcLabel.style.color=(mcVal!==null&&mcVal>22000)?'#ef4444':'rgb(91,184,255)';
           mcLabel.style.left=(r.right+8)+'px';
           mcLabel.style.top=(cy+9)+'px';
           mcLabel.style.transform='translateY(-50%)';
