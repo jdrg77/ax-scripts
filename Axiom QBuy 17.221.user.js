@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.19
+// @version      11.20
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -989,6 +989,79 @@ function navigateToMeme(row, fallbackCA) {
   observer.observe(document.body, { childList: true, subtree: true });
 
   setInterval(() => { checkTopPulseReference(); }, 500);
+
+  // ---- Trades Glow ----
+  const _TG_SRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
+  const _tgCache = new Map();
+
+  async function _fetchTrades(pairAddress) {
+    const c = _tgCache.get(pairAddress);
+    if (c && Date.now() - c.ts < 450) return c.trades;
+    const srv = _TG_SRV[Math.floor(Math.random() * _TG_SRV.length)];
+    try {
+      const r = await fetch(`${srv}/transactions-feed-v3`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairAddress, orderBy: 'DESC' }),
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      const trades = (Array.isArray(data) ? data : []).map(row => ({
+        type: row[2], createdAt: new Date(row[3]), totalSol: row[10] || 0,
+      }));
+      _tgCache.set(pairAddress, { ts: Date.now(), trades });
+      return trades;
+    } catch { return null; }
+  }
+
+  function _applyTradeGlow(btn, trades) {
+    if (btn.__tgLabel?.isConnected) btn.__tgLabel.remove();
+    btn.__tgLabel = null;
+
+    if (!trades) { btn.style.boxShadow = ''; return; }
+
+    const now = Date.now();
+    const has3m  = trades.some(t => now - t.createdAt.getTime() < 3 * 60000);
+    const has30m = trades.some(t => now - t.createdAt.getTime() < 30 * 60000);
+
+    if (has3m)       btn.style.boxShadow = '0 0 12px 5px rgba(239,68,68,0.9)';
+    else if (has30m) btn.style.boxShadow = '0 0 8px 2px rgba(239,68,68,0.35)';
+    else             btn.style.boxShadow = '';
+
+    const buys  = trades.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
+    const sells = trades.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
+    const diff  = buys - sells;
+
+    if (Math.abs(diff) >= 0.5) {
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'position:fixed;z-index:99997;font:bold 10px monospace;pointer-events:none;' +
+        `color:${diff > 0 ? '#22c55e' : '#ef4444'};text-shadow:0 0 4px currentColor;`;
+      lbl.textContent = (diff > 0 ? '+' : '') + diff.toFixed(2);
+      document.body.appendChild(lbl);
+      btn.__tgLabel = lbl;
+    }
+  }
+
+  function _updateTGLabels() {
+    addedBtns.forEach(btn => {
+      const lbl = btn.__tgLabel;
+      if (!lbl?.isConnected) return;
+      const r = btn.getBoundingClientRect();
+      lbl.style.top  = (r.top + r.height / 2 - 7) + 'px';
+      lbl.style.left = (r.right + 4) + 'px';
+    });
+  }
+
+  async function _pollTradeGlows() {
+    const vis = addedBtns.filter(b => b.isConnected && b.style.display !== 'none' && b._pairAddress);
+    for (const btn of vis.slice(0, 6)) {
+      const trades = await _fetchTrades(btn._pairAddress);
+      _applyTradeGlow(btn, trades);
+    }
+  }
+
+  setInterval(_pollTradeGlows, 500);
+  setInterval(_updateTGLabels, 16);
 
   // ---- Quick Buy Top Buttons ----
   let _qtb1 = null, _qtb2 = null;
