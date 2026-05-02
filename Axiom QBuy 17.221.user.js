@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.26
+// @version      11.27
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1116,14 +1116,12 @@ function navigateToMeme(row, fallbackCA) {
 
     _qtb1 = document.createElement('button');
     _qtb1.textContent = '⚡ Buy #1';
+    _qtb1.__qbMoveHooked = true; // prevent Pause On Hover from adding pause-forwarding to this button
     _qtb1.style.cssText = base;
-    _qtb1.addEventListener('mouseenter', e => {
+    _qtb1.addEventListener('mouseenter', () => {
       const hd = _getPauseHandlerDom();
-      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
-    });
-    _qtb1.addEventListener('mousemove', e => {
-      const hd = _getPauseHandlerDom();
-      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+      // Coords outside the viewport force axiom to treat mouse as "left column" → unpause
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: window.innerWidth + 200, clientY: window.innerHeight + 200 }));
     });
     _qtb1.onclick = _buyTopCoin;
     document.body.appendChild(_qtb1);
