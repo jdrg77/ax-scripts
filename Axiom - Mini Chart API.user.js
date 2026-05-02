@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.6
+// @version      1.7
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -20,6 +20,7 @@
     try{window.__axiomMiniChart._observer&&window.__axiomMiniChart._observer.disconnect();}catch(e){}
     try{window.__axiomMiniChart.canvas.remove();}catch(e){}
     try{window.__axiomMiniChart.diffLabel.remove();}catch(e){}
+    try{window.__axiomMiniChart.mcLabel.remove();}catch(e){}
   }
 
   const W_PX=85, H_PX=50, MAX_BARS=30;
@@ -34,7 +35,12 @@
     'font:bold 11px monospace;color:rgb(255,255,255);text-shadow:0 0 4px rgba(255,255,255,0.8);white-space:nowrap;';
   document.body.appendChild(diffLabel);
 
-  const s={canvas,diffLabel,bars:[],lastToken:null,pairAddress:null,tokenAddress:null,
+  const mcLabel=document.createElement('div');
+  mcLabel.style.cssText='position:fixed;z-index:99999;pointer-events:none;display:none;'+
+    'font:bold 10px monospace;color:rgb(91,184,255);white-space:nowrap;';
+  document.body.appendChild(mcLabel);
+
+  const s={canvas,diffLabel,mcLabel,bars:[],lastToken:null,pairAddress:null,tokenAddress:null,
            diffValue:null,W_PX,H_PX,tPos:null,tFetch:null,tFast:null,tDiff:null,_observer:null};
   window.__axiomMiniChart=s;
 
@@ -173,16 +179,23 @@
       if(!topBtn||!buy1){
         canvas.style.display='none';
         diffLabel.style.display='none';
+        mcLabel.style.display='none';
         return;
       }
       const r=buy1.getBoundingClientRect();
       if(r.width===0){
         canvas.style.display='none';
         diffLabel.style.display='none';
+        mcLabel.style.display='none';
         return;
       }
 
       const cy=r.top+r.height/2;
+
+      // MC from .__tgLbl already on the QBuy button — no extra API call
+      const tgTxt=topBtn.querySelector('.__tgLbl')?.textContent||'';
+      const mcIdx=tgTxt.indexOf('$');
+      const mcTxt=mcIdx!==-1?tgTxt.slice(mcIdx):'';
 
       // Diff label right of ⚡ Buy #1
       if(s.diffValue!==null && s.diffValue!==undefined){
@@ -194,8 +207,20 @@
         diffLabel.style.display='block';
         const dlW=diffLabel.offsetWidth||50;
         canvas.style.left=(r.right+8+dlW+8)+'px';
+
+        // MC label just below diff label
+        if(mcTxt){
+          if(mcLabel.textContent!==mcTxt) mcLabel.textContent=mcTxt;
+          mcLabel.style.left=(r.right+8)+'px';
+          mcLabel.style.top=(cy+9)+'px';
+          mcLabel.style.transform='translateY(-50%)';
+          mcLabel.style.display='block';
+        } else {
+          mcLabel.style.display='none';
+        }
       } else {
         diffLabel.style.display='none';
+        mcLabel.style.display='none';
         canvas.style.left=(r.right+8)+'px';
       }
 
