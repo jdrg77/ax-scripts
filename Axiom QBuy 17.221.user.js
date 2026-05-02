@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.35
+// @version      11.36
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -991,47 +991,61 @@ function navigateToMeme(row, fallbackCA) {
   setInterval(() => { checkTopPulseReference(); }, 500);
 
   // ---- Trades Glow ----
-  const _TG_SRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
+  const TGSRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const _tgCache = new Map();
   const _mcCache = new Map();
 
-  const _TG_LIMIT = 25;
+  const TGLIMIT = 25;
 
   function _tgFmtMc(n) {
     if (!n || !isFinite(n) || n <= 0) return '';
-    if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
-    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
     if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-    return '$' + n.toFixed(0);
+    return '$' + Math.round(n);
   }
 
-  async function _fetchMC(tokenCA) {
-    if (!tokenCA) return 0;
-    const c = _mcCache.get(tokenCA);
-    if (c && Date.now() - c.ts < 30000) return c.mc;
+  async function _fetchMC(btn) {
+    const ca = btn?._ca;
+    if (!ca) return 0;
+    const c = _mcCache.get(ca);
+    if (c && Date.now() - c.ts < 1500) return c.mc;
+    const ticker = btn._ticker || btn.querySelector('.qb-name-label')?.textContent || '';
+    const query = ticker || ca;
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: tokenCA, sort: 'mcap', maxResults: 5, v: Date.now() }),
+        body: JSON.stringify({
+          query,
+          includedProtocols: ['bonk', 'pump'],
+          sort: 'mcap',
+          isOg: false,
+          includedQuoteTokens: ['SOL', 'USDC', 'USD1'],
+          onlyBonded: false,
+          onlyDexPaid: false,
+          maxResults: 20,
+          v: Date.now(),
+        }),
       });
       if (!res.ok) return 0;
       const data = await res.json();
       const tokens = Array.isArray(data) ? data : [];
-      const token = tokens.find(t => t.tokenAddress === tokenCA) || tokens[0];
-      if (!token) return 0;
-      const solPrice = window.__solPriceUsd || 150;
+      const token = tokens.find(t => t.tokenAddress === ca || t.pairAddress === ca);
+      if (!token) { _mcCache.set(ca, { ts: Date.now(), mc: 0 }); return 0; }
+      const solPrice = window.__solPriceUsd || 85.96;
       const priceSol = (token.liquidityToken > 0) ? (token.liquiditySol / token.liquidityToken) : 0;
       const mc = priceSol * (token.supply || 0) * solPrice;
-      _mcCache.set(tokenCA, { ts: Date.now(), mc });
+      _mcCache.set(ca, { ts: Date.now(), mc });
       return mc;
     } catch { return 0; }
   }
 
   async function _fetchTrades(pairAddress) {
+    if (!pairAddress) return null;
     const c = _tgCache.get(pairAddress);
     if (c && Date.now() - c.ts < 450) return c;
-    const srv = _TG_SRV[Math.floor(Math.random() * _TG_SRV.length)];
+    const srv = TGSRV[Math.floor(Math.random() * TGSRV.length)];
     try {
       const r = await fetch(`${srv}/transactions-feed-v3`, {
         method: 'POST', credentials: 'include',
@@ -1051,72 +1065,55 @@ function navigateToMeme(row, fallbackCA) {
   }
 
   function _applyTradeGlow(btn, result, mc) {
-    btn.querySelector('.__tgLbl')?.remove();
-
     if (!btn.isConnected || btn.style.display === 'none') return;
-    if (!result) { btn.style.filter = ''; return; }
 
+    const ALERT_FILTER  = 'drop-shadow(rgb(139, 0, 0) 0px 0px 10px) drop-shadow(rgba(180, 0, 0, 0.85) 0px 0px 20px) drop-shadow(rgba(255, 60, 60, 0.6) 0px 0px 4px)';
+    const STRONG_FILTER = 'drop-shadow(rgba(239, 68, 68, 0.95) 0px 0px 8px)';
+    const WEAK_FILTER   = 'drop-shadow(rgba(239, 68, 68, 0.4) 0px 0px 6px)';
+
+    function setFilter(desired) {
+      if ((btn.style.filter || '') !== desired) btn.style.filter = desired;
+    }
+    function ensureLabel(desiredText, color) {
+      let lbl = btn.querySelector('.__tgLbl');
+      if (!desiredText) { if (lbl) lbl.remove(); return; }
+      if (!lbl) {
+        lbl = document.createElement('div');
+        lbl.className = '__tgLbl';
+        lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
+          'font:bold 11px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
+          'text-shadow:0 0 4px currentColor;';
+        btn.appendChild(lbl);
+      }
+      if (lbl.textContent !== desiredText) lbl.textContent = desiredText;
+      if (lbl.style.color !== color) lbl.style.color = color;
+    }
+
+    if (!result) { setFilter(''); ensureLabel('', ''); return; }
     const { trades } = result;
     const now = Date.now();
     const recent = trades.filter(t => now - t.createdAt.getTime() < 5 * 60000);
-    if (!recent.length) { btn.style.filter = ''; return; }
-
-    // 25+ tx in last 5 min
-    if (recent.length >= _TG_LIMIT) {
-      const buys25  = recent.filter(t => t.type === 'buy').reduce((s, t) => s + t.totalSol, 0);
-      const sells25 = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
-      const diff25  = buys25 - sells25;
-
-      if (mc > 0 && mc < 7000) {
-        // MC < $7K → show diff + MC appended only if positive, no alert glow
-        if (diff25 >= 0.5) {
-          const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
-          btn.style.filter = has3m
-            ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
-            : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
-          const lbl = document.createElement('div');
-          lbl.className = '__tgLbl';
-          lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
-            'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
-            'color:#ffffff;text-shadow:0 0 6px rgba(255,255,255,0.9);';
-          lbl.textContent = '+' + diff25.toFixed(2) + ' ' + _tgFmtMc(mc);
-          btn.appendChild(lbl);
-        } else {
-          btn.style.filter = '';
-        }
-        return;
-      }
-
-      // MC >= $7K (or unknown) → alert glow + MC label
-      btn.style.filter = 'drop-shadow(0 0 10px rgba(139,0,0,1)) drop-shadow(0 0 20px rgba(180,0,0,0.85)) drop-shadow(0 0 4px rgba(255,60,60,0.6))';
-      const lbl = document.createElement('div');
-      lbl.className = '__tgLbl';
-      lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
-        'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
-        'color:#ff4444;text-shadow:0 0 4px currentColor;';
-      const mcTxt = _tgFmtMc(mc);
-      if (mcTxt) { lbl.textContent = mcTxt; btn.appendChild(lbl); }
-      return;
-    }
+    if (!recent.length) { setFilter(''); ensureLabel('', ''); return; }
 
     const buys  = recent.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
     const sells = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
     const diff  = buys - sells;
+    const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
+    const isAlert = recent.length >= TGLIMIT && (mc >= 7000 || mc === 0);
 
+    if (isAlert) {
+      setFilter(ALERT_FILTER);
+      ensureLabel(_tgFmtMc(mc), 'rgb(255, 68, 68)');
+      return;
+    }
     if (diff >= 0.5) {
-      const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
-      btn.style.filter = has3m
-        ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
-        : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
-      const lbl = document.createElement('div');
-      lbl.className = '__tgLbl';
-      lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
-        'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
-        'color:#ffffff;text-shadow:0 0 6px rgba(255,255,255,0.9);';
-      lbl.textContent = '+' + diff.toFixed(2);
-      btn.appendChild(lbl);
+      setFilter(has3m ? STRONG_FILTER : WEAK_FILTER);
+      let txt = '+' + diff.toFixed(2);
+      if (mc > 0 && mc < 7000) txt += ' ' + _tgFmtMc(mc);
+      ensureLabel(txt, 'rgb(255, 255, 255)');
     } else {
-      btn.style.filter = '';
+      setFilter('');
+      ensureLabel('', '');
     }
   }
 
@@ -1127,14 +1124,14 @@ function navigateToMeme(row, fallbackCA) {
     if (!vis.length) return;
     _tgPolling = true;
     try {
-      for (const btn of vis.slice(0, 2)) {
+      for (const btn of vis.slice(0, 4)) {
         if (!btn.isConnected || btn.style.display === 'none') continue;
         const result = await _fetchTrades(btn._pairAddress);
         let mc = 0;
         if (result) {
           const now = Date.now();
           const recentCount = result.trades.filter(t => now - t.createdAt.getTime() < 5 * 60000).length;
-          if (recentCount >= _TG_LIMIT && btn._pairAddress) mc = await _fetchMC(btn._pairAddress);
+          if (recentCount >= TGLIMIT && btn._ca) mc = await _fetchMC(btn);
         }
         _applyTradeGlow(btn, result, mc);
       }
