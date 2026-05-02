@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.34
+// @version      11.35
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1134,7 +1134,7 @@ function navigateToMeme(row, fallbackCA) {
         if (result) {
           const now = Date.now();
           const recentCount = result.trades.filter(t => now - t.createdAt.getTime() < 5 * 60000).length;
-          if (recentCount >= _TG_LIMIT && btn._ca) mc = await _fetchMC(btn._ca);
+          if (recentCount >= _TG_LIMIT && btn._pairAddress) mc = await _fetchMC(btn._pairAddress);
         }
         _applyTradeGlow(btn, result, mc);
       }
