@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.22
+// @version      11.23
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1019,7 +1019,8 @@ function navigateToMeme(row, fallbackCA) {
     if (btn.__tgLabel?.isConnected) btn.__tgLabel.remove();
     btn.__tgLabel = null;
 
-    if (!trades) { btn.style.boxShadow = ''; return; }
+    if (!btn.isConnected || btn.style.display === 'none') return;
+    if (!trades) { btn.style.filter = ''; return; }
 
     const now = Date.now();
     const has3m  = trades.some(t => now - t.createdAt.getTime() < 3 * 60000);
@@ -1057,7 +1058,9 @@ function navigateToMeme(row, fallbackCA) {
 
   async function _pollTradeGlows() {
     const vis = addedBtns.filter(b => b.isConnected && b.style.display !== 'none' && b._pairAddress);
+    if (!vis.length) return;
     for (const btn of vis.slice(0, 2)) {
+      if (!btn.isConnected || btn.style.display === 'none') continue;
       const trades = await _fetchTrades(btn._pairAddress);
       _applyTradeGlow(btn, trades);
     }
