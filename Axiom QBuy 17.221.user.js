@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.31
+// @version      11.32
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -993,6 +993,7 @@ function navigateToMeme(row, fallbackCA) {
   // ---- Trades Glow ----
   const _TG_SRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const _tgCache = new Map();
+  const _mcCache = new Map();
 
   const _TG_LIMIT = 25;
 
@@ -1002,6 +1003,29 @@ function navigateToMeme(row, fallbackCA) {
     if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
     return '$' + n.toFixed(0);
+  }
+
+  async function _fetchMC(tokenCA) {
+    if (!tokenCA) return 0;
+    const c = _mcCache.get(tokenCA);
+    if (c && Date.now() - c.ts < 30000) return c.mc;
+    try {
+      const res = await fetch('https://api10.axiom.trade/search-v5', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: tokenCA, sort: 'mcap', maxResults: 5, v: Date.now() }),
+      });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      const tokens = Array.isArray(data) ? data : [];
+      const token = tokens.find(t => t.tokenAddress === tokenCA) || tokens[0];
+      if (!token) return 0;
+      const solPrice = window.__solPriceUsd || 150;
+      const priceSol = (token.liquidityToken > 0) ? (token.liquiditySol / token.liquidityToken) : 0;
+      const mc = priceSol * (token.supply || 0) * solPrice;
+      _mcCache.set(tokenCA, { ts: Date.now(), mc });
+      return mc;
+    } catch { return 0; }
   }
 
   async function _fetchTrades(pairAddress) {
@@ -1020,21 +1044,19 @@ function navigateToMeme(row, fallbackCA) {
       const trades = raw.map(row => ({
         type: row[2], createdAt: new Date(row[3]), totalSol: row[10] || 0,
       }));
-      // MC ≈ latest priceUsd * 1B supply (pump.fun)
-      const approxMc = raw.length > 0 ? ((raw[0][9] || 0) * 1e9) : 0;
-      const entry = { ts: Date.now(), trades, approxMc };
+      const entry = { ts: Date.now(), trades };
       _tgCache.set(pairAddress, entry);
       return entry;
     } catch { return null; }
   }
 
-  function _applyTradeGlow(btn, result) {
+  function _applyTradeGlow(btn, result, mc) {
     btn.querySelector('.__tgLbl')?.remove();
 
     if (!btn.isConnected || btn.style.display === 'none') return;
     if (!result) { btn.style.filter = ''; return; }
 
-    const { trades, approxMc } = result;
+    const { trades } = result;
     const now = Date.now();
     const recent = trades.filter(t => now - t.createdAt.getTime() < 5 * 60000);
     if (!recent.length) { btn.style.filter = ''; return; }
@@ -1045,20 +1067,22 @@ function navigateToMeme(row, fallbackCA) {
       const sells25 = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
       const diff25  = buys25 - sells25;
 
-      if (approxMc > 0 && approxMc < 7000) {
-        // MC < $7K → show diff + MC appended, no alert glow
-        const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
-        btn.style.filter = has3m
-          ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
-          : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
-        if (Math.abs(diff25) >= 0.5) {
+      if (mc > 0 && mc < 7000) {
+        // MC < $7K → show diff + MC appended only if positive, no alert glow
+        if (diff25 >= 0.5) {
+          const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
+          btn.style.filter = has3m
+            ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
+            : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
           const lbl = document.createElement('div');
           lbl.className = '__tgLbl';
           lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
             'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
-            `color:${diff25 > 0 ? '#22c55e' : '#ef4444'};text-shadow:0 0 4px currentColor;`;
-          lbl.textContent = (diff25 > 0 ? '+' : '') + diff25.toFixed(2) + ' ' + _tgFmtMc(approxMc);
+            'color:#ffffff;text-shadow:0 0 6px rgba(255,255,255,0.9);';
+          lbl.textContent = '+' + diff25.toFixed(2) + ' ' + _tgFmtMc(mc);
           btn.appendChild(lbl);
+        } else {
+          btn.style.filter = '';
         }
         return;
       }
@@ -1070,28 +1094,29 @@ function navigateToMeme(row, fallbackCA) {
       lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
         'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
         'color:#ff4444;text-shadow:0 0 4px currentColor;';
-      lbl.textContent = _tgFmtMc(approxMc) || (recent.length + '+');
+      lbl.textContent = _tgFmtMc(mc) || (recent.length + '+');
       btn.appendChild(lbl);
       return;
     }
-
-    const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
-    btn.style.filter = has3m
-      ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
-      : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
 
     const buys  = recent.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
     const sells = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
     const diff  = buys - sells;
 
-    if (Math.abs(diff) >= 0.5) {
+    if (diff >= 0.5) {
+      const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
+      btn.style.filter = has3m
+        ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
+        : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
       const lbl = document.createElement('div');
       lbl.className = '__tgLbl';
       lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
         'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
-        `color:${diff > 0 ? '#22c55e' : '#ef4444'};text-shadow:0 0 4px currentColor;`;
-      lbl.textContent = (diff > 0 ? '+' : '') + diff.toFixed(2);
+        'color:#ffffff;text-shadow:0 0 6px rgba(255,255,255,0.9);';
+      lbl.textContent = '+' + diff.toFixed(2);
       btn.appendChild(lbl);
+    } else {
+      btn.style.filter = '';
     }
   }
 
@@ -1105,7 +1130,13 @@ function navigateToMeme(row, fallbackCA) {
       for (const btn of vis.slice(0, 2)) {
         if (!btn.isConnected || btn.style.display === 'none') continue;
         const result = await _fetchTrades(btn._pairAddress);
-        _applyTradeGlow(btn, result);
+        let mc = 0;
+        if (result) {
+          const now = Date.now();
+          const recentCount = result.trades.filter(t => now - t.createdAt.getTime() < 5 * 60000).length;
+          if (recentCount >= _TG_LIMIT && btn._ca) mc = await _fetchMC(btn._ca);
+        }
+        _applyTradeGlow(btn, result, mc);
       }
     } finally { _tgPolling = false; }
   }
