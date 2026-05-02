@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.33
+// @version      11.34
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1005,20 +1005,20 @@ function navigateToMeme(row, fallbackCA) {
     return '$' + n.toFixed(0);
   }
 
-  async function _fetchMC(tokenCA, name) {
-    if (!tokenCA || !name) return 0;
+  async function _fetchMC(tokenCA) {
+    if (!tokenCA) return 0;
     const c = _mcCache.get(tokenCA);
     if (c && Date.now() - c.ts < 30000) return c.mc;
     try {
       const res = await fetch('https://api10.axiom.trade/search-v5', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: name, sort: 'mcap', maxResults: 20, v: Date.now() }),
+        body: JSON.stringify({ query: tokenCA, sort: 'mcap', maxResults: 5, v: Date.now() }),
       });
       if (!res.ok) return 0;
       const data = await res.json();
       const tokens = Array.isArray(data) ? data : [];
-      const token = tokens.find(t => t.tokenAddress === tokenCA);
+      const token = tokens.find(t => t.tokenAddress === tokenCA) || tokens[0];
       if (!token) return 0;
       const solPrice = window.__solPriceUsd || 150;
       const priceSol = (token.liquidityToken > 0) ? (token.liquiditySol / token.liquidityToken) : 0;
@@ -1134,7 +1134,7 @@ function navigateToMeme(row, fallbackCA) {
         if (result) {
           const now = Date.now();
           const recentCount = result.trades.filter(t => now - t.createdAt.getTime() < 5 * 60000).length;
-          if (recentCount >= _TG_LIMIT && btn._ca) mc = await _fetchMC(btn._ca, btn._name || btn._ticker);
+          if (recentCount >= _TG_LIMIT && btn._ca) mc = await _fetchMC(btn._ca);
         }
         _applyTradeGlow(btn, result, mc);
       }
