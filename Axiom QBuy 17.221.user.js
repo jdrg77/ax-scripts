@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.25
+// @version      11.26
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1117,6 +1117,14 @@ function navigateToMeme(row, fallbackCA) {
     _qtb1 = document.createElement('button');
     _qtb1.textContent = '⚡ Buy #1';
     _qtb1.style.cssText = base;
+    _qtb1.addEventListener('mouseenter', e => {
+      const hd = _getPauseHandlerDom();
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+    });
+    _qtb1.addEventListener('mousemove', e => {
+      const hd = _getPauseHandlerDom();
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+    });
     _qtb1.onclick = _buyTopCoin;
     document.body.appendChild(_qtb1);
   }
