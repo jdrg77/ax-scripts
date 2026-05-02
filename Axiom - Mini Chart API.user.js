@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.10
+// @version      1.11
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -45,7 +45,7 @@
   tradesPanel.style.cssText=[
     'position:fixed','z-index:99999','display:none',
     'background:#0b0d13','border:1px solid #1e2131','border-radius:8px',
-    'width:292px','box-shadow:0 8px 32px rgba(0,0,0,0.8)',
+    'width:292px',
     'font-family:GeistMono,ui-monospace,"Cascadia Code","Source Code Pro",Menlo,Consolas,monospace',
     'font-size:12px','color:#c1c5dc','pointer-events:none','overflow:hidden',
   ].join(';');
