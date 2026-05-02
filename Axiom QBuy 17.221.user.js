@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.24
+// @version      11.25
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1021,15 +1021,16 @@ function navigateToMeme(row, fallbackCA) {
     if (!trades) { btn.style.filter = ''; return; }
 
     const now = Date.now();
-    const has3m  = trades.some(t => now - t.createdAt.getTime() < 3 * 60000);
-    const has30m = trades.some(t => now - t.createdAt.getTime() < 30 * 60000);
+    const recent = trades.filter(t => now - t.createdAt.getTime() < 5 * 60000);
+    if (!recent.length) { btn.style.filter = ''; return; }
 
-    if (has3m)       btn.style.filter = 'drop-shadow(0 0 8px rgba(239,68,68,0.95))';
-    else if (has30m) btn.style.filter = 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
-    else             btn.style.filter = '';
+    const has3m = recent.some(t => now - t.createdAt.getTime() < 3 * 60000);
+    btn.style.filter = has3m
+      ? 'drop-shadow(0 0 8px rgba(239,68,68,0.95))'
+      : 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
 
-    const buys  = trades.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
-    const sells = trades.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
+    const buys  = recent.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
+    const sells = recent.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
     const diff  = buys - sells;
 
     if (Math.abs(diff) >= 0.5) {
