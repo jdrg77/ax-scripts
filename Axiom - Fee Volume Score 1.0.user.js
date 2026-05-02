@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Fee Volume Score
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -50,26 +50,25 @@
     return valSpan ? parseVolumeK(valSpan.textContent.trim()) : null;
   }
 
+  function getFeeEl(row) {
+    const wrapper = row.querySelector('[class*="group/image"]');
+    if (!wrapper) return null;
+    return wrapper.querySelector('img[alt="SOL"]')?.parentElement || null;
+  }
+
   function updateRow(row) {
-    let dot = row.__fvsDot;
-    if (!dot) {
-      dot = document.createElement('div');
-      dot.style.cssText =
-        'position:absolute;right:4px;top:50%;transform:translateY(-50%);' +
-        'width:9px;height:9px;border-radius:50%;pointer-events:none;z-index:20;flex-shrink:0;';
-      row.appendChild(dot);
-      row.__fvsDot = dot;
-    }
+    const solDiv = getFeeEl(row);
+    if (!solDiv) return;
 
     const fee  = getFee(row);
     const volK = getVolumeK(row);
 
     if (fee === null || volK === null || volK === 0) {
-      dot.style.background = 'transparent';
+      solDiv.style.color = '';
       return;
     }
 
-    dot.style.background = (fee / volK) >= THRESHOLD ? '#22c55e' : '#ef4444';
+    solDiv.style.color = (fee / volK) >= THRESHOLD ? '#22c55e' : '#ef4444';
   }
 
   function scan() {
@@ -79,5 +78,5 @@
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   setInterval(scan, 400);
 
-  console.log('📊 Axiom Fee Volume Score v1.0 loaded');
+  console.log('📊 Axiom Fee Volume Score v1.1 loaded');
 })();
