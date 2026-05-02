@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.21
+// @version      11.22
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -462,6 +462,7 @@ function navigateToMeme(row, fallbackCA) {
   function removeButtons() {
     addedBtns.forEach(btn => {
       if (btn._original) delete btn._original.dataset.qbAdded;
+      if (btn.__tgLabel?.isConnected) btn.__tgLabel.remove();
       btn.remove();
     });
     addedBtns.length = 0;
@@ -1024,9 +1025,9 @@ function navigateToMeme(row, fallbackCA) {
     const has3m  = trades.some(t => now - t.createdAt.getTime() < 3 * 60000);
     const has30m = trades.some(t => now - t.createdAt.getTime() < 30 * 60000);
 
-    if (has3m)       btn.style.boxShadow = '0 0 12px 5px rgba(239,68,68,0.9)';
-    else if (has30m) btn.style.boxShadow = '0 0 8px 2px rgba(239,68,68,0.35)';
-    else             btn.style.boxShadow = '';
+    if (has3m)       btn.style.filter = 'drop-shadow(0 0 8px rgba(239,68,68,0.95))';
+    else if (has30m) btn.style.filter = 'drop-shadow(0 0 6px rgba(239,68,68,0.4))';
+    else             btn.style.filter = '';
 
     const buys  = trades.filter(t => t.type === 'buy').reduce((s, t)  => s + t.totalSol, 0);
     const sells = trades.filter(t => t.type === 'sell').reduce((s, t) => s + t.totalSol, 0);
@@ -1046,7 +1047,9 @@ function navigateToMeme(row, fallbackCA) {
     addedBtns.forEach(btn => {
       const lbl = btn.__tgLabel;
       if (!lbl?.isConnected) return;
+      if (!btn.isConnected || btn.style.display === 'none') { lbl.remove(); btn.__tgLabel = null; return; }
       const r = btn.getBoundingClientRect();
+      if (!r.width) { lbl.remove(); btn.__tgLabel = null; return; }
       lbl.style.top  = (r.top + r.height / 2 - 7) + 'px';
       lbl.style.left = (r.right + 4) + 'px';
     });
