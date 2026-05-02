@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.9
+// @version      1.10
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -209,7 +209,7 @@
       const buys=recent.filter(t=>t.type==='buy');
       const sells=recent.filter(t=>t.type==='sell');
       s.diffValue=buys.reduce((a,t)=>a+t.totalSol,0)-sells.reduce((a,t)=>a+t.totalSol,0);
-      s.recentBuys=buys.slice(0,4);
+      s.recentBuys=buys.slice(0,3);
       renderTradesPanel();
     }catch(e){}
   }
