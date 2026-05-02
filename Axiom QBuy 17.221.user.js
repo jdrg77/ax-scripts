@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.27
+// @version      11.28
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1129,6 +1129,10 @@ function navigateToMeme(row, fallbackCA) {
 
   function _updateQTBPositions() {
     if (!_qtb1 || !_qtb2) return;
+    const onPulse = location.pathname.startsWith('/pulse');
+    _qtb1.style.display = onPulse ? '' : 'none';
+    _qtb2.style.display = onPulse ? '' : 'none';
+    if (!onPulse) return;
     const col = _getNewPairsColRect();
     const x = (col ? col.left + 8 : 8) + 30;
     const btnH = _qtb2.offsetHeight || 32;
