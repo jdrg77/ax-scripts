@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.18
+// @version      11.19
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1021,13 +1021,9 @@ function navigateToMeme(row, fallbackCA) {
 
   function _buildQTBs() {
     const base = 'position:fixed;z-index:99998;background:#111827;border:1.5px solid #374151;' +
-      'border-radius:6px;color:#e5e7eb;font:bold 11px monospace;cursor:pointer;padding:5px 12px;white-space:nowrap;';
-    _qtb1 = document.createElement('button');
-    _qtb1.textContent = '⚡ Buy #1';
-    _qtb1.style.cssText = base;
-    _qtb1.onclick = _buyTopCoin;
-    document.body.appendChild(_qtb1);
+      'border-radius:6px;color:#e5e7eb;font:bold 14px monospace;cursor:pointer;padding:6px 15px;white-space:nowrap;';
 
+    // _qtb2 (⏸) on left, _qtb1 (⚡) on right
     _qtb2 = document.createElement('button');
     _qtb2.textContent = '⏸ Buy #1';
     _qtb2.style.cssText = base;
@@ -1041,23 +1037,30 @@ function navigateToMeme(row, fallbackCA) {
     });
     _qtb2.addEventListener('mouseleave', e => {
       const hd = _getPauseHandlerDom();
-      if (hd) hd.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+      // Dispatch mousemove at the coords where mouse went — if outside column axiom resumes
+      if (hd) hd.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
     });
     _qtb2.onclick = _buyTopCoin;
     document.body.appendChild(_qtb2);
+
+    _qtb1 = document.createElement('button');
+    _qtb1.textContent = '⚡ Buy #1';
+    _qtb1.style.cssText = base;
+    _qtb1.onclick = _buyTopCoin;
+    document.body.appendChild(_qtb1);
   }
 
   function _updateQTBPositions() {
     if (!_qtb1 || !_qtb2) return;
     const col = _getNewPairsColRect();
-    const x = col ? col.left + 8 : 8;
-    const btnH = _qtb1.offsetHeight || 28;
+    const x = (col ? col.left + 8 : 8) + 30;
+    const btnH = _qtb2.offsetHeight || 32;
     const y = col ? Math.max(4, col.top - btnH - 6) : 60;
-    const w1 = _qtb1.offsetWidth || 80;
-    _qtb1.style.top = y + 'px';
-    _qtb1.style.left = x + 'px';
+    const w2 = _qtb2.offsetWidth || 90;
     _qtb2.style.top = y + 'px';
-    _qtb2.style.left = (x + w1 + 6) + 'px';
+    _qtb2.style.left = x + 'px';
+    _qtb1.style.top = y + 'px';
+    _qtb1.style.left = (x + w2 + 6) + 'px';
   }
 
   _buildQTBs();
