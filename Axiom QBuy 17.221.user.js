@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.23
+// @version      11.24
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -462,7 +462,6 @@ function navigateToMeme(row, fallbackCA) {
   function removeButtons() {
     addedBtns.forEach(btn => {
       if (btn._original) delete btn._original.dataset.qbAdded;
-      if (btn.__tgLabel?.isConnected) btn.__tgLabel.remove();
       btn.remove();
     });
     addedBtns.length = 0;
@@ -1016,8 +1015,7 @@ function navigateToMeme(row, fallbackCA) {
   }
 
   function _applyTradeGlow(btn, trades) {
-    if (btn.__tgLabel?.isConnected) btn.__tgLabel.remove();
-    btn.__tgLabel = null;
+    btn.querySelector('.__tgLbl')?.remove();
 
     if (!btn.isConnected || btn.style.display === 'none') return;
     if (!trades) { btn.style.filter = ''; return; }
@@ -1036,38 +1034,31 @@ function navigateToMeme(row, fallbackCA) {
 
     if (Math.abs(diff) >= 0.5) {
       const lbl = document.createElement('div');
-      lbl.style.cssText = 'position:fixed;z-index:99997;font:bold 10px monospace;pointer-events:none;' +
+      lbl.className = '__tgLbl';
+      lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
+        'font:bold 10px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
         `color:${diff > 0 ? '#22c55e' : '#ef4444'};text-shadow:0 0 4px currentColor;`;
       lbl.textContent = (diff > 0 ? '+' : '') + diff.toFixed(2);
-      document.body.appendChild(lbl);
-      btn.__tgLabel = lbl;
+      btn.appendChild(lbl);
     }
   }
 
-  function _updateTGLabels() {
-    addedBtns.forEach(btn => {
-      const lbl = btn.__tgLabel;
-      if (!lbl?.isConnected) return;
-      if (!btn.isConnected || btn.style.display === 'none') { lbl.remove(); btn.__tgLabel = null; return; }
-      const r = btn.getBoundingClientRect();
-      if (!r.width) { lbl.remove(); btn.__tgLabel = null; return; }
-      lbl.style.top  = (r.top + r.height / 2 - 7) + 'px';
-      lbl.style.left = (r.right + 4) + 'px';
-    });
-  }
-
+  let _tgPolling = false;
   async function _pollTradeGlows() {
+    if (_tgPolling) return;
     const vis = addedBtns.filter(b => b.isConnected && b.style.display !== 'none' && b._pairAddress);
     if (!vis.length) return;
-    for (const btn of vis.slice(0, 2)) {
-      if (!btn.isConnected || btn.style.display === 'none') continue;
-      const trades = await _fetchTrades(btn._pairAddress);
-      _applyTradeGlow(btn, trades);
-    }
+    _tgPolling = true;
+    try {
+      for (const btn of vis.slice(0, 2)) {
+        if (!btn.isConnected || btn.style.display === 'none') continue;
+        const trades = await _fetchTrades(btn._pairAddress);
+        _applyTradeGlow(btn, trades);
+      }
+    } finally { _tgPolling = false; }
   }
 
   setInterval(_pollTradeGlows, 500);
-  setInterval(_updateTGLabels, 16);
 
   // ---- Quick Buy Top Buttons ----
   let _qtb1 = null, _qtb2 = null;
