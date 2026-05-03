@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      2.5
+// @version      2.6
 // @description  Mini candlestick chart top New Pair (escala 5.8K, ATH+inicio marcados, pill de precio actual)
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -115,6 +115,17 @@
     }
     return null;
   }
+  function isPanelOpen(){
+    for (const inp of document.querySelectorAll('input')){
+      const ph=(inp.placeholder||'').toLowerCase();
+      if ((ph.includes('ticker')||ph.includes('search')||ph.includes('name')) && inp.offsetParent!==null){
+        const r=inp.getBoundingClientRect();
+        if (r.width>50 && r.height>0) return true;
+      }
+    }
+    return false;
+  }
+
   function findFeeRect(row){
     const spans=[...row.querySelectorAll('span,div')].filter(e=>e.children.length===0);
     for (const s of spans){
@@ -229,6 +240,7 @@
   }
 
   function step(){
+    if(isPanelOpen()){canvases.forEach(cv=>cv.canvas.style.display='none');return;}
     const col=getNewPairsCol();
     const rows=getRows(col, NUM_SLOTS);
     const visibleCAs=new Set();
@@ -266,6 +278,7 @@
   }
 
   function reposLoop(){
+    if(isPanelOpen()){canvases.forEach(cv=>cv.canvas.style.display='none');return;}
     const col=getNewPairsCol();
     const rows=getRows(col, NUM_SLOTS);
     for (let i=0;i<NUM_SLOTS;i++){
