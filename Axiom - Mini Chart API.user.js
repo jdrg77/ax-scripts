@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart API (Buy#1)
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      1.14
+// @version      1.15
 // @description  Mini chart API del primer New Pair, a la derecha de Buy #1, fondo 50%
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -32,8 +32,8 @@
   document.body.appendChild(canvas);
 
   const diffLabel=document.createElement('div');
-  diffLabel.style.cssText='position:fixed;z-index:99999;pointer-events:none;display:none;'+
-    'font:bold 11px monospace;color:rgb(255,255,255);text-shadow:0 0 4px rgba(255,255,255,0.8);white-space:nowrap;';
+  diffLabel.style.cssText='position:fixed;z-index:100000;pointer-events:none;display:none;'+
+    'font:bold 17px monospace;color:rgb(255,255,255);text-shadow:0 0 6px rgba(255,255,255,0.9);white-space:nowrap;';
   document.body.appendChild(diffLabel);
 
   const mcLabel=document.createElement('div');
@@ -279,28 +279,26 @@ const cy=r.top+r.height/2;
       const mcIdx=tgTxt.indexOf('$');
       const mcTxt=mcIdx!==-1?tgTxt.slice(mcIdx):'';
 
-      // Diff label right of ⚡ Buy #1
-      let canvasLeft=r.right+8;
+      // Canvas fixed right of Buy #1; diff label overlays center of canvas
+      const canvasLeft=r.right+8;
       if(s.diffValue!==null && s.diffValue!==undefined && s.diffValue>=0){
         const txt='+'+s.diffValue.toFixed(2);
         if(diffLabel.textContent!==txt) diffLabel.textContent=txt;
         const diffRed=s.diffValue>=0.7;
         diffLabel.style.color=diffRed?'#ef4444':'rgb(255,255,255)';
-        diffLabel.style.textShadow=diffRed?'0 0 4px rgba(239,68,68,0.8)':'0 0 4px rgba(255,255,255,0.8)';
-        diffLabel.style.left=(r.right+8)+'px';
+        diffLabel.style.textShadow=diffRed?'0 0 6px rgba(239,68,68,0.9)':'0 0 6px rgba(255,255,255,0.9)';
+        diffLabel.style.left=(canvasLeft+W_PX/2)+'px';
         diffLabel.style.top=cy+'px';
-        diffLabel.style.transform='translateY(-50%)';
+        diffLabel.style.transform='translate(-50%,-50%)';
         diffLabel.style.display='block';
-        const dlW=diffLabel.offsetWidth||50;
-        canvasLeft=r.right+8+dlW+8;
 
         if(mcTxt){
           if(mcLabel.textContent!==mcTxt) mcLabel.textContent=mcTxt;
           const mcVal=parseMCLabel(mcTxt);
           mcLabel.style.color=(mcVal!==null&&mcVal>22000)?'#ef4444':'rgb(91,184,255)';
-          mcLabel.style.left=(r.right+8)+'px';
-          mcLabel.style.top=(cy+9)+'px';
-          mcLabel.style.transform='translateY(-50%)';
+          mcLabel.style.left=(canvasLeft+W_PX/2)+'px';
+          mcLabel.style.top=(cy+11)+'px';
+          mcLabel.style.transform='translate(-50%,-50%)';
           mcLabel.style.display='block';
         } else {
           mcLabel.style.display='none';
