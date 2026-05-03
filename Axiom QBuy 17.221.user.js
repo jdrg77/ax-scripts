@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.37
+// @version      11.38
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -1074,27 +1074,40 @@ function navigateToMeme(row, fallbackCA) {
     function setFilter(desired) {
       if ((btn.style.filter || '') !== desired) btn.style.filter = desired;
     }
+    function isTopBtn() {
+      const all = [...document.querySelectorAll('button')]
+        .filter(b => b.style.position === 'fixed' && b._pairAddress && b.style.display !== 'none');
+      if (!all.length) return false;
+      all.sort((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top));
+      return all[0] === btn;
+    }
     function ensureLabel(desiredText, color) {
       let lbl = btn.__tgLblEl || null;
       if (!desiredText) { if (lbl) { lbl.remove(); btn.__tgLblEl = null; } return; }
+      const top = isTopBtn();
       if (!lbl) {
         lbl = document.createElement('div');
         lbl.className = '__tgLbl';
-        lbl.style.cssText = 'position:fixed;font:bold 11px monospace;pointer-events:none;white-space:nowrap;' +
-          'z-index:10002;text-shadow:0 0 4px currentColor;text-align:center;transform:translate(-50%,-50%);';
         document.body.appendChild(lbl);
         btn.__tgLblEl = lbl;
       }
       if (lbl.textContent !== desiredText) lbl.textContent = desiredText;
       if (lbl.style.color !== color) lbl.style.color = color;
-      const mc = document.querySelector('canvas[data-axmini="1"]');
-      if (mc && mc.style.display !== 'none') {
-        const r = mc.getBoundingClientRect();
-        lbl.style.left = (r.left + r.width / 2) + 'px';
-        lbl.style.top  = (r.top  + r.height / 2) + 'px';
-        lbl.style.display = 'block';
+      if (top) {
+        const mc = document.querySelector('canvas[data-axmini="1"]');
+        if (mc && mc.style.display !== 'none') {
+          const r = mc.getBoundingClientRect();
+          lbl.style.cssText = 'position:fixed;font:bold 17px monospace;pointer-events:none;white-space:nowrap;' +
+            'z-index:100001;text-shadow:0 0 4px currentColor;text-align:center;transform:translate(-50%,-50%);' +
+            'color:' + color + ';left:' + (r.left + r.width / 2) + 'px;top:' + (r.top + r.height / 2) + 'px;display:block;';
+        } else {
+          lbl.style.display = 'none';
+        }
       } else {
-        lbl.style.display = 'none';
+        lbl.style.cssText = 'position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);' +
+          'font:bold 11px monospace;pointer-events:none;white-space:nowrap;z-index:10002;' +
+          'text-shadow:0 0 4px currentColor;color:' + color + ';';
+        if (!btn.contains(lbl)) btn.appendChild(lbl);
       }
     }
 
@@ -1130,6 +1143,11 @@ function navigateToMeme(row, fallbackCA) {
   async function _pollTradeGlows() {
     if (_tgPolling) return;
     const vis = addedBtns.filter(b => b.isConnected && b.style.display !== 'none' && b._pairAddress);
+    for (const btn of addedBtns) {
+      if ((!btn.isConnected || btn.style.display === 'none') && btn.__tgLblEl) {
+        btn.__tgLblEl.remove(); btn.__tgLblEl = null;
+      }
+    }
     if (!vis.length) return;
     _tgPolling = true;
     try {
