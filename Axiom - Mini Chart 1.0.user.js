@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      2.7
+// @version      2.8
 // @description  Mini candlestick chart top New Pair (escala 5.8K, ATH+inicio marcados, pill de precio actual)
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -54,13 +54,7 @@
   for (let i=0;i<NUM_SLOTS;i++) canvases.push(makeCanvas());
   const engines=new Map();
 
-  const tgOverlay=document.createElement('div');
-  tgOverlay.style.cssText='position:fixed;z-index:100000;pointer-events:none;display:none;'+
-    'font:bold 12px ui-monospace,Menlo,Consolas,monospace;color:#fff;'+
-    'text-shadow:0 0 6px rgba(255,255,255,0.9);white-space:nowrap;text-align:center;';
-  document.body.appendChild(tgOverlay);
-
-  function makeEngine(firstMC){
+function makeEngine(firstMC){
     const eng={candles:[], lastPrice:null, yMin:SEED_MC, yMax:INIT_YMAX, startPrice:firstMC};
     const bStart=Math.floor(Date.now()/BUCKET_MS)*BUCKET_MS;
     const o=SEED_MC, c=firstMC;
@@ -275,9 +269,9 @@
     const col=getNewPairsCol();
     const rows=getRows(col, NUM_SLOTS);
     const cv=canvases[0]; const fr=rows[0];
-    if (!fr){ cv.canvas.style.display='none'; tgOverlay.style.display='none'; return; }
+    if (!fr){ cv.canvas.style.display='none'; return; }
     const feeR=findFeeRect(fr);
-    if (!feeR){ cv.canvas.style.display='none'; tgOverlay.style.display='none'; return; }
+    if (!feeR){ cv.canvas.style.display='none'; return; }
 
     const cLeft=feeR.left - CANVAS_W - 2 + OFFSET_X;
     const cTop =feeR.top + (feeR.height - H_PX)/2 + OFFSET_Y;
@@ -285,31 +279,6 @@
     cv.canvas.style.left=cLeft+'px';
     cv.canvas.style.top =cTop+'px';
 
-    // Overlay: read tgLbl from top QBuy button
-    const topBtn=[...document.querySelectorAll('button')]
-      .filter(b=>b.style.position==='fixed'&&b._pairAddress&&b.style.display!=='none')
-      .sort((a,b)=>parseFloat(a.style.top)-parseFloat(b.style.top))[0];
-    const tgTxt=topBtn?.querySelector('.__tgLbl')?.textContent?.trim()||'';
-    if(tgTxt){
-      const diffMatch=tgTxt.match(/^([+-][\d.]+)/);
-      const diffVal=diffMatch?parseFloat(diffMatch[1]):null;
-      const mcMatch=tgTxt.match(/\$([\d.]+)(K|M|B)?/i);
-      let mcVal=null;
-      if(mcMatch){mcVal=parseFloat(mcMatch[1]);if(mcMatch[2]==='K')mcVal*=1000;if(mcMatch[2]==='M')mcVal*=1e6;if(mcMatch[2]==='B')mcVal*=1e9;}
-      const diffRed=diffVal!==null&&diffVal>=0.7;
-      const mcRed=mcVal!==null&&mcVal>22000;
-      tgOverlay.style.color=diffRed?'#ef4444':'#fff';
-      tgOverlay.style.textShadow=diffRed?'0 0 6px rgba(239,68,68,0.9)':'0 0 6px rgba(255,255,255,0.9)';
-      // Build text: diff line + mc line
-      let html='<div>'+tgTxt.replace(/(\$[\d.]+[KMBkmb]?)/i,'<span style="color:'+(mcRed?'#ef4444':'rgb(91,184,255)')+'">$1</span>')+'</div>';
-      tgOverlay.innerHTML=html;
-      tgOverlay.style.left=(cLeft+W_PX/2)+'px';
-      tgOverlay.style.top =(cTop+H_PX/2)+'px';
-      tgOverlay.style.transform='translate(-50%,-50%)';
-      tgOverlay.style.display='block';
-    } else {
-      tgOverlay.style.display='none';
-    }
   }
 
   const idR=setInterval(reposLoop, REPOS_MS);
