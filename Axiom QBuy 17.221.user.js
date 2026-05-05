@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.39
+// @version      11.40
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -994,6 +994,12 @@ function navigateToMeme(row, fallbackCA) {
   const TGSRV = ['https://api2.axiom.trade', 'https://api3.axiom.trade', 'https://api6.axiom.trade'];
   const _tgCache = new Map();
   const _mcCache = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _tgCache) if (now - v.ts > 60000) _tgCache.delete(k);
+    for (const [k, v] of _mcCache) if (now - v.ts > 60000) _mcCache.delete(k);
+    if (hashCache.size > 400) { const keys = [...hashCache.keys()].slice(0, hashCache.size - 400); keys.forEach(k => hashCache.delete(k)); }
+  }, 30000);
 
   const TGLIMIT = 25;
 

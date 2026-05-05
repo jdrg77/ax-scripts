@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match
 // @namespace    http://tampermonkey.net/
-// @version      8.38
+// @version      8.39
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -76,15 +76,12 @@
     const existing = sessionBest.get(keyCA);
     if (existing && d.matchPct <= existing.matchPct) return;
 
-    const template = getQBButtons()[0]?._original?.cloneNode(true) || null;
-
     sessionBest.set(keyCA, {
       rowCA:       keyCA,
       ca:          d.ca,
       pairAddress: d.pairAddress,
       newPairCA:   d._rescuedRowCA || d.rowCA || keyCA,
       memeHref:    `/meme/${d.pairAddress}?chain=sol`,
-      btnTemplate: template,
       ticker:      d.ticker,
       name:        d.name,
       imgSrc:      d.imgSrc,
@@ -95,6 +92,7 @@
       platform:    'pump',
       isMigrated:  false,
       hasDex:      false,
+      _ts:         Date.now(),
     });
     console.log('✅ Best Match API result saved:', d.ticker, d.matchPct + '%');
   });
@@ -307,7 +305,6 @@
         pairAddress,
         newPairCA:   localStorage.getItem('axiomNewPairCA') || '',
         memeHref,
-        btnTemplate: winner._isGrad ? null : winner._original?.cloneNode(true),
         ticker:      winner._isGrad ? (winner.ticker || '') : (winner._ticker || ''),
         name:       winner._isGrad ? (winner.name   || '') : (winner._name   || ''),
         imgSrc:     getBtnImgSrc(winner),
@@ -319,14 +316,15 @@
         age,
         mc,
         solText:    getBtnSolText(winner),
+        _ts:        Date.now(),
       });
     }
   }
 
   // === Mini buttons ===
 
-  function createMiniBtn(rowCA, template) {
-    const el = template ? template.cloneNode(true) : document.createElement('button');
+  function createMiniBtn(rowCA) {
+    const el = document.createElement('button');
     delete el.dataset.qbAdded;
     el.setAttribute('data-qbm-mini', rowCA);
     el.style.cssText         = '';
@@ -398,7 +396,7 @@
     if (existing?.isConnected && existing._matchPct === best.matchPct) return existing;
     if (existing?.isConnected) existing.remove();
     if (existing?._label?.isConnected) existing._label.remove();
-    const el = createMiniBtn(rowCA, best.btnTemplate);
+    const el = createMiniBtn(rowCA);
     el._matchPct = best.matchPct;
     el.dataset.qbmNewPairCa = best.newPairCA || '';
     return el;
@@ -613,7 +611,11 @@
 
   // === Main loop ===
 
-  setInterval(() => { updateGlow(); updateMiniButtons(); }, 4);
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of sessionBest) if (now - v._ts > 60000) sessionBest.delete(k);
+  }, 30000);
+  setInterval(() => { updateGlow(); updateMiniButtons(); }, 16);
 
   console.log('⭐ Axiom QBuy Best Match v8.10 — Raydium V4 blue styling');
 })();

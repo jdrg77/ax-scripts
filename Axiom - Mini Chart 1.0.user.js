@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - Mini Chart
 // @namespace    https://github.com/jdrg77/ax-scripts
-// @version      2.8
+// @version      2.9
 // @description  Mini candlestick chart top New Pair (escala 5.8K, ATH+inicio marcados, pill de precio actual)
 // @match        https://axiom.trade/*
 // @run-at       document-idle
@@ -148,6 +148,7 @@ function makeEngine(firstMC){
       }
     }
     eng.lastPrice=price;
+    if (eng.candles.length>60) eng.candles.shift();
     if (price>eng.yMax) eng.yMax=price;
     if (price<eng.yMin) eng.yMin=price;
   }

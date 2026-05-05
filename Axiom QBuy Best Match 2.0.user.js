@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy Best Match 2
 // @namespace    http://tampermonkey.net/
-// @version      1.23
+// @version      1.24
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -203,7 +203,7 @@
   // ============================================================
   const MAX_CONC   = 3;
   const STAGGER_MS = 0;
-  const started    = new Set();
+  const started    = new Map();
   const queue      = [];
   const sessionBest = new Map();
   let   activeCount = 0;
@@ -349,6 +349,7 @@
       matchedAge,
       matchedMc,
       matchedMcUsd,
+      _ts:         Date.now(),
     });
     const btn = document.querySelector(`[data-qbm-mini="${rowCA}"]`);
     if (btn) btn.dataset.qbmPair = t.tokenAddress;
@@ -371,9 +372,8 @@
     const key = task.rowCA || task.name;
     if (!key) return;
     if (sessionBest.has(task.rowCA)) return;
-    if (started.has(key)) return;
-    if (started.size > 500) started.clear();
-    started.add(key);
+    if (started.has(key) && Date.now() - started.get(key) < 60000) return;
+    started.set(key, Date.now());
     queue.push(task);
     tryStart();
   }
@@ -407,6 +407,11 @@
   }
 
   // Scan on mutations AND on a fixed interval — ensures row 0 is never missed
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of sessionBest) if (now - v._ts > 60000) sessionBest.delete(k);
+    for (const [k, v] of started)     if (now - v     > 60000) started.delete(k);
+  }, 30000);
   new MutationObserver(scanRows).observe(document.body, { childList: true, subtree: true });
   setInterval(scanRows, 500);
   setTimeout(scanRows, 800); // initial scan once DOM settles
