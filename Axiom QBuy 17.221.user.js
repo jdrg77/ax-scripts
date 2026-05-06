@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom QBuy 17.221
 // @namespace    http://tampermonkey.net/
-// @version      11.43
+// @version      11.44
 // @match        https://axiom.trade/*
 // @grant        none
 // @run-at       document-idle
@@ -951,6 +951,11 @@ function navigateToMeme(row, fallbackCA) {
 
       document.body.appendChild(newBtn);
       addedBtns.push(newBtn);
+
+      newBtn.addEventListener('mouseenter', () => {
+        const ca = newBtn._pairAddress || newBtn._ca;
+        if (ca) localStorage.setItem('axiomTopPairCA', ca);
+      });
 
       newBtn.addEventListener('click', e => {
         e.stopPropagation(); e.preventDefault();
