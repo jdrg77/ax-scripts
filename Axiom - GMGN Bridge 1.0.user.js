@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Axiom - GMGN Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @match        https://axiom.trade/*
 // @match        https://gmgn.ai/*
 // @match        https://*.gmgn.ai/*
@@ -55,6 +55,13 @@
         if (rowCA) { sendCA(rowCA); return; }
       }
 
+      // Axiom panel Buy #N buttons — usa axiomTopPairCA (seteado por readTopNewPairCA)
+      const panelBtn = e.target.closest('[class*="group/quickBuyButton"]');
+      if (panelBtn) {
+        const ca = localStorage.getItem('axiomTopPairCA');
+        if (ca) { sendCA(ca); return; }
+      }
+
       // QBuy 17.221 button — usa axiomTopPairCA
       let el = e.target;
       while (el && el !== document.body) {
@@ -67,7 +74,7 @@
       }
     }, true);
 
-    console.log('🚀 GMGN Bridge v1.6 — Axiom side loaded');
+    console.log('🚀 GMGN Bridge v1.7 — Axiom side loaded');
   }
 
   if (location.hostname.includes('gmgn.ai')) {
